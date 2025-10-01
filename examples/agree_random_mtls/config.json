@@ -1,0 +1,19 @@
+{
+  "parties": [
+    {
+      "index": 0,
+      "address": "localhost:8080",
+      "cert_path": "certs/party-0/cert.pem",
+      "key_path": "certs/party-0/key.pem"
+    },
+    {
+      "index": 1,
+      "address": "localhost:8081",
+      "cert_path": "certs/party-1/cert.pem",
+      "key_path": "certs/party-1/key.pem"
+    }
+  ],
+  "ca_cert_path": "certs/ca.pem",
+  "bit_length": 256,
+  "timeout_seconds": 30
+}
