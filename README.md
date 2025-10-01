@@ -1,5 +1,7 @@
 # cb-mpc-go
 
+test
+
 Go bindings for [Coinbase's MPC library](https://github.com/coinbase/cb-mpc) - enabling secure multi-party computation for threshold cryptography.
 
 **🎯 Production-grade MPC protocols** with formal security proofs, constant-time implementations, and comprehensive testing including malicious party scenarios.
