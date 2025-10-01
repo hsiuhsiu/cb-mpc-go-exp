@@ -53,3 +53,6 @@ examples/ecdsa2pc_mtls/ecdsa2pc_mtls
 # Temporary files
 tmp/
 temp/
+
+# Claude Code settings
+.claude/

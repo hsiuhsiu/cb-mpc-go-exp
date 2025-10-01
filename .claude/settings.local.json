@@ -28,7 +28,9 @@
       "Bash(yes)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(gofmt:*)"
+      "Bash(gofmt:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": [],
     "ask": []

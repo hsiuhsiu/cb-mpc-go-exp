@@ -3,36 +3,73 @@ name: Lint
 on:
   push:
     branches: [ main, master ]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - ".gitignore"
   pull_request:
-    branches: [ main, master ]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - ".gitignore"
+
+permissions:
+  contents: read
 
 jobs:
-  golangci:
-    name: lint
+  lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0
+        with:
+          egress-policy: audit
+
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           submodules: recursive
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.21'
-
-      - name: Install dependencies
+      - name: Build Docker image
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build
+          echo "Building Docker image for linting..."
+          make image
 
-      - name: Build C++ library (needed for CGO)
-        run: make build-cpp
+      - name: Run linting checks
+        run: |
+          echo "Running code quality and formatting checks..."
+          docker run --rm -v $(pwd):/workspace -w /workspace cb-mpc-go bash -c '
+            set -euo pipefail
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v3
-        with:
-          version: latest
-          args: --timeout=10m
-        env:
-          CGO_ENABLED: 1
+            echo "=== Checking Go formatting ==="
+            unformatted=$(gofmt -s -l . | sed "s|^\./||" | grep -vE "^(cb-mpc/)" || true)
+            if [ -n "$unformatted" ]; then
+              echo "❌ The following files are not formatted correctly:"
+              echo "$unformatted"
+              echo "Run \"gofmt -s -w .\" to fix"
+              exit 1
+            fi
+            echo "✅ All Go files are properly formatted"
+
+            echo "=== Checking CGO isolation ==="
+            violations=$(find . -path './cb-mpc' -prune -o -path './internal/cgo' -prune -o -type f -name '*.go' -print0 | xargs -0 grep -nE "^[[:space:]]*import[[:space:]]+\"C\"([[:space:]]*|$)" || true)
+            if [ -n "$violations" ]; then
+              echo "❌ ERROR: Found \"import \\\"C\\\"\" outside of repo-root internal/cgo/ or cb-mpc/:"
+              echo "$violations"
+              echo "All CGO code must be in internal/cgo/ package only"
+              exit 1
+            fi
+            echo "✅ CGO properly isolated to internal/cgo"
+
+            echo "=== Running golangci-lint (skipping C++ build) ==="
+            # Ensure modules are downloaded for readonly mode
+            SKIP_CPP_BUILD=1 bash scripts/go_with_cpp.sh go mod download
+            SKIP_CPP_BUILD=1 bash scripts/go_with_cpp.sh go mod verify
+            # Install and run golangci-lint built with current Go toolchain (no login shell)
+            SKIP_CPP_BUILD=1 bash scripts/go_with_cpp.sh go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.60.3
+            SKIP_CPP_BUILD=1 bash scripts/go_with_cpp.sh $(go env GOPATH)/bin/golangci-lint run --timeout=10m
+
+            echo "✅ All linting checks passed!"
+          '

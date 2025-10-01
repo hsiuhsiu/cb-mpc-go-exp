@@ -10,10 +10,12 @@ CB_MPC_DIR="$REPO_ROOT/cb-mpc"
 
 BUILD_TYPE="${BUILD_TYPE:-Release}"
 
-# Auto-build C++ library if needed
-if [ ! -f "$CB_MPC_DIR/lib/$BUILD_TYPE/libcbmpc.a" ]; then
-    echo "C++ library not found, building..."
-    bash "$SCRIPT_DIR/build_cpp.sh" "$BUILD_TYPE"
+# Auto-build C++ library if needed (unless explicitly skipped)
+if [ "${SKIP_CPP_BUILD:-0}" != "1" ]; then
+    if [ ! -f "$CB_MPC_DIR/lib/$BUILD_TYPE/libcbmpc.a" ]; then
+        echo "C++ library not found, building..."
+        bash "$SCRIPT_DIR/build_cpp.sh" "$BUILD_TYPE"
+    fi
 fi
 
 # Set CGO environment variables

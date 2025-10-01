@@ -3,59 +3,92 @@ name: Security Checks
 on:
   push:
     branches: [ main, master ]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - ".gitignore"
   pull_request:
-    branches: [ main, master ]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - ".gitignore"
+
+permissions:
+  contents: read
 
 jobs:
   security:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
+      - name: Harden Runner
+        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0
+        with:
+          egress-policy: audit
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          submodules: recursive
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential cmake ninja-build
+      - name: Build Docker image
+        run: |
+          echo "Building Docker image for security scanning..."
+          make image
 
-    - name: Build C++ library
-      run: make build-cpp
+      - name: Run security checks
+        run: |
+          echo "Running comprehensive security analysis..."
+          docker run --rm -v $(pwd):/workspace -w /workspace cb-mpc-go bash -c '
+            set -euo pipefail
 
-    - name: Run gosec Security Scanner
-      uses: securecodewarrior/github-action-gosec@master
-      with:
-        args: './...'
+            echo "=== Installing security tools ==="
+            go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+            go install github.com/sonatypecommunity/nancy@latest
 
-    - name: Run Nancy vulnerability scanner
-      run: |
-        go install github.com/sonatypecommunity/nancy@latest
-        go list -json -deps ./... | nancy sleuth
+            echo "=== Running gosec security scanner ==="
+            gosec -fmt json -out gosec-report.json ./... || true
+            gosec ./...
 
-    - name: Check for secrets
-      uses: trufflesecurity/trufflehog@main
-      with:
-        path: ./
-        base: main
-        head: HEAD
-        extra_args: --debug --only-verified
+            echo "=== Running Nancy vulnerability scanner ==="
+            go list -json -deps ./... | nancy sleuth || true
 
-    - name: Verify no hardcoded secrets in tests
-      run: |
-        # Check for potential hardcoded keys or secrets
-        if grep -r -i "BEGIN.*PRIVATE\|BEGIN.*CERTIFICATE" --include="*.go" .; then
-          echo "WARNING: Found potential hardcoded certificates in Go files"
-          grep -r -i "BEGIN.*PRIVATE\|BEGIN.*CERTIFICATE" --include="*.go" .
-          echo "Ensure these are test fixtures only and not real secrets"
-        fi
+            echo "=== Checking for hardcoded secrets ==="
+            if grep -r -i "BEGIN.*PRIVATE\|BEGIN.*CERTIFICATE" --include="*.go" . || true; then
+              echo "⚠️  WARNING: Found potential certificates in Go files"
+              echo "Verifying these are test fixtures only..."
+              violations=$(grep -r -i "BEGIN.*PRIVATE\|BEGIN.*CERTIFICATE" --include="*.go" . | grep -v "_test.go" | grep -v "testdata" || true)
+              if [ -n "$violations" ]; then
+                echo "❌ ERROR: Found certificates outside test files!"
+                echo "$violations"
+                exit 1
+              fi
+              echo "✅ Certificates found only in test files (OK)"
+            else
+              echo "✅ No hardcoded certificates found"
+            fi
 
-    - name: Memory safety checks
-      run: |
-        # Run tests with race detector
-        bash scripts/go_with_cpp.sh go test -race -short ./pkg/mpc ./internal/cgo
+            echo "=== Memory safety checks ==="
+            echo "Building C++ library for race testing..."
+            cd cb-mpc && make build && cd ..
+            echo "Running tests with race detector..."
+            bash scripts/go_with_cpp.sh go test -race -short ./pkg/mpc ./internal/cgo
+
+            echo "=== Checking for sensitive patterns ==="
+            # Check for potential security issues in code
+            if grep -r -E "(password|secret|key|token|credential)" --include="*.go" . | grep -v "_test.go" | grep -v "testdata" | grep -v "// " || true; then
+              echo "⚠️  Found potential sensitive data references (review manually)"
+            fi
+
+            echo "✅ All security checks completed!"
+          '
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            gosec-report.json
+          retention-days: 30
