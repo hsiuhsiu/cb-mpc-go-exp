@@ -1,38 +1,20 @@
 name: Lint
 
 on:
-  push:
-    branches: [ main, master ]
   pull_request:
-    branches: [ main, master ]
+  push:
+    branches: [ main ]
 
 jobs:
-  golangci:
-    name: lint
+  lint:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.21'
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build
-
-      - name: Build C++ library (needed for CGO)
-        run: make build-cpp
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v3
-        with:
-          version: latest
-          args: --timeout=10m
+      - name: Run lint target
         env:
-          CGO_ENABLED: 1
+          CBMPC_USE_DOCKER: "1"
+        run: make lint

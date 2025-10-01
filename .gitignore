@@ -1,55 +1,15 @@
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-
-# Test binary, built with `go test -c`
-*.test
-
-# Output of the go coverage tool
-*.out
-
-# Go workspace file
-go.work
-
-# Dependency directories
-vendor/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
 # Build artifacts
-build/
-bin/
-
-# Example executables and certificates
-examples/*/certs/
-examples/*/*.pem
-examples/*/*.log
-examples/*/party-*.log
-examples/agree_random_mtls/agree_random_mtls
-examples/ecdsa2pc_mtls/ecdsa2pc_mtls
-
-# Certificate files (anywhere)
-*.pem
-*.key
-*.crt
-*.p12
-*.pfx
-
-# Log files
+/build/
+/dist/
 *.log
 
-# Temporary files
-tmp/
-temp/
+# Editor settings
+.idea/
+.vscode/
+
+# Go build cache
+bin/
+
+# macOS noise
+.DS_Store
+

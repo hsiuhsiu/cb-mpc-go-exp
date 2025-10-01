@@ -1,0 +1,36 @@
+diff --git a/cmake/openssl.cmake b/cmake/openssl.cmake
+index 6c0e197..01dc281 100644
+--- a/cmake/openssl.cmake
++++ b/cmake/openssl.cmake
+@@ -1,13 +1,23 @@
+ macro(link_openssl TARGET_NAME)
+-  if(IS_LINUX)
+-    set(OPENSSL_PATH "/usr/local/opt/openssl@3.2.0")
+-    include_directories(${OPENSSL_PATH}/include)
+-    target_link_libraries(${TARGET_NAME} PUBLIC ${OPENSSL_PATH}/lib64/libcrypto.a)
++  if(NOT DEFINED CBMPC_OPENSSL_ROOT)
++    if(DEFINED ENV{CBMPC_OPENSSL_ROOT})
++      set(CBMPC_OPENSSL_ROOT $ENV{CBMPC_OPENSSL_ROOT})
++    else()
++      set(CBMPC_OPENSSL_ROOT "/usr/local/opt/openssl@3.2.0")
++    endif()
+   endif()
+ 
+-  if(IS_MACOS)
+-    include_directories("/usr/local/opt/openssl@3.2.0/include")
+-    target_link_libraries(${TARGET_NAME} PUBLIC
+-                          "/usr/local/opt/openssl@3.2.0/lib/libcrypto.a")
++  set(_cbmpc_openssl_include "${CBMPC_OPENSSL_ROOT}/include")
++
++  if(IS_LINUX)
++    set(_cbmpc_openssl_lib "${CBMPC_OPENSSL_ROOT}/lib64/libcrypto.a")
++    if(NOT EXISTS "${_cbmpc_openssl_lib}")
++      set(_cbmpc_openssl_lib "${CBMPC_OPENSSL_ROOT}/lib/libcrypto.a")
++    endif()
++  else()
++    set(_cbmpc_openssl_lib "${CBMPC_OPENSSL_ROOT}/lib/libcrypto.a")
+   endif()
++
++  include_directories("${_cbmpc_openssl_include}")
++  target_link_libraries(${TARGET_NAME} PUBLIC "${_cbmpc_openssl_lib}")
+ endmacro(link_openssl)

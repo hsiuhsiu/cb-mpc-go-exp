@@ -1,5 +1,4 @@
 module github.com/coinbase/cb-mpc-go
 
-go 1.24.2
+go 1.22
 
-require golang.org/x/sync v0.17.0 // indirect

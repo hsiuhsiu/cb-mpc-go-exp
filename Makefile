@@ -1,58 +1,44 @@
-.PHONY: help build test test-short clean deps examples force-build-cpp
+SHELL := /bin/bash
 
-# Marker file to track if C++ library is built
-CPP_LIB := cb-mpc/lib/Release/libcbmpc.a
-SUBMODULE_INIT := cb-mpc/.git
+CBMPC_USE_DOCKER ?= 0
+BUILD_TYPE ?= Release
+GO ?= go
+GOLANGCI_LINT ?= golangci-lint
+GO_RUNNER := scripts/run_with_go.sh
+GOLANGCI_RUNNER := scripts/run_golangci.sh
+GO_PACKAGES := ./cmd/... ./pkg/...
+GO_LINT_TARGETS := ./cmd/... ./pkg/...
+DOCKER_RUN := scripts/docker_exec.sh
 
-help:
-	@echo "Available targets:"
-	@echo "  deps         - Initialize git submodules"
-	@echo "  build-cpp    - Build cb-mpc C++ library (only if needed)"
-	@echo "  force-build-cpp - Force rebuild of C++ library"
-	@echo "  build        - Build Go wrapper (builds C++ if needed)"
-	@echo "  test         - Run Go tests (builds C++ if needed)"
-	@echo "  test-short   - Run Go tests without checking C++ build"
-	@echo "  examples     - Run example programs"
-	@echo "  clean        - Clean Go build artifacts"
-	@echo "  clean-all    - Clean everything including cb-mpc build"
+RUN_CMD = scripts/run_host_or_docker.sh $(1)
 
-# Initialize submodules if not already done
-$(SUBMODULE_INIT):
-	git submodule update --init --recursive
+.PHONY: test
+## Build cb-mpc and run Go unit tests.
+test: build-cbmpc
+	$(GO_RUNNER) test $(GO_PACKAGES)
 
-# Build C++ library only if it doesn't exist or is outdated
-$(CPP_LIB): $(SUBMODULE_INIT)
-	@echo "Building C++ library (this may take a few minutes)..."
-	bash scripts/build_cpp.sh Release
+.PHONY: lint
+## Run static analysis.
+lint:
+	$(GOLANGCI_RUNNER) run $(GO_LINT_TARGETS)
 
-# Convenience target that checks if rebuild is needed
-build-cpp: $(CPP_LIB)
-	@echo "✅ C++ library is up to date"
+.PHONY: lint-fix
+## Apply autofixes where available.
+lint-fix:
+	$(GOLANGCI_RUNNER) run --fix $(GO_LINT_TARGETS)
 
-# Force rebuild of C++ library
-force-build-cpp: $(SUBMODULE_INIT)
-	@echo "Force rebuilding C++ library..."
-	bash scripts/build_cpp.sh Release
+.PHONY: openssl
+## Build a local OpenSSL copy suitable for linking cb-mpc.
+openssl:
+	$(call RUN_CMD,scripts/build_openssl.sh)
 
-# Build Go code (will build C++ if needed)
-build: $(CPP_LIB)
-	bash scripts/go_with_cpp.sh go build ./...
+.PHONY: build-cbmpc
+## Configure and build the cb-mpc static library from source without installing system-wide.
+build-cbmpc: openssl
+	$(call RUN_CMD,scripts/build_cbmpc.sh $(BUILD_TYPE))
 
-# Run tests (will build C++ if needed)
-test: $(CPP_LIB)
-	bash scripts/go_with_cpp.sh go test -v ./...
-
-# Run tests without checking C++ build (fast)
-test-short:
-	bash scripts/go_with_cpp.sh go test -v -short ./...
-
-examples: $(CPP_LIB)
-	@echo "Running agree_random example..."
-	bash scripts/go_with_cpp.sh go run examples/agree_random/main.go
-
+.PHONY: clean
+## Remove build artefacts.
 clean:
-	go clean ./...
+	rm -rf build
 
-clean-all: clean
-	cd cb-mpc && make clean || true
-	rm -rf cb-mpc/build cb-mpc/lib
