@@ -28,7 +28,6 @@ linters:
     - govet
     - ineffassign
     - staticcheck
-    - typecheck
     - unused
     - gofmt
     - goimports
@@ -38,20 +37,37 @@ linters:
     - unparam
     - misspell
     - prealloc
-    - exportloopref
   disable:
-    - deadcode      # Deprecated
-    - varcheck      # Deprecated
-    - structcheck   # Deprecated
-    - ifshort       # Too opinionated
+    # (none)
 
 issues:
+  exclude-dirs:
+    - cb-mpc
   exclude-rules:
     # Exclude CGO files from some checks that don't apply well
     - path: internal/cgo/
       linters:
         - gosec  # CGO has necessary unsafe operations
         - gocritic
+    # Exclude everything under cb-mpc (submodule and demos)
+    - path: ^cb-mpc/
+      linters:
+        - gofmt
+        - goimports
+        - gosec
+        - staticcheck
+        - govet
+        - errcheck
+        - gosimple
+        - ineffassign
+        - typecheck
+        - unused
+        - gocyclo
+        - goconst
+        - unparam
+        - misspell
+        - prealloc
+        - exportloopref
     # Allow long lines in generated code
     - path: ".*\\.pb\\.go"
       linters:

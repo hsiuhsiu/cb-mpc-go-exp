@@ -2,17 +2,16 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"time"
 
+	"github.com/coinbase/cb-mpc-go/examples"
 	"github.com/coinbase/cb-mpc-go/pkg/mpc"
 )
 
@@ -86,67 +85,59 @@ func main() {
 		log.Fatal("Failed to parse CA certificate")
 	}
 
-	// Load this party's certificate and key
-	cert, err := tls.LoadX509KeyPair(myPartyConfig.CertPath, myPartyConfig.KeyPath)
+	// Load TLS configuration using the examples helper
+	tlsConfig, err := examples.LoadTLSConfig(config.CACertPath, myPartyConfig.CertPath, myPartyConfig.KeyPath, *partyIndex == 0)
 	if err != nil {
-		log.Fatalf("Failed to load party certificate: %v", err)
+		log.Fatalf("Failed to load TLS config: %v", err)
 	}
 
-	// Build party configurations for mTLS
-	parties := make(map[int]mpc.PartyConfig)
-	nameToIndex := make(map[string]int)
+	// Set up addresses for mTLS session (similar to ecdsa2pc_mtls example)
+	var serverAddress string
+	var clientAddrs []string
 
-	for _, p := range config.Parties {
-		// Load each party's certificate for verification
-		certPEM, err := os.ReadFile(p.CertPath)
-		if err != nil {
-			log.Fatalf("Failed to read certificate for party %d: %v", p.Index, err)
+	if *partyIndex == 0 {
+		// Party 0 is the server
+		serverAddress = myPartyConfig.Address
+		clientAddrs = make([]string, len(config.Parties))
+		for _, p := range config.Parties {
+			if p.Index == *partyIndex {
+				clientAddrs[p.Index] = "" // Empty string for self
+			} else {
+				clientAddrs[p.Index] = p.Address
+			}
 		}
-
-		block, _ := pem.Decode(certPEM)
-		if block == nil {
-			log.Fatalf("Failed to decode PEM for party %d", p.Index)
+	} else {
+		// Other parties are clients
+		serverAddress = ""
+		clientAddrs = make([]string, len(config.Parties))
+		for _, p := range config.Parties {
+			if p.Index == *partyIndex {
+				clientAddrs[p.Index] = "" // Empty string for self
+			} else if p.Index == 0 {
+				clientAddrs[p.Index] = p.Address // Connect to server (party 0)
+			} else {
+				clientAddrs[p.Index] = "" // Don't connect to other clients directly
+			}
 		}
-
-		partyCert, err := x509.ParseCertificate(block.Bytes)
-		if err != nil {
-			log.Fatalf("Failed to parse certificate for party %d: %v", p.Index, err)
-		}
-
-		// Generate party name from certificate
-		partyName, err := mpc.PartyNameFromCertificate(partyCert)
-		if err != nil {
-			log.Fatalf("Failed to get party name for party %d: %v", p.Index, err)
-		}
-
-		parties[p.Index] = mpc.PartyConfig{
-			Address: p.Address,
-			Cert:    partyCert,
-		}
-		nameToIndex[partyName] = p.Index
 	}
 
 	fmt.Println("Setting up mTLS connections...")
 	fmt.Println()
 
-	// Create mTLS session
+	// Create mTLS session using the examples package
 	timeout := time.Duration(config.TimeoutSeconds) * time.Second
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
 
-	session, err := mpc.NewMTLSSession(mpc.MTLSConfig{
-		MyIndex:     *partyIndex,
-		Parties:     parties,
-		CertPool:    certPool,
-		TLSCert:     cert,
-		NameToIndex: nameToIndex,
-		Timeout:     timeout,
-	})
+	session, err := examples.NewMTLSSession(*partyIndex, len(config.Parties), serverAddress, clientAddrs, tlsConfig)
 	if err != nil {
 		log.Fatalf("Failed to create mTLS session: %v", err)
 	}
 	defer session.Close()
+
+	// Give some time for connections to establish
+	time.Sleep(2 * time.Second)
 
 	fmt.Println("✅ All mTLS connections established")
 	fmt.Println()
