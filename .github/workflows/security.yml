@@ -1,0 +1,61 @@
+name: Security Checks
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake ninja-build
+
+    - name: Build C++ library
+      run: make build-cpp
+
+    - name: Run gosec Security Scanner
+      uses: securecodewarrior/github-action-gosec@master
+      with:
+        args: './...'
+
+    - name: Run Nancy vulnerability scanner
+      run: |
+        go install github.com/sonatypecommunity/nancy@latest
+        go list -json -deps ./... | nancy sleuth
+
+    - name: Check for secrets
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: main
+        head: HEAD
+        extra_args: --debug --only-verified
+
+    - name: Verify no hardcoded secrets in tests
+      run: |
+        # Check for potential hardcoded keys or secrets
+        if grep -r -i "BEGIN.*PRIVATE\|BEGIN.*CERTIFICATE" --include="*.go" .; then
+          echo "WARNING: Found potential hardcoded certificates in Go files"
+          grep -r -i "BEGIN.*PRIVATE\|BEGIN.*CERTIFICATE" --include="*.go" .
+          echo "Ensure these are test fixtures only and not real secrets"
+        fi
+
+    - name: Memory safety checks
+      run: |
+        # Run tests with race detector
+        bash scripts/go_with_cpp.sh go test -race -short ./pkg/mpc ./internal/cgo

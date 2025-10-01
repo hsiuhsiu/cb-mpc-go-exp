@@ -23,10 +23,10 @@ func NewECDSA2PC(curve Curve) *ECDSA2PC {
 
 // ECDSA2PKey represents a distributed ECDSA key share
 type ECDSA2PKey struct {
-	cgoKey   *cgo.ECDSA2PKey
-	curve    Curve
-	role     int
-	pubKey   []byte
+	cgoKey    *cgo.ECDSA2PKey
+	curve     Curve
+	role      int
+	pubKey    []byte
 	privShare []byte
 }
 

@@ -19,9 +19,9 @@ type MTLSSession struct {
 	partyCount int
 
 	// Network connections
-	listener   net.Listener
-	clients    []net.Conn
-	clientsMu  sync.RWMutex
+	listener  net.Listener
+	clients   []net.Conn
+	clientsMu sync.RWMutex
 
 	// Message queues for each party
 	messageQueues []chan []byte

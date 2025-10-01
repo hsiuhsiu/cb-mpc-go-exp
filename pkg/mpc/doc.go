@@ -28,17 +28,17 @@
 //
 // # Security Considerations
 //
-// - All cryptographic operations are designed to be constant-time to prevent
-//   timing attacks. However, this depends on the compiler and CPU architecture.
+//   - All cryptographic operations are designed to be constant-time to prevent
+//     timing attacks. However, this depends on the compiler and CPU architecture.
 //
-// - The underlying C++ library is NOT thread-safe. Do not share Sessions or
-//   KeyShares across goroutines without proper synchronization.
+//   - The underlying C++ library is NOT thread-safe. Do not share Sessions or
+//     KeyShares across goroutines without proper synchronization.
 //
-// - Key shares should be stored securely. Compromise of all key shares allows
-//   recovery of the full private key.
+//   - Key shares should be stored securely. Compromise of all key shares allows
+//     recovery of the full private key.
 //
-// - Network communication between parties should use authenticated and encrypted
-//   channels (e.g., mTLS) to prevent man-in-the-middle attacks.
+//   - Network communication between parties should use authenticated and encrypted
+//     channels (e.g., mTLS) to prevent man-in-the-middle attacks.
 //
 // # Performance
 //

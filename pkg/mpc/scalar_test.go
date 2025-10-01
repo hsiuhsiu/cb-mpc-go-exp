@@ -62,8 +62,8 @@ func TestScalarEqual(t *testing.T) {
 
 func TestScalarIsZero(t *testing.T) {
 	tests := []struct {
-		name  string
-		data  []byte
+		name   string
+		data   []byte
 		isZero bool
 	}{
 		{"single zero byte", []byte{0x00}, true},

@@ -557,4 +557,3 @@ func TestECDSA2PC_ConcurrentSigning(t *testing.T) {
 		}
 	}
 }
-
