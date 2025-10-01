@@ -26,7 +26,8 @@
       "Bash(bash:*)",
       "Bash(go get:*)",
       "Bash(yes)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
