@@ -28,7 +28,7 @@ jobs:
         sudo apt-get install -y build-essential cmake ninja-build
 
     - name: Cache C++ build
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: cb-mpc/lib/Release
         key: ${{ runner.os }}-cbmpc-${{ hashFiles('cb-mpc/**/*.cpp', 'cb-mpc/**/*.h', 'cb-mpc/CMakeLists.txt') }}
