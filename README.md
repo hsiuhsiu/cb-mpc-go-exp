@@ -2,14 +2,17 @@
 
 Go bindings for [Coinbase's MPC library](https://github.com/coinbase/cb-mpc) - enabling secure multi-party computation for threshold cryptography.
 
+**🎯 Production-grade MPC protocols** with formal security proofs, constant-time implementations, and comprehensive testing including malicious party scenarios.
+
 ## Features
 
-- **Two-Party ECDSA**: Distributed key generation and signing between two parties
-- **Multi-Party ECDSA**: Threshold signing with configurable quorum (t-of-n)
-- **EdDSA/Schnorr**: Multi-party Schnorr signature schemes
-- **HD Key Derivation**: MPC-friendly hierarchical deterministic keys
-- **Publicly Verifiable Encryption**: Secure backup and recovery
-- **Pure Go API**: Idiomatic Go interfaces with CGO complexity hidden
+- **🔐 Threshold Signatures**: ECDSA, EdDSA, and Schnorr in both 2PC and multi-party variants
+- **🔑 Key Management**: Distributed key generation, HD derivation, and proactive refresh
+- **🛡️ Backup & Recovery**: Publicly verifiable encryption with access control
+- **🔍 Zero-Knowledge**: Comprehensive ZK proof systems for privacy-preserving protocols
+- **⚡ High Performance**: Optimized C++ cryptography with minimal Go/CGO overhead
+- **🛠️ Pure Go API**: Idiomatic Go interfaces with complete CGO isolation
+- **🔒 Production Ready**: Formal specifications, constant-time operations, and comprehensive testing
 
 ## Installation
 
@@ -242,15 +245,54 @@ Benchmark results: [Coming Soon]
 
 | Protocol | Status | Description |
 |----------|--------|-------------|
+| **Core Protocols** | | |
 | Agree Random 2PC | ✅ Ready | Two-party random value agreement |
 | Agree Random MPC | ✅ Ready | Multi-party random value agreement (any n ≥ 2) |
 | ECDSA 2PC | ✅ Ready | Two-party ECDSA (DKG, sign, refresh) |
-| ECDSA MPC | 🚧 Planned | Threshold ECDSA (t-of-n) |
-| EdDSA MPC | 🚧 Planned | Multi-party EdDSA/Schnorr |
-| EC-DKG | 🚧 Planned | Distributed key generation |
-| HD Derivation | 🚧 Planned | MPC-friendly BIP32-like derivation |
-| PVE | 🚧 Planned | Publicly verifiable encryption |
-| Zero Knowledge | 🚧 Planned | Various ZK proof protocols |
+| **Threshold Signatures** | | |
+| ECDSA MPC | 🚧 Planned | Multi-party threshold ECDSA (t-of-n) |
+| Schnorr 2PC | 🚧 Planned | Two-party Schnorr signatures (EdDSA, BIP340) |
+| Schnorr MPC | 🚧 Planned | Multi-party Schnorr signatures |
+| EdDSA 2PC | 🚧 Planned | Two-party EdDSA (Ed25519, Ed448) |
+| EdDSA MPC | 🚧 Planned | Multi-party EdDSA threshold signing |
+| **Key Management** | | |
+| EC-DKG | 🚧 Planned | Elliptic curve distributed key generation |
+| HD Derivation ECDSA 2PC | 🚧 Planned | MPC-friendly BIP32-like derivation for ECDSA |
+| HD Derivation EdDSA 2PC | 🚧 Planned | MPC-friendly BIP32-like derivation for EdDSA |
+| Key Refresh | 🚧 Planned | Proactive security through key rotation |
+| **Backup & Recovery** | | |
+| PVE (Base) | 🚧 Planned | Publicly verifiable encryption |
+| PVE Batch | 🚧 Planned | Batch publicly verifiable encryption |
+| PVE AC | 🚧 Planned | PVE with access control |
+| **Zero-Knowledge Proofs** | | |
+| ZK Elliptic Curve | 🚧 Planned | Zero-knowledge proofs for EC operations |
+| ZK Paillier | 🚧 Planned | Zero-knowledge proofs for Paillier encryption |
+| ZK Pedersen | 🚧 Planned | Zero-knowledge proofs for Pedersen commitments |
+| ZK ElGamal | 🚧 Planned | Zero-knowledge proofs for ElGamal encryption |
+| **Primitives** | | |
+| Oblivious Transfer | 🚧 Planned | Base OT and OT extensions |
+| Committed Broadcast | 🚧 Planned | Authenticated broadcast with commitments |
+| Integer Commitments | 🚧 Planned | Commitment schemes for integers |
+| Secret Sharing | 🚧 Planned | Shamir secret sharing and reconstructions |
+
+### Implementation Priority
+
+**🔥 High Priority (Next)**
+- ECDSA MPC (threshold ECDSA)
+- Schnorr 2PC (EdDSA, BIP340)
+- HD Derivation for ECDSA 2PC
+
+**🎯 Medium Priority**
+- EdDSA 2PC & MPC
+- PVE (Publicly Verifiable Encryption)
+- EC-DKG (standalone distributed key generation)
+
+**📋 Lower Priority**
+- Advanced ZK proofs
+- Oblivious Transfer primitives
+- Specialized commitment schemes
+
+> **Note**: All protocols listed are available in the underlying [cb-mpc C++ library](https://github.com/coinbase/cb-mpc). This roadmap reflects Go wrapper implementation priorities. Contributions welcome!
 
 ## Contributing
 
