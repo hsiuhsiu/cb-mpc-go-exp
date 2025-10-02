@@ -12,14 +12,7 @@ OPENSSL_ROOT_DEFAULT="${REPO_ROOT}/build/openssl-${ENV_FLAVOR}"
 OPENSSL_ROOT="${CBMPC_OPENSSL_ROOT:-${OPENSSL_ROOT_DEFAULT}}"
 
 export CBMPC_OPENSSL_ROOT="${OPENSSL_ROOT}"
+export CXXFLAGS="-I${OPENSSL_ROOT}/include ${CXXFLAGS:-}"
 
-cleanup() {
-  scripts/patch_cbmpc.sh restore || true
-}
-
-trap cleanup EXIT
-
-scripts/patch_cbmpc.sh apply
-
-cmake -S "${CB_MPC_DIR}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" -DBUILD_TESTS=OFF
+cmake -S "${CB_MPC_DIR}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" -DBUILD_TESTS=OFF -DCBMPC_OPENSSL_ROOT="${OPENSSL_ROOT}"
 cmake --build "${BUILD_DIR}" --target cbmpc --config "${BUILD_TYPE}"

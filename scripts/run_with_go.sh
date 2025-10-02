@@ -10,17 +10,9 @@ mkdir -p "${GOCACHE_DIR}" "${GOMODCACHE_DIR}"
 export GOCACHE="${GOCACHE_DIR}"
 export GOMODCACHE="${GOMODCACHE_DIR}"
 
-USE_DOCKER="${CBMPC_USE_DOCKER:-0}"
-
-if [[ "${USE_DOCKER}" == "1" ]]; then
-  if scripts/docker_available.sh >/dev/null 2>&1; then
-    if CBMPC_ENV_FLAVOR=docker scripts/docker_exec.sh go "$@"; then
-      exit 0
-    fi
-    echo "Go command failed inside Docker; falling back to host tooling." >&2
-  else
-    echo "Docker unavailable; running Go command on host." >&2
-  fi
+if [[ "${CBMPC_USE_DOCKER:-0}" == "1" ]]; then
+  CBMPC_ENV_FLAVOR=docker scripts/docker_exec.sh go "$@"
+  exit 0
 fi
 
 if command -v go >/dev/null 2>&1; then

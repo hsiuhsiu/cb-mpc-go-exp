@@ -1,20 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-COMMAND_NAME="$1"
-shift || true
-
-if ! scripts/docker_available.sh >/dev/null 2>&1; then
-  echo "Docker is unavailable; cannot run ${COMMAND_NAME} inside the dev container." >&2
+if [[ $# -lt 1 ]]; then
+  echo "usage: docker_exec.sh <command> [args...]" >&2
   exit 1
 fi
 
+COMMAND_NAME="$1"
+shift || true
+
 DOCKER_BIN="${CBMPC_DOCKER_BIN:-docker}"
+
+if ! command -v "${DOCKER_BIN}" >/dev/null 2>&1; then
+  echo "${DOCKER_BIN} not found on PATH; install Docker or unset CBMPC_USE_DOCKER." >&2
+  exit 1
+fi
+
 DOCKER_IMAGE="${CBMPC_DOCKER_IMAGE:-cb-mpc-go/dev}"
 DOCKERFILE="${CBMPC_DOCKERFILE:-docker/dev.Dockerfile}"
 ENV_FLAVOR="${CBMPC_ENV_FLAVOR:-docker}"
 
-mkdir -p build/.cache/go-build build/.cache/go-mod build/.cache/golangci build/openssl build/cb-mpc
+mkdir -p build/.cache/go-build-${ENV_FLAVOR} build/.cache/go-mod-${ENV_FLAVOR} \
+  build/.cache/golangci-${ENV_FLAVOR} build/openssl-${ENV_FLAVOR} build/cb-mpc-${ENV_FLAVOR}
 
 if ! "${DOCKER_BIN}" image inspect "${DOCKER_IMAGE}" >/dev/null 2>&1; then
   "${DOCKER_BIN}" build -t "${DOCKER_IMAGE}" -f "${DOCKERFILE}" .

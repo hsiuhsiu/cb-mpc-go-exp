@@ -35,6 +35,8 @@ A production-focused Go wrapper around [Coinbase's cb-mpc](https://github.com/co
    make build-cbmpc
    ```
 
+   The examples below run natively. If you prefer the Linux dev container, prefix commands with `CBMPC_USE_DOCKER=1` (Docker must be available and running).
+
    Native builds write artefacts under `build/openssl-host` and `build/cb-mpc-host`. When running with `CBMPC_USE_DOCKER=1`, the helper scripts isolate the container builds under `build/openssl-docker` and `build/cb-mpc-docker` to avoid CMake cache conflicts.
 
 4. Run the (currently minimal) Go test suite (the target depends on `make build-cbmpc` to ensure the native library is present):

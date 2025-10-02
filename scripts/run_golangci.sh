@@ -13,17 +13,9 @@ export GOCACHE="${GOCACHE_DIR}"
 export GOMODCACHE="${GOMODCACHE_DIR}"
 export GOLANGCI_LINT_CACHE="${GOLANGCI_CACHE_DIR}"
 
-USE_DOCKER="${CBMPC_USE_DOCKER:-0}"
-
-if [[ "${USE_DOCKER}" == "1" ]]; then
-  if scripts/docker_available.sh >/dev/null 2>&1; then
-    if CBMPC_ENV_FLAVOR=docker scripts/docker_exec.sh golangci-lint "$@"; then
-      exit 0
-    fi
-    echo "golangci-lint failed inside Docker; falling back to host tooling." >&2
-  else
-    echo "Docker unavailable; running golangci-lint on host." >&2
-  fi
+if [[ "${CBMPC_USE_DOCKER:-0}" == "1" ]]; then
+  CBMPC_ENV_FLAVOR=docker scripts/docker_exec.sh golangci-lint "$@"
+  exit 0
 fi
 
 if command -v golangci-lint >/dev/null 2>&1; then
