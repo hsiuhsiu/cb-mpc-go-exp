@@ -1,0 +1,15 @@
+# Build artifacts
+/build/
+/dist/
+*.log
+
+# Editor settings
+.idea/
+.vscode/
+
+# Go build cache
+bin/
+
+# macOS noise
+.DS_Store
+

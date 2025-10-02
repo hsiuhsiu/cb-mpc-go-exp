@@ -1,0 +1,20 @@
+name: Lint
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run lint target
+        env:
+          CBMPC_USE_DOCKER: "1"
+        run: make lint
