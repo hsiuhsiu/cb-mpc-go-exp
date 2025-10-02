@@ -12,7 +12,16 @@ A production-focused Go wrapper around [Coinbase's cb-mpc](https://github.com/co
 
 ## Getting started
 
-1. Clone the repository and initialize submodules:
+1. Install prerequisites:
+
+   ```bash
+   brew install git-lfs            # or use your distro package manager
+   git lfs install
+   ```
+
+   The upstream cb-mpc submodule stores several assets in Git LFS; without these commands `git submodule update` will emit warnings and leave large binaries out of sync.
+
+2. Clone the repository and initialize submodules:
 
    ```bash
    git clone git@github.com:coinbase/cb-mpc-go.git
@@ -20,35 +29,35 @@ A production-focused Go wrapper around [Coinbase's cb-mpc](https://github.com/co
    git submodule update --init --recursive
    ```
 
-2. Build the cb-mpc C++ static library from source without installing it system-wide:
+3. Build the cb-mpc C++ static library from source without installing it system-wide:
 
    ```bash
    make build-cbmpc
    ```
 
-   The helper target downloads a local static OpenSSL 3.2.0 build into `build/openssl`, patches the upstream CMake scripts to respect that location, and emits `libcbmpc.a` under `build/cb-mpc`.
+   Native builds write artefacts under `build/openssl-host` and `build/cb-mpc-host`. When running with `CBMPC_USE_DOCKER=1`, the helper scripts isolate the container builds under `build/openssl-docker` and `build/cb-mpc-docker` to avoid CMake cache conflicts.
 
-3. Run the (currently minimal) Go test suite (the target depends on `make build-cbmpc` to ensure the native library is present):
+4. Run the (currently minimal) Go test suite (the target depends on `make build-cbmpc` to ensure the native library is present):
 
    ```bash
    make test
    ```
 
-   On a clean macOS install the helper script automatically downloads Go 1.22.5 into `build/go`. Set `CBMPC_USE_DOCKER=1` if you prefer to run the tests inside the dev container.
+   On a clean macOS install the helper script automatically downloads Go 1.22.5 into `build/go-host`. Set `CBMPC_USE_DOCKER=1` if you prefer to run the tests inside the dev container, which will keep its own toolchain under `build/go-docker`.
 
-4. Run Go linters:
+5. Run Go linters:
 
    ```bash
    make lint
    ```
 
-   A matching `golangci-lint` v1.58.1 binary is installed into `build/bin` on demand, or you can execute the lint target inside Docker by exporting `CBMPC_USE_DOCKER=1`.
+   A matching `golangci-lint` v1.58.1 binary is installed into `build/bin-host` (or `build/bin-docker` in container mode) on demand.
 
 ## Development workflow
 
 - `make lint-fix` formats and auto-fixes lint findings when supported by `golangci-lint`.
 - `make clean` removes all generated build artefacts, including the local cb-mpc build directory.
-- Tool shims bootstrap pinned Go and `golangci-lint` toolchains automatically; export `CBMPC_USE_DOCKER=1` to run the same workflow inside the dev container.
+- Tool shims bootstrap pinned Go and `golangci-lint` toolchains automatically and keep separate caches per environment flavour (`*-host` vs `*-docker`) so you can switch between native macOS and Linux container runs without manual cleanup. Export `CBMPC_USE_DOCKER=1` to run the same workflow inside the dev container.
 - The Dockerfiles under `docker/` mirror the tooling used in CI, allowing local validation via `docker build -f docker/dev.Dockerfile .`.
 
 ## Continuous integration

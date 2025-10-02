@@ -2,13 +2,10 @@ SHELL := /bin/bash
 
 CBMPC_USE_DOCKER ?= 0
 BUILD_TYPE ?= Release
-GO ?= go
-GOLANGCI_LINT ?= golangci-lint
 GO_RUNNER := scripts/run_with_go.sh
 GOLANGCI_RUNNER := scripts/run_golangci.sh
 GO_PACKAGES := ./cmd/... ./pkg/...
 GO_LINT_TARGETS := ./cmd/... ./pkg/...
-DOCKER_RUN := scripts/docker_exec.sh
 
 RUN_CMD = scripts/run_host_or_docker.sh $(1)
 
