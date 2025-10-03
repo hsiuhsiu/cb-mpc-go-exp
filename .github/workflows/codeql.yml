@@ -1,0 +1,67 @@
+name: CodeQL
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: '0 5 * * 0'
+
+jobs:
+  analyze:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Ensure LFS assets are present
+        run: git lfs pull --exclude='' --include='*'
+
+      - name: Record cb-mpc revision
+        id: cbmpc
+        run: echo "rev=$(git rev-parse HEAD:third_party/cb-mpc)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go cache
+        uses: actions/cache@v4
+        with:
+          path: build/.cache
+          key: codeql-go-cache-${{ hashFiles('go.sum') }}-${{ steps.cbmpc.outputs.rev }}
+          restore-keys: |
+            codeql-go-cache-
+
+      - name: Restore cb-mpc build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/openssl-host
+            build/cb-mpc-host
+          key: codeql-build-${{ steps.cbmpc.outputs.rev }}
+          restore-keys: |
+            codeql-build-
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake clang ninja-build pkg-config python3 perl git curl
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go, cpp
+
+      - name: Build project
+        env:
+          CBMPC_USE_DOCKER: "0"
+        run: |
+          make bootstrap
+          make test
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3

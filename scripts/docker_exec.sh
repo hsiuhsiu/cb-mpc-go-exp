@@ -21,7 +21,8 @@ DOCKERFILE="${CBMPC_DOCKERFILE:-docker/dev.Dockerfile}"
 ENV_FLAVOR="${CBMPC_ENV_FLAVOR:-docker}"
 
 mkdir -p build/.cache/go-build-${ENV_FLAVOR} build/.cache/go-mod-${ENV_FLAVOR} \
-  build/.cache/golangci-${ENV_FLAVOR} build/openssl-${ENV_FLAVOR} build/cb-mpc-${ENV_FLAVOR}
+  build/.cache/golangci-${ENV_FLAVOR} build/openssl-${ENV_FLAVOR} build/cb-mpc-${ENV_FLAVOR} \
+  build/gopath-${ENV_FLAVOR}
 
 if ! "${DOCKER_BIN}" image inspect "${DOCKER_IMAGE}" >/dev/null 2>&1; then
   "${DOCKER_BIN}" build -t "${DOCKER_IMAGE}" -f "${DOCKERFILE}" .
@@ -39,6 +40,9 @@ GID_VALUE="$(id -g)"
   -e CBMPC_GOCACHE=/workspace/build/.cache/go-build-${ENV_FLAVOR} \
   -e CBMPC_GOMODCACHE=/workspace/build/.cache/go-mod-${ENV_FLAVOR} \
   -e CBMPC_GOLANGCI_CACHE=/workspace/build/.cache/golangci-${ENV_FLAVOR} \
+  -e GOCACHE=/workspace/build/.cache/go-build-${ENV_FLAVOR} \
+  -e GOMODCACHE=/workspace/build/.cache/go-mod-${ENV_FLAVOR} \
+  -e GOPATH=/workspace/build/gopath-${ENV_FLAVOR} \
   -e GOFLAGS="${GOFLAGS:-}" \
   --user "${UID_VALUE}:${GID_VALUE}" \
   "${DOCKER_IMAGE}" "${COMMAND_NAME}" "$@"

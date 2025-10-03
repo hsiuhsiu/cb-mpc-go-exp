@@ -67,7 +67,7 @@ A production-focused Go wrapper around [Coinbase's cb-mpc](https://github.com/co
 
 ## Continuous integration
 
-GitHub Actions workflows invoke the same Make targets (`make lint`, `make vuln`, `make sec`, `make test`) on every pull request with `CBMPC_USE_DOCKER=1`, so CI runs inside the dev container while local development can stay native.
+GitHub Actions workflows invoke the same Make targets (`make lint`, `make vuln`, `make sec`, `make test`) on every pull request with `CBMPC_USE_DOCKER=1`, covering a Linux container matrix across amd64 and arm64 plus a native macOS host job so both environments stay healthy.
 
 ## Next steps
 

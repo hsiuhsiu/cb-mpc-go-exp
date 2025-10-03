@@ -11,6 +11,10 @@ GOVULNCHECK_VERSION := v1.1.4
 GOSEC_VERSION := v2.20.0
 GOSEC_EXCLUDES := -exclude-dir=third_party -exclude-dir=build -exclude-dir=pkg/cbmpc/internal/cgo
 
+PKGS ?=
+VULN_PACKAGES := $(if $(PKGS),$(PKGS),./...)
+SEC_PACKAGES := $(if $(PKGS),$(PKGS),./...)
+
 RUN_CMD = scripts/run_host_or_docker.sh $(1)
 
 .PHONY: bootstrap
@@ -38,12 +42,12 @@ lint-fix:
 .PHONY: vuln
 ## Run govulncheck against the module packages.
 vuln:
-	CGO_ENABLED=0 GOFLAGS=-mod=mod $(GO_RUNNER) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+	CGO_ENABLED=0 GOFLAGS=-mod=mod $(GO_RUNNER) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) $(VULN_PACKAGES)
 
 .PHONY: sec
 ## Run gosec with exclusions for generated cgo stubs and vendored code.
 sec:
-	CGO_ENABLED=0 GOFLAGS=-mod=mod $(GO_RUNNER) run github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION) $(GOSEC_EXCLUDES) ./...
+	CGO_ENABLED=0 GOFLAGS=-mod=mod $(GO_RUNNER) run github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION) $(GOSEC_EXCLUDES) $(SEC_PACKAGES)
 
 .PHONY: tidy-check
 ## Ensure go.mod and go.sum are tidy.
