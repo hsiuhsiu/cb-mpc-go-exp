@@ -1,4 +1,6 @@
-// Package cbmpc exposes idiomatic Go wrappers around the Coinbase cb-mpc C++
-// library. The API surface intentionally starts small; concrete bindings will
-// be added incrementally as we model use-cases and stabilize the build flow.
+// Package cbmpc exposes a future-facing Go API for the Coinbase cb-mpc
+// library. The exported types compile today without linking the native
+// bindings so that downstream projects can adopt the package without pulling in
+// cgo immediately. Once the bindings are implemented the same API will surface
+// the real MPC primitives.
 package cbmpc
