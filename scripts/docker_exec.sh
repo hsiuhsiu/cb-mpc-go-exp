@@ -39,5 +39,6 @@ GID_VALUE="$(id -g)"
   -e CBMPC_GOCACHE=/workspace/build/.cache/go-build-${ENV_FLAVOR} \
   -e CBMPC_GOMODCACHE=/workspace/build/.cache/go-mod-${ENV_FLAVOR} \
   -e CBMPC_GOLANGCI_CACHE=/workspace/build/.cache/golangci-${ENV_FLAVOR} \
+  -e GOFLAGS="${GOFLAGS:-}" \
   --user "${UID_VALUE}:${GID_VALUE}" \
   "${DOCKER_IMAGE}" "${COMMAND_NAME}" "$@"

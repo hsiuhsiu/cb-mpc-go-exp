@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DEST_ROOT="${1:-${PWD}/build/go}"
-VERSION="${2:-1.22.5}"
+VERSION="${2:-1.23.12}"
 
 INSTALL_DIR="${DEST_ROOT}/go"
 GO_BIN="${INSTALL_DIR}/bin/go"
@@ -53,4 +53,7 @@ rm -rf "${INSTALL_DIR}"
 mkdir -p "${DEST_ROOT}"
 
 tar -xzf "${ARCHIVE_PATH}" -C "${DEST_ROOT}"
+
+# Drop the Go toolchain's testdata to keep go mod tidy from walking bogus packages.
+rm -rf "${INSTALL_DIR}/test"
 

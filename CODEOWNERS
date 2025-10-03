@@ -1,0 +1,4 @@
+# Default maintainers for cb-mpc-go. Update this list if ownership changes.
+* @coinbase/cb-mpc-go-maintainers
+
+# GitHub requires CODEOWNERS to live on the default branch to take effect.

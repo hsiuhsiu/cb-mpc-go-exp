@@ -22,7 +22,7 @@ if command -v golangci-lint >/dev/null 2>&1; then
   exec golangci-lint "$@"
 fi
 
-GO_VERSION="${GO_VERSION:-1.22.5}"
+GO_VERSION="${GO_VERSION:-1.23.12}"
 GO_ROOT="${CBMPC_GO_ROOT:-${PWD}/build/go-${ENV_FLAVOR}}"
 LOCAL_GO="${GO_ROOT}/go/bin/go"
 
@@ -34,7 +34,7 @@ if ! command -v go >/dev/null 2>&1; then
 fi
 
 TOOLS_BIN="${CBMPC_TOOLS_BIN:-${PWD}/build/bin-${ENV_FLAVOR}}"
-GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-v1.58.1}"
+GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-v1.64.8}"
 LOCAL_BIN="${TOOLS_BIN}/golangci-lint"
 
 if [[ ! -x "${LOCAL_BIN}" ]]; then

@@ -7,4 +7,3 @@ func TestLibraryVersion(t *testing.T) {
 		t.Fatal("expected placeholder version to be non-empty")
 	}
 }
-

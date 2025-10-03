@@ -45,7 +45,7 @@ A production-focused Go wrapper around [Coinbase's cb-mpc](https://github.com/co
    make test
    ```
 
-   On a clean macOS install the helper script automatically downloads Go 1.22.5 into `build/go-host`. Set `CBMPC_USE_DOCKER=1` if you prefer to run the tests inside the dev container, which will keep its own toolchain under `build/go-docker`.
+   On a clean macOS install the helper script automatically downloads Go 1.23.12 into `build/go-host`. Set `CBMPC_USE_DOCKER=1` if you prefer to run the tests inside the dev container, which will keep its own toolchain under `build/go-docker`.
 
 5. Run Go linters:
 
@@ -53,18 +53,21 @@ A production-focused Go wrapper around [Coinbase's cb-mpc](https://github.com/co
    make lint
    ```
 
-   A matching `golangci-lint` v1.58.1 binary is installed into `build/bin-host` (or `build/bin-docker` in container mode) on demand.
+   A matching `golangci-lint` v1.64.8 binary is installed into `build/bin-host` (or `build/bin-docker` in container mode) on demand.
 
 ## Development workflow
 
+- `make bootstrap` runs Git LFS setup, syncs submodules, and performs the initial cb-mpc build.
 - `make lint-fix` formats and auto-fixes lint findings when supported by `golangci-lint`.
+- `make vuln` executes `govulncheck ./...` with the pinned toolchain, while `make sec` wraps `gosec` with exclusions for generated cgo shims.
+- `make tidy-check` ensures `go.mod` and `go.sum` stay clean by running `go mod tidy` and failing on diffs.
 - `make clean` removes all generated build artefacts, including the local cb-mpc build directory.
 - Tool shims bootstrap pinned Go and `golangci-lint` toolchains automatically and keep separate caches per environment flavour (`*-host` vs `*-docker`) so you can switch between native macOS and Linux container runs without manual cleanup. Export `CBMPC_USE_DOCKER=1` to run the same workflow inside the dev container.
 - The Dockerfiles under `docker/` mirror the tooling used in CI, allowing local validation via `docker build -f docker/dev.Dockerfile .`.
 
 ## Continuous integration
 
-GitHub Actions workflows invoke the same Make targets (`make lint`, `make test`) on every pull request with `CBMPC_USE_DOCKER=1`, so CI runs inside the dev container while local development can stay native.
+GitHub Actions workflows invoke the same Make targets (`make lint`, `make vuln`, `make sec`, `make test`) on every pull request with `CBMPC_USE_DOCKER=1`, so CI runs inside the dev container while local development can stay native.
 
 ## Next steps
 
