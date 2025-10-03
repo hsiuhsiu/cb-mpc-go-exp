@@ -5,6 +5,10 @@ on:
   push:
     branches: [ main ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   container-matrix:
     name: Container (linux, ${{ matrix.arch }})
@@ -29,6 +33,12 @@ jobs:
 
       - name: Ensure LFS assets are present
         run: git lfs pull --exclude='' --include='*'
+
+      - name: Sync submodules
+        run: git submodule update --init --recursive
+
+      - name: Verify submodule integrity
+        run: CBMPC_SKIP_SUBMODULE_SYNC=1 scripts/check_submodule.sh
 
       - name: Set up QEMU (arm64)
         if: matrix.arch == 'arm64'
@@ -111,6 +121,9 @@ jobs:
         continue-on-error: true
         run: make sec PKGS=./pkg/cbmpc/internal/...
 
+      - name: Enforce cgo boundary
+        run: make check-boundary
+
       - name: Run tidy check
         run: make tidy-check
 
@@ -135,6 +148,12 @@ jobs:
 
       - name: Ensure LFS assets are present
         run: git lfs pull --exclude='' --include='*'
+
+      - name: Sync submodules
+        run: git submodule update --init --recursive
+
+      - name: Verify submodule integrity
+        run: CBMPC_SKIP_SUBMODULE_SYNC=1 scripts/check_submodule.sh
 
       - name: Record cb-mpc revision
         id: cbmpc
@@ -169,6 +188,9 @@ jobs:
 
       - name: Run gosec
         run: make sec PKGS=./pkg/...
+
+      - name: Enforce cgo boundary
+        run: make check-boundary
 
       - name: Run tidy check
         run: make tidy-check

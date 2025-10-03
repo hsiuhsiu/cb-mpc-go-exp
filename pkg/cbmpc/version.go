@@ -2,14 +2,23 @@ package cbmpc
 
 import "github.com/coinbase/cb-mpc-go/internal/bindings"
 
-const fallbackVersion = "unbuilt"
+var (
+	Version     = "v0.0.0-in-progress"
+	UpstreamSHA = "unknown"
+	UpstreamDir = "third_party/cb-mpc"
+)
 
-// Version reports the semantic version of the linked cb-mpc native library.
-// Until the bindings are available the function returns a placeholder value so
-// callers can surface diagnostics without crashing.
-func Version() string {
+// WrapperVersion returns the semantic version populated at build time via
+// ldflags. In development it defaults to v0.0.0-in-progress.
+func WrapperVersion() string {
+	return Version
+}
+
+// UpstreamVersion returns the version string reported by the native bindings if
+// available; otherwise it falls back to the pinned upstream commit SHA.
+func UpstreamVersion() string {
 	if v := bindings.Version(); v != "" {
 		return v
 	}
-	return fallbackVersion
+	return UpstreamSHA
 }

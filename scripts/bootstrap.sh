@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+cd "${REPO_ROOT}"
+
 echo "==> Installing Git LFS"
 if command -v git >/dev/null 2>&1; then
   git lfs install --skip-repo
@@ -14,6 +16,7 @@ fi
 
 echo "==> Syncing submodules"
 git submodule update --init --recursive
+CBMPC_SKIP_SUBMODULE_SYNC=1 scripts/check_submodule.sh
 
 if [[ "${CBMPC_SKIP_BUILD:-0}" != "1" ]]; then
   echo "==> Building OpenSSL"

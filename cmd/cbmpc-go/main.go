@@ -9,7 +9,8 @@ import (
 )
 
 func main() {
-	log.Printf("cb-mpc-go version: %s", cbmpc.Version())
+	log.Printf("cb-mpc-go version: %s", cbmpc.WrapperVersion())
+	log.Printf("cb-mpc upstream: %s (%s)", cbmpc.UpstreamVersion(), cbmpc.UpstreamDir)
 
 	cfg := cbmpc.Config{}
 	lib, err := cbmpc.Open(cfg)
