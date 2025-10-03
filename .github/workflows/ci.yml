@@ -1,0 +1,177 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  container-matrix:
+    name: Container (linux, ${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    env:
+      CBMPC_USE_DOCKER: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Git LFS
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git-lfs
+          git lfs install --skip-repo
+
+      - name: Ensure LFS assets are present
+        run: git lfs pull --exclude='' --include='*'
+
+      - name: Set up QEMU (arm64)
+        if: matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/arm64
+
+      - name: Record cb-mpc revision
+        id: cbmpc
+        run: echo "rev=$(git rev-parse HEAD:third_party/cb-mpc)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/.cache
+          key: go-cache-linux-${{ matrix.arch }}-${{ hashFiles('go.sum') }}-${{ steps.cbmpc.outputs.rev }}
+          restore-keys: |
+            go-cache-linux-${{ matrix.arch }}-
+
+      - name: Restore cb-mpc build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/openssl-*
+            build/cb-mpc-*
+          key: cbmpc-build-linux-${{ matrix.arch }}-${{ steps.cbmpc.outputs.rev }}
+          restore-keys: |
+            cbmpc-build-linux-${{ matrix.arch }}-
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true
+
+      - name: Restore Docker layer cache
+        id: docker-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: buildx-linux-${{ matrix.arch }}-${{ hashFiles('docker/dev.Dockerfile') }}-${{ steps.cbmpc.outputs.rev }}
+          restore-keys: |
+            buildx-linux-${{ matrix.arch }}-
+
+      - name: Build dev container
+        run: |
+          mkdir -p /tmp/.buildx-cache
+          rm -rf /tmp/.buildx-cache-new
+          docker buildx build \
+            --builder "${{ steps.buildx.outputs.name }}" \
+            --platform linux/${{ matrix.arch }} \
+            --cache-from type=local,src=/tmp/.buildx-cache \
+            --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max \
+            --load \
+            -t cb-mpc-go/dev \
+            -f docker/dev.Dockerfile .
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+      - name: Bootstrap dependencies
+        run: make bootstrap
+
+      - name: Run lint
+        run: make lint
+
+      - name: Run govulncheck (pkg)
+        run: make vuln PKGS=./pkg/...
+
+      - name: Advisory govulncheck (internal)
+        if: hashFiles('internal/**/*.go') != ''
+        continue-on-error: true
+        run: make vuln PKGS=./internal/...
+
+      - name: Run gosec (pkg)
+        run: make sec PKGS=./pkg/...
+
+      - name: Advisory gosec (bindings)
+        if: hashFiles('pkg/cbmpc/internal/**/*.go') != ''
+        continue-on-error: true
+        run: make sec PKGS=./pkg/cbmpc/internal/...
+
+      - name: Run tidy check
+        run: make tidy-check
+
+      - name: Run tests
+        run: make test
+
+  native-macos:
+    name: Native macOS
+    runs-on: macos-14
+    env:
+      CBMPC_USE_DOCKER: "0"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Git LFS
+        run: |
+          brew install git-lfs
+          git lfs install --skip-repo
+
+      - name: Ensure LFS assets are present
+        run: git lfs pull --exclude='' --include='*'
+
+      - name: Record cb-mpc revision
+        id: cbmpc
+        run: echo "rev=$(git rev-parse HEAD:third_party/cb-mpc)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go cache
+        uses: actions/cache@v4
+        with:
+          path: build/.cache
+          key: native-go-cache-${{ hashFiles('go.sum') }}-${{ steps.cbmpc.outputs.rev }}
+          restore-keys: |
+            native-go-cache-
+
+      - name: Restore cb-mpc build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/openssl-host
+            build/cb-mpc-host
+          key: native-build-${{ steps.cbmpc.outputs.rev }}
+          restore-keys: |
+            native-build-
+
+      - name: Bootstrap dependencies
+        run: make bootstrap
+
+      - name: Run lint
+        run: make lint
+
+      - name: Run govulncheck
+        run: make vuln PKGS=./pkg/...
+
+      - name: Run gosec
+        run: make sec PKGS=./pkg/...
+
+      - name: Run tidy check
+        run: make tidy-check
+
+      - name: Run tests
+        run: make test
