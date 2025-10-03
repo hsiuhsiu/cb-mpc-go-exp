@@ -1,3 +1,3 @@
-[submodule "third_party/cb-mpc"]
-	path = third_party/cb-mpc
+[submodule "cb-mpc"]
+	path = cb-mpc
 	url = https://github.com/coinbase/cb-mpc

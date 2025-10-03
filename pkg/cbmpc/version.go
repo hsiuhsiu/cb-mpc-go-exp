@@ -5,7 +5,7 @@ import "github.com/coinbase/cb-mpc-go/internal/bindings"
 var (
 	Version     = "v0.0.0-in-progress"
 	UpstreamSHA = "unknown"
-	UpstreamDir = "third_party/cb-mpc"
+	UpstreamDir = "cb-mpc"
 )
 
 // WrapperVersion returns the semantic version populated at build time via

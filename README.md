@@ -4,7 +4,7 @@ A production-focused Go wrapper around [Coinbase's cb-mpc](https://github.com/co
 
 ## Repository layout
 
-- `third_party/cb-mpc`: git submodule tracking the upstream C++ library.
+- `cb-mpc`: git submodule tracking the upstream C++ library.
 - `pkg/cbmpc`: public Go API surface; will grow as bindings are implemented.
 - `cmd/cbmpc-go`: placeholder command-line entry point useful for manual smoke testing during development.
 - `docker/`: container images that match the CI environment for linting and testing.
@@ -26,10 +26,11 @@ A production-focused Go wrapper around [Coinbase's cb-mpc](https://github.com/co
    ```bash
    git clone git@github.com:coinbase/cb-mpc-go.git
    cd cb-mpc-go
+   git submodule sync --recursive
    git submodule update --init --recursive
    ```
 
-   The `third_party/cb-mpc` submodule is pinned to a specific commit SHA. When contributing, keep it at the recorded revision unless you are preparing an intentional bump (see `docs/adr/0005-submodule-pin-policy.md`).
+   The `cb-mpc` submodule is pinned to a specific commit SHA. When contributing, keep it at the recorded revision unless you are preparing an intentional bump (see `docs/adr/0005-submodule-pin-policy.md`).
 
    Alternatively run `scripts/bootstrap.sh` to automate LFS setup, submodule sync, tool downloads, and the initial builds.
 

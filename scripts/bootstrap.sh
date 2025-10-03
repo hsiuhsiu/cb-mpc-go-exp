@@ -15,6 +15,7 @@ else
 fi
 
 echo "==> Syncing submodules"
+git submodule sync --recursive
 git submodule update --init --recursive
 CBMPC_SKIP_SUBMODULE_SYNC=1 scripts/check_submodule.sh
 

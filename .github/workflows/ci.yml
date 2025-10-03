@@ -34,6 +34,9 @@ jobs:
       - name: Ensure LFS assets are present
         run: git lfs pull --exclude='' --include='*'
 
+      - name: Sync submodule metadata
+        run: git submodule sync --recursive
+
       - name: Sync submodules
         run: git submodule update --init --recursive
 
@@ -48,7 +51,7 @@ jobs:
 
       - name: Record cb-mpc revision
         id: cbmpc
-        run: echo "rev=$(git rev-parse HEAD:third_party/cb-mpc)" >> "$GITHUB_OUTPUT"
+        run: echo "rev=$(git rev-parse HEAD:cb-mpc)" >> "$GITHUB_OUTPUT"
 
       - name: Restore Go cache
         uses: actions/cache@v4
@@ -149,6 +152,9 @@ jobs:
       - name: Ensure LFS assets are present
         run: git lfs pull --exclude='' --include='*'
 
+      - name: Sync submodule metadata
+        run: git submodule sync --recursive
+
       - name: Sync submodules
         run: git submodule update --init --recursive
 
@@ -157,7 +163,7 @@ jobs:
 
       - name: Record cb-mpc revision
         id: cbmpc
-        run: echo "rev=$(git rev-parse HEAD:third_party/cb-mpc)" >> "$GITHUB_OUTPUT"
+        run: echo "rev=$(git rev-parse HEAD:cb-mpc)" >> "$GITHUB_OUTPUT"
 
       - name: Restore Go cache
         uses: actions/cache@v4

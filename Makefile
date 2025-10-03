@@ -9,15 +9,15 @@ GO_LINT_TARGETS := ./cmd/... ./pkg/...
 GOLANGCI_CONFIG := .golangci.yml
 GOVULNCHECK_VERSION := v1.1.4
 GOSEC_VERSION := v2.20.0
-GOSEC_EXCLUDES := -exclude-dir=third_party -exclude-dir=build -exclude-dir=pkg/cbmpc/internal/cgo
+GOSEC_EXCLUDES := -exclude-dir=cb-mpc -exclude-dir=build -exclude-dir=pkg/cbmpc/internal/cgo
 
 PKGS ?=
 VULN_PACKAGES := $(if $(PKGS),$(PKGS),./...)
 SEC_PACKAGES := $(if $(PKGS),$(PKGS),./...)
 
 WRAPPER_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo v0.0.0-in-progress)
-UPSTREAM_SHA ?= $(shell git -C third_party/cb-mpc rev-parse HEAD 2>/dev/null || echo unknown)
-UPSTREAM_DIR ?= third_party/cb-mpc
+UPSTREAM_SHA ?= $(shell git -C cb-mpc rev-parse HEAD 2>/dev/null || echo unknown)
+UPSTREAM_DIR ?= cb-mpc
 GO_LDFLAGS := -X github.com/coinbase/cb-mpc-go/pkg/cbmpc.Version=$(WRAPPER_VERSION) -X github.com/coinbase/cb-mpc-go/pkg/cbmpc.UpstreamSHA=$(UPSTREAM_SHA) -X github.com/coinbase/cb-mpc-go/pkg/cbmpc.UpstreamDir=$(UPSTREAM_DIR)
 
 RUN_CMD = scripts/run_host_or_docker.sh $(1)
@@ -34,6 +34,7 @@ help:
 ## Initialize Git LFS, sync submodules, and build cb-mpc once.
 bootstrap:
 	git lfs install --skip-repo
+	git submodule sync --recursive
 	git submodule update --init --recursive
 	CBMPC_SKIP_SUBMODULE_SYNC=1 scripts/check_submodule.sh
 	$(MAKE) build-cbmpc
@@ -72,7 +73,7 @@ tidy-check:
 .PHONY: check-boundary
 ## Fail if import "C" appears outside internal/bindings.
 check-boundary:
-	@files=$$(git ls-files '*.go' | grep -v '^internal/bindings/' | grep -v '^third_party/' || true); \
+	@files=$$(git ls-files '*.go' | grep -v '^internal/bindings/' | grep -v '^cb-mpc/' || true); \
 	if [ -n "$$files" ]; then \
 		if grep -n 'import "C"' $$files; then \
 			echo 'Error: import "C" used outside internal/bindings' >&2; \
