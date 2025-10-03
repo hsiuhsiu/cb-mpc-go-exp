@@ -6,8 +6,8 @@ Accepted
 
 ## Context
 
-The Go wrapper depends on the upstream C++ repository via the Git submodule in
-`third_party/cb-mpc`. Allowing the submodule to drift onto mutable branches
+The Go wrapper depends on the upstream C++ repository via the `cb-mpc` Git submodule.
+Allowing the submodule to drift onto mutable branches
 creates non-deterministic builds and makes provenance audits difficult. We want
 clear guidance on how we pin and update the submodule.
 
