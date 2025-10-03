@@ -15,27 +15,33 @@ PKGS ?=
 VULN_PACKAGES := $(if $(PKGS),$(PKGS),./...)
 SEC_PACKAGES := $(if $(PKGS),$(PKGS),./...)
 
+WRAPPER_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo v0.0.0-in-progress)
+UPSTREAM_SHA ?= $(shell git -C third_party/cb-mpc rev-parse HEAD 2>/dev/null || echo unknown)
+UPSTREAM_DIR ?= third_party/cb-mpc
+GO_LDFLAGS := -X github.com/coinbase/cb-mpc-go/pkg/cbmpc.Version=$(WRAPPER_VERSION) -X github.com/coinbase/cb-mpc-go/pkg/cbmpc.UpstreamSHA=$(UPSTREAM_SHA) -X github.com/coinbase/cb-mpc-go/pkg/cbmpc.UpstreamDir=$(UPSTREAM_DIR)
+
 RUN_CMD = scripts/run_host_or_docker.sh $(1)
 
 .PHONY: help
 ## Print available make targets.
 help:
 	@printf "Available targets:\n"
-	@grep -hE '^([a-zA-Z0-9_-]|\.)+:|^##' $(MAKEFILE_LIST) | \
-	  sed -e 's/:.*//' -e 's/^## /\t/' | \
-	  awk 'NR%2{printf "  %-18s", $$0} !(NR%2){print $$0}'
+	@awk 'BEGIN{target=""} \
+	  /^\.PHONY:/ {target=$$2} \
+	  /^## / {if (target != "") {printf "  %-18s %s\n", target, substr($$0,4); target=""}}' $(MAKEFILE_LIST)
 
 .PHONY: bootstrap
 ## Initialize Git LFS, sync submodules, and build cb-mpc once.
 bootstrap:
 	git lfs install --skip-repo
 	git submodule update --init --recursive
+	CBMPC_SKIP_SUBMODULE_SYNC=1 scripts/check_submodule.sh
 	$(MAKE) build-cbmpc
 
 .PHONY: test
 ## Build cb-mpc and run Go unit tests.
 test: build-cbmpc
-	$(GO_RUNNER) test $(GO_PACKAGES)
+	$(GO_RUNNER) test -ldflags "$(GO_LDFLAGS)" $(GO_PACKAGES)
 
 .PHONY: lint
 ## Run static analysis.
@@ -62,6 +68,17 @@ sec:
 tidy-check:
 	GOFLAGS=-mod=mod $(GO_RUNNER) mod tidy
 	git diff --exit-code go.mod go.sum
+
+.PHONY: check-boundary
+## Fail if import "C" appears outside internal/bindings.
+check-boundary:
+	@files=$$(git ls-files '*.go' | grep -v '^internal/bindings/' | grep -v '^third_party/' || true); \
+	if [ -n "$$files" ]; then \
+		if grep -n 'import "C"' $$files; then \
+			echo 'Error: import "C" used outside internal/bindings' >&2; \
+			exit 1; \
+		fi; \
+	fi
 
 .PHONY: openssl
 ## Build a local OpenSSL copy suitable for linking cb-mpc.
