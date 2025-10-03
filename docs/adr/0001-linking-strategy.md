@@ -22,7 +22,7 @@ assembled and what licensing considerations exist.
   avoid ABI drift and to keep provenance clear.
 - Both the cb-mpc and OpenSSL builds run inside the repo-controlled build
   directories so we can track provenance. The top-level `LICENSE` and
-  third_party submodule already contain appropriate license text; this ADR makes
+  cb-mpc submodule already contain appropriate license text; this ADR makes
   explicit that the produced binaries inherit those licences.
 - CI and developers must rely on the repo-managed builds rather than system
   packages. Future tooling can add trust checks (hashes, SLSA attestations) but

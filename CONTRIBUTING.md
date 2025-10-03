@@ -5,7 +5,7 @@ We value community contributions and aim to keep the review loop fast. If someth
 ## Quick Start Checklist
 
 1. Use Go 1.22 (CI pins to Go 1.22.x). The helper scripts bootstrap toolchains automatically, or you can install Go yourself.
-2. Make sure Git LFS is installed before cloning or updating submodules (`brew install git-lfs && git lfs install`).
+2. Make sure Git LFS is installed before cloning or updating submodules (`brew install git-lfs && git lfs install`), then run `git submodule sync --recursive && git submodule update --init --recursive`.
 3. Build the native dependencies once with `make build-cbmpc`.
 4. Keep changes focussed and small; large rewrites land faster when split into reviewable pieces.
 
