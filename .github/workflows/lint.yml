@@ -1,4 +1,4 @@
-name: Lint
+name: Lint & Security
 
 on:
   pull_request:
@@ -6,8 +6,10 @@ on:
     branches: [ main ]
 
 jobs:
-  lint:
+  analysis:
     runs-on: ubuntu-latest
+    env:
+      CBMPC_USE_DOCKER: "1"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -15,6 +17,10 @@ jobs:
           submodules: recursive
 
       - name: Run lint target
-        env:
-          CBMPC_USE_DOCKER: "1"
         run: make lint
+
+      - name: Run govulncheck target
+        run: make vuln
+
+      - name: Run gosec target
+        run: make sec

@@ -6,4 +6,3 @@ package cbmpc
 func LibraryVersion() string {
 	return "unversioned"
 }
-

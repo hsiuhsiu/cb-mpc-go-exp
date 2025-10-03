@@ -6,8 +6,19 @@ GO_RUNNER := scripts/run_with_go.sh
 GOLANGCI_RUNNER := scripts/run_golangci.sh
 GO_PACKAGES := ./cmd/... ./pkg/...
 GO_LINT_TARGETS := ./cmd/... ./pkg/...
+GOLANGCI_CONFIG := .golangci.yml
+GOVULNCHECK_VERSION := v1.1.4
+GOSEC_VERSION := v2.20.0
+GOSEC_EXCLUDES := -exclude-dir=third_party -exclude-dir=build -exclude-dir=pkg/cbmpc/internal/cgo
 
 RUN_CMD = scripts/run_host_or_docker.sh $(1)
+
+.PHONY: bootstrap
+## Initialize Git LFS, sync submodules, and build cb-mpc once.
+bootstrap:
+	git lfs install --skip-repo
+	git submodule update --init --recursive
+	$(MAKE) build-cbmpc
 
 .PHONY: test
 ## Build cb-mpc and run Go unit tests.
@@ -17,12 +28,28 @@ test: build-cbmpc
 .PHONY: lint
 ## Run static analysis.
 lint:
-	$(GOLANGCI_RUNNER) run $(GO_LINT_TARGETS)
+	$(GOLANGCI_RUNNER) run --config $(GOLANGCI_CONFIG) $(GO_LINT_TARGETS)
 
 .PHONY: lint-fix
 ## Apply autofixes where available.
 lint-fix:
-	$(GOLANGCI_RUNNER) run --fix $(GO_LINT_TARGETS)
+	$(GOLANGCI_RUNNER) run --config $(GOLANGCI_CONFIG) --fix $(GO_LINT_TARGETS)
+
+.PHONY: vuln
+## Run govulncheck against the module packages.
+vuln:
+	CGO_ENABLED=0 GOFLAGS=-mod=mod $(GO_RUNNER) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+
+.PHONY: sec
+## Run gosec with exclusions for generated cgo stubs and vendored code.
+sec:
+	CGO_ENABLED=0 GOFLAGS=-mod=mod $(GO_RUNNER) run github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION) $(GOSEC_EXCLUDES) ./...
+
+.PHONY: tidy-check
+## Ensure go.mod and go.sum are tidy.
+tidy-check:
+	GOFLAGS=-mod=mod $(GO_RUNNER) mod tidy
+	git diff --exit-code go.mod go.sum
 
 .PHONY: openssl
 ## Build a local OpenSSL copy suitable for linking cb-mpc.

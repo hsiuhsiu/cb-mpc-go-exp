@@ -1,0 +1,36 @@
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  disable-all: true
+  enable:
+    - gofumpt
+    - gci
+    - revive
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - misspell
+    - gocritic
+
+linters-settings:
+  gofumpt:
+    module-path: github.com/coinbase/cb-mpc-go
+  gci:
+    sections:
+      - Standard
+      - Default
+      - Prefix(github.com/coinbase/cb-mpc-go)
+    skip-generated: true
+  revive:
+    severity: warning
+  misspell:
+    locale: US
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0

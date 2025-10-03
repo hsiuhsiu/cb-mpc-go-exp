@@ -10,8 +10,18 @@ mkdir -p "${GOCACHE_DIR}" "${GOMODCACHE_DIR}"
 export GOCACHE="${GOCACHE_DIR}"
 export GOMODCACHE="${GOMODCACHE_DIR}"
 
+# Enforce Go module immutability unless the caller opts out by specifying their own -mod flag.
+CURRENT_GOFLAGS="${GOFLAGS:-}"
+if [[ "${CURRENT_GOFLAGS}" != *"-mod="* ]]; then
+  if [[ -z "${CURRENT_GOFLAGS}" ]]; then
+    export GOFLAGS="-mod=readonly"
+  else
+    export GOFLAGS="${CURRENT_GOFLAGS} -mod=readonly"
+  fi
+fi
+
 if [[ "${CBMPC_USE_DOCKER:-0}" == "1" ]]; then
-  CBMPC_ENV_FLAVOR=docker scripts/docker_exec.sh go "$@"
+  CBMPC_ENV_FLAVOR=docker GOFLAGS="${GOFLAGS}" scripts/docker_exec.sh go "$@"
   exit 0
 fi
 
@@ -19,7 +29,7 @@ if command -v go >/dev/null 2>&1; then
   exec go "$@"
 fi
 
-GO_VERSION="${GO_VERSION:-1.22.5}"
+GO_VERSION="${GO_VERSION:-1.23.12}"
 GO_ROOT="${CBMPC_GO_ROOT:-${PWD}/build/go-${ENV_FLAVOR}}"
 LOCAL_GO="${GO_ROOT}/go/bin/go"
 
