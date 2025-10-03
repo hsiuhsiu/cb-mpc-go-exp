@@ -17,6 +17,14 @@ SEC_PACKAGES := $(if $(PKGS),$(PKGS),./...)
 
 RUN_CMD = scripts/run_host_or_docker.sh $(1)
 
+.PHONY: help
+## Print available make targets.
+help:
+	@printf "Available targets:\n"
+	@grep -hE '^([a-zA-Z0-9_-]|\.)+:|^##' $(MAKEFILE_LIST) | \
+	  sed -e 's/:.*//' -e 's/^## /\t/' | \
+	  awk 'NR%2{printf "  %-18s", $$0} !(NR%2){print $$0}'
+
 .PHONY: bootstrap
 ## Initialize Git LFS, sync submodules, and build cb-mpc once.
 bootstrap:
@@ -69,4 +77,3 @@ build-cbmpc: openssl
 ## Remove build artefacts.
 clean:
 	rm -rf build
-
