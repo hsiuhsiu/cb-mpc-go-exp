@@ -49,6 +49,6 @@ OPENSSL_ROOT="/workspace/build/openssl-${ENV_FLAVOR}"
   -e GOFLAGS="${GOFLAGS:-}" \
   -e CGO_CFLAGS="-I${OPENSSL_ROOT}/include" \
   -e CGO_CXXFLAGS="-I${OPENSSL_ROOT}/include" \
-  -e CGO_LDFLAGS="-L${OPENSSL_ROOT}/lib" \
+  -e CGO_LDFLAGS="-L${OPENSSL_ROOT}/lib -L${OPENSSL_ROOT}/lib64" \
   --user "${UID_VALUE}:${GID_VALUE}" \
   "${DOCKER_IMAGE}" "${COMMAND_NAME}" "$@"
