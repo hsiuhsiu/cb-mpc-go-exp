@@ -18,6 +18,17 @@ if [[ "${CBMPC_USE_DOCKER:-0}" == "1" ]]; then
   exit 0
 fi
 
+# Set CGO flags for OpenSSL based on build flavor (host only)
+OPENSSL_ROOT="${PWD}/build/openssl-${ENV_FLAVOR}"
+export CGO_CFLAGS="${CGO_CFLAGS:+${CGO_CFLAGS} }-I${OPENSSL_ROOT}/include"
+export CGO_CXXFLAGS="${CGO_CXXFLAGS:+${CGO_CXXFLAGS} }-I${OPENSSL_ROOT}/include"
+
+# Add library paths that exist
+LDFLAGS_OPENSSL=""
+[[ -d "${OPENSSL_ROOT}/lib" ]] && LDFLAGS_OPENSSL="${LDFLAGS_OPENSSL} -L${OPENSSL_ROOT}/lib"
+[[ -d "${OPENSSL_ROOT}/lib64" ]] && LDFLAGS_OPENSSL="${LDFLAGS_OPENSSL} -L${OPENSSL_ROOT}/lib64"
+export CGO_LDFLAGS="${CGO_LDFLAGS:+${CGO_LDFLAGS} }${LDFLAGS_OPENSSL}"
+
 if command -v golangci-lint >/dev/null 2>&1; then
   exec golangci-lint "$@"
 fi

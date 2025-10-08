@@ -59,6 +59,63 @@ static inline void free_cmem_view(cmem_t &view) {
   view.size = 0;
 }
 
+// Allocate and copy a vector of buf_t to a new cmems_t that the caller owns.
+// The caller is responsible for freeing this memory.
+static inline cmems_t alloc_and_copy_vector(const std::vector<buf_t> &vec) {
+  cmems_t result{};
+  if (vec.empty()) {
+    result.data = nullptr;
+    result.sizes = nullptr;
+    result.count = 0;
+    return result;
+  }
+
+  size_t n = vec.size();
+
+  // Calculate total size needed for all data
+  size_t total_size = 0;
+  for (const auto &buf : vec) {
+    total_size += static_cast<size_t>(buf.size());
+  }
+
+  // Allocate contiguous buffer for all data
+  uint8_t *data = nullptr;
+  if (total_size > 0) {
+    data = static_cast<uint8_t *>(std::malloc(total_size));
+    if (!data) {
+      result.data = nullptr;
+      result.sizes = nullptr;
+      result.count = 0;
+      return result;
+    }
+  }
+
+  // Allocate array for sizes
+  int *sizes = static_cast<int *>(std::malloc(n * sizeof(int)));
+  if (!sizes) {
+    std::free(data);
+    result.data = nullptr;
+    result.sizes = nullptr;
+    result.count = 0;
+    return result;
+  }
+
+  // Copy data and record sizes
+  size_t offset = 0;
+  for (size_t i = 0; i < n; ++i) {
+    sizes[i] = static_cast<int>(vec[i].size());
+    if (vec[i].size() > 0 && vec[i].data()) {
+      std::memcpy(data + offset, vec[i].data(), vec[i].size());
+      offset += vec[i].size();
+    }
+  }
+
+  result.data = data;
+  result.sizes = sizes;
+  result.count = static_cast<int>(n);
+  return result;
+}
+
 class go_transport_base : public coinbase::mpc::data_transport_interface_t {
  public:
   go_transport_base(const cbmpc_go_transport *table, std::vector<cbmpc_role_id> mapping)
@@ -242,6 +299,30 @@ int cbmpc_multi_agree_random(cbmpc_jobmp *j, int bitlen, cmem_t *out) {
     return rv;
   }
   *out = alloc_and_copy(result.data(), static_cast<size_t>(result.size()));
+  return 0;
+}
+
+int cbmpc_weak_multi_agree_random(cbmpc_jobmp *j, int bitlen, cmem_t *out) {
+  auto wrapper = reinterpret_cast<go_jobmp *>(j);
+  if (!wrapper || !wrapper->job || !out) return E_BADARG;
+  buf_t result;
+  error_t rv = coinbase::mpc::weak_multi_agree_random(*wrapper->job, bitlen, result);
+  if (rv != SUCCESS) {
+    return rv;
+  }
+  *out = alloc_and_copy(result.data(), static_cast<size_t>(result.size()));
+  return 0;
+}
+
+int cbmpc_multi_pairwise_agree_random(cbmpc_jobmp *j, int bitlen, cmems_t *out) {
+  auto wrapper = reinterpret_cast<go_jobmp *>(j);
+  if (!wrapper || !wrapper->job || !out) return E_BADARG;
+  std::vector<buf_t> result;
+  error_t rv = coinbase::mpc::multi_pairwise_agree_random(*wrapper->job, bitlen, result);
+  if (rv != SUCCESS) {
+    return rv;
+  }
+  *out = alloc_and_copy_vector(result);
   return 0;
 }
 

@@ -76,6 +76,5 @@ GitHub Actions workflows invoke the same Make targets (`make lint`, `make vuln`,
 
 ## Next steps
 
-- Implement cgo bindings that link against `build/cb-mpc`
 - Model higher-level Go APIs that expose safe MPC workflows
 - Expand testing (unit and integration) around the bindings once available

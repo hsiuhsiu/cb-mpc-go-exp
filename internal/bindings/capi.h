@@ -39,6 +39,8 @@ void cbmpc_jobmp_free(cbmpc_jobmp *j);
 
 int cbmpc_agree_random_2p(cbmpc_job2p *j, int bitlen, cmem_t *out);
 int cbmpc_multi_agree_random(cbmpc_jobmp *j, int bitlen, cmem_t *out);
+int cbmpc_weak_multi_agree_random(cbmpc_jobmp *j, int bitlen, cmem_t *out);
+int cbmpc_multi_pairwise_agree_random(cbmpc_jobmp *j, int bitlen, cmems_t *out);
 
 #ifdef __cplusplus
 }

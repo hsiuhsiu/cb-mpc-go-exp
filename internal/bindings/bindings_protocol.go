@@ -38,3 +38,29 @@ func AgreeRandomMP(cj unsafe.Pointer, bitlen int) ([]byte, error) {
 	}
 	return cmemToGoBytes(out), nil
 }
+
+// WeakMultiAgreeRandom is a C binding wrapper for the weak multi-party agree random protocol.
+func WeakMultiAgreeRandom(cj unsafe.Pointer, bitlen int) ([]byte, error) {
+	if cj == nil {
+		return nil, errors.New("nil job")
+	}
+	var out C.cmem_t
+	rc := C.cbmpc_weak_multi_agree_random((*C.cbmpc_jobmp)(cj), C.int(bitlen), &out)
+	if rc != 0 {
+		return nil, errors.New("weak_multi_agree_random failed")
+	}
+	return cmemToGoBytes(out), nil
+}
+
+// MultiPairwiseAgreeRandom is a C binding wrapper for the multi-party pairwise agree random protocol.
+func MultiPairwiseAgreeRandom(cj unsafe.Pointer, bitlen int) ([][]byte, error) {
+	if cj == nil {
+		return nil, errors.New("nil job")
+	}
+	var out C.cmems_t
+	rc := C.cbmpc_multi_pairwise_agree_random((*C.cbmpc_jobmp)(cj), C.int(bitlen), &out)
+	if rc != 0 {
+		return nil, errors.New("multi_pairwise_agree_random failed")
+	}
+	return cmemsToGoByteSlices(out), nil
+}
