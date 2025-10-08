@@ -2,34 +2,16 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
-	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"math"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
+	"github.com/coinbase/cb-mpc-go/examples/common"
 	"github.com/coinbase/cb-mpc-go/examples/tlsnet"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
 )
-
-type partyConfig struct {
-	Name    string `json:"name"`
-	Address string `json:"address"`
-	Cert    string `json:"cert"`
-	Key     string `json:"key"`
-}
-
-type clusterConfig struct {
-	CACert  string        `json:"ca_cert"`
-	Parties []partyConfig `json:"parties"`
-}
 
 func main() {
 	var (
@@ -43,7 +25,7 @@ func main() {
 		log.Fatal("--self flag is required")
 	}
 
-	cfg, err := loadConfig(*configPath)
+	cfg, err := common.LoadConfig(*configPath)
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
@@ -65,12 +47,12 @@ func main() {
 		log.Fatalf("self name %q not present in config", *selfName)
 	}
 
-	cert, err := tls.LoadX509KeyPair(cfg.Parties[selfIndex].Cert, cfg.Parties[selfIndex].Key)
+	cert, err := common.LoadKeyPair(cfg.Parties[selfIndex].Cert, cfg.Parties[selfIndex].Key)
 	if err != nil {
 		log.Fatalf("load certificate: %v", err)
 	}
 
-	caPool, err := loadCertPool(cfg.CACert)
+	caPool, err := common.LoadCertPool(cfg.CACert)
 	if err != nil {
 		log.Fatalf("load CA: %v", err)
 	}
@@ -107,59 +89,4 @@ func main() {
 		log.Fatalf("AgreeRandom: %v", err)
 	}
 	fmt.Printf("Party %s produced %d-bit random: %x\n", names[selfIndex], *bitlen, out)
-}
-
-func loadConfig(path string) (*clusterConfig, error) {
-	absPath, err := securePath(path)
-	if err != nil {
-		return nil, err
-	}
-	data, err := os.ReadFile(absPath) // #nosec G304 -- absPath validated by securePath
-	if err != nil {
-		return nil, err
-	}
-	var cfg clusterConfig
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, err
-	}
-	if len(cfg.Parties) < 2 {
-		return nil, errors.New("cluster must contain at least two parties")
-	}
-	return &cfg, nil
-}
-
-func loadCertPool(path string) (*x509.CertPool, error) {
-	absPath, err := securePath(path)
-	if err != nil {
-		return nil, err
-	}
-	pemData, err := os.ReadFile(absPath) // #nosec G304 -- absPath validated by securePath
-	if err != nil {
-		return nil, err
-	}
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(pemData) {
-		return nil, errors.New("failed to parse CA certificate")
-	}
-	return pool, nil
-}
-
-func securePath(path string) (string, error) {
-	clean := filepath.Clean(path)
-	absPath, err := filepath.Abs(clean)
-	if err != nil {
-		return "", err
-	}
-	base, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	rel, err := filepath.Rel(base, absPath)
-	if err != nil {
-		return "", err
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return "", fmt.Errorf("path %q escapes working directory", path)
-	}
-	return absPath, nil
 }

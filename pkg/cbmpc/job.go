@@ -3,6 +3,7 @@ package cbmpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"runtime"
 	"unsafe"
 
@@ -10,11 +11,10 @@ import (
 )
 
 var (
-	ErrInvalidBits = errors.New("bitlen must be >= 8 and a multiple of 8")
-	ErrBadPeers    = errors.New("invalid peers/self set")
-
-	errNilTransport = errors.New("cbmpc: nil transport")
-	errJobClosed    = errors.New("cbmpc: job closed")
+	ErrInvalidBits  = errors.New("bitlen must be >= 8 and a multiple of 8")
+	ErrBadPeers     = errors.New("invalid peers/self configuration")
+	ErrNilTransport = errors.New("transport must not be nil")
+	ErrJobClosed    = errors.New("job has been closed")
 )
 
 type Job2P struct {
@@ -63,13 +63,16 @@ func (a transportAdapter) ReceiveAll(ctx context.Context, from []uint32) (map[ui
 // party names. Names must be stable, unique identifiers for each participant.
 func NewJob2P(t Transport, self Role, names [2]string) (*Job2P, error) {
 	if t == nil {
-		return nil, errNilTransport
+		return nil, ErrNilTransport
 	}
 	if !self.valid() {
-		return nil, ErrBadPeers
+		return nil, fmt.Errorf("%w: role %d is not valid", ErrBadPeers, self)
 	}
-	if names[0] == "" || names[1] == "" || names[0] == names[1] {
-		return nil, ErrBadPeers
+	if names[0] == "" || names[1] == "" {
+		return nil, fmt.Errorf("%w: party names must not be empty", ErrBadPeers)
+	}
+	if names[0] == names[1] {
+		return nil, fmt.Errorf("%w: party names must be unique (got %q)", ErrBadPeers, names[0])
 	}
 
 	adapter := transportAdapter{inner: t}
@@ -102,23 +105,23 @@ func (j *Job2P) Close() error {
 // the session; self is the caller's index within that slice.
 func NewJobMP(t Transport, self RoleID, names []string) (*JobMP, error) {
 	if t == nil {
-		return nil, errNilTransport
+		return nil, ErrNilTransport
 	}
 	n := len(names)
 	if n < 2 {
-		return nil, ErrBadPeers
+		return nil, fmt.Errorf("%w: need at least 2 parties (got %d)", ErrBadPeers, n)
 	}
 	if int(self) < 0 || int(self) >= n {
-		return nil, ErrBadPeers
+		return nil, fmt.Errorf("%w: self role %d out of range [0,%d)", ErrBadPeers, self, n)
 	}
 
 	seen := make(map[string]struct{}, n)
-	for _, name := range names {
+	for i, name := range names {
 		if name == "" {
-			return nil, ErrBadPeers
+			return nil, fmt.Errorf("%w: party name at index %d is empty", ErrBadPeers, i)
 		}
 		if _, dup := seen[name]; dup {
-			return nil, ErrBadPeers
+			return nil, fmt.Errorf("%w: duplicate party name %q", ErrBadPeers, name)
 		}
 		seen[name] = struct{}{}
 	}
@@ -151,14 +154,14 @@ func (j *JobMP) Close() error {
 
 func (j *Job2P) ptr() (unsafe.Pointer, error) {
 	if j == nil || j.cptr == nil {
-		return nil, errJobClosed
+		return nil, ErrJobClosed
 	}
 	return j.cptr, nil
 }
 
 func (j *JobMP) ptr() (unsafe.Pointer, error) {
 	if j == nil || j.cptr == nil {
-		return nil, errJobClosed
+		return nil, ErrJobClosed
 	}
 	return j.cptr, nil
 }

@@ -8,7 +8,7 @@ GO_PACKAGES := ./cmd/... ./pkg/...
 GO_LINT_TARGETS := ./cmd/... ./pkg/...
 GOLANGCI_CONFIG := .golangci.yml
 GOVULNCHECK_VERSION := v1.1.4
-GOSEC_VERSION := v2.21.0
+GOSEC_VERSION := v2.22.9
 GOSEC_EXCLUDES := -exclude-dir=cb-mpc -exclude-dir=build -exclude-dir=pkg/cbmpc/internal/cgo
 TOOLS_BIN := $(abspath build/tools/bin)
 DEFAULT_GOSEC := $(TOOLS_BIN)/gosec
