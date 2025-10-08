@@ -42,6 +42,18 @@ int cbmpc_multi_agree_random(cbmpc_jobmp *j, int bitlen, cmem_t *out);
 int cbmpc_weak_multi_agree_random(cbmpc_jobmp *j, int bitlen, cmem_t *out);
 int cbmpc_multi_pairwise_agree_random(cbmpc_jobmp *j, int bitlen, cmems_t *out);
 
+// ECDSA 2P key serialization/deserialization
+int cbmpc_ecdsa2p_key_serialize(const void *key, cmem_t *out);
+int cbmpc_ecdsa2p_key_deserialize(cmem_t serialized, void **key);
+void cbmpc_ecdsa2p_key_free(void *key);
+int cbmpc_ecdsa2p_key_get_public_key(cmem_t serialized_key, cmem_t *out);
+int cbmpc_ecdsa2p_key_get_curve_nid(cmem_t serialized_key, int *nid);
+
+// ECDSA 2P protocols
+int cbmpc_ecdsa2p_dkg(cbmpc_job2p *j, int curve_nid, cmem_t *key_out);
+int cbmpc_ecdsa2p_refresh(cbmpc_job2p *j, cmem_t key_in, cmem_t *key_out);
+int cbmpc_ecdsa2p_sign(cbmpc_job2p *j, cmem_t sid_in, cmem_t key, cmem_t msg, cmem_t *sid_out, cmem_t *sig_out);
+
 #ifdef __cplusplus
 }
 #endif

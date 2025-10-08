@@ -10,8 +10,11 @@
 #include "capi.h"
 
 #include "cbmpc/core/buf.h"
+#include "cbmpc/core/convert.h"
 #include "cbmpc/core/error.h"
+#include "cbmpc/crypto/base_ecc.h"
 #include "cbmpc/protocol/agree_random.h"
+#include "cbmpc/protocol/ecdsa_2p.h"
 #include "cbmpc/protocol/mpc_job.h"
 
 extern "C" {
@@ -323,6 +326,214 @@ int cbmpc_multi_pairwise_agree_random(cbmpc_jobmp *j, int bitlen, cmems_t *out) 
     return rv;
   }
   *out = alloc_and_copy_vector(result);
+  return 0;
+}
+
+// Helper function to find ecurve_t by NID
+static inline coinbase::crypto::ecurve_t find_curve_by_nid(int nid) {
+  return coinbase::crypto::ecurve_t::find(nid);
+}
+
+// Helper to serialize ECDSA 2P key manually
+static buf_t serialize_ecdsa2p_key(const coinbase::mpc::ecdsa2pc::key_t& key) {
+  // Calculate size
+  coinbase::converter_t size_calc(true);
+  uint32_t role_val = static_cast<uint32_t>(key.role);
+  int curve_nid = key.curve.get_openssl_code();
+  buf_t Q_bin = key.Q.to_compressed_bin();
+  buf_t x_share_bin = key.x_share.to_bin();
+  buf_t c_key_bin = key.c_key.to_bin();
+
+  // Make a mutable copy of paillier for serialization
+  coinbase::crypto::paillier_t paillier_copy = key.paillier;
+
+  size_calc.convert(role_val);
+  size_calc.convert(curve_nid);
+  size_calc.convert(Q_bin);
+  size_calc.convert(x_share_bin);
+  size_calc.convert(c_key_bin);
+  paillier_copy.convert(size_calc);
+
+  if (size_calc.is_error()) return buf_t();
+
+  // Allocate and write
+  buf_t result(size_calc.get_size());
+  coinbase::converter_t writer(result.data());
+  paillier_copy = key.paillier;
+
+  writer.convert(role_val);
+  writer.convert(curve_nid);
+  writer.convert(Q_bin);
+  writer.convert(x_share_bin);
+  writer.convert(c_key_bin);
+  paillier_copy.convert(writer);
+
+  if (writer.is_error()) return buf_t();
+  return result;
+}
+
+// Helper to deserialize ECDSA 2P key manually
+static error_t deserialize_ecdsa2p_key(mem_t serialized, coinbase::mpc::ecdsa2pc::key_t& key) {
+  coinbase::converter_t reader(serialized);
+
+  uint32_t role_val = 0;
+  int curve_nid = 0;
+  buf_t Q_bin, x_share_bin, c_key_bin;
+
+  reader.convert(role_val);
+  reader.convert(curve_nid);
+  reader.convert(Q_bin);
+  reader.convert(x_share_bin);
+  reader.convert(c_key_bin);
+  key.paillier.convert(reader);
+
+  if (reader.is_error()) return E_CRYPTO;
+
+  key.role = static_cast<party_t>(role_val);
+  key.curve = find_curve_by_nid(curve_nid);
+  if (!key.curve) return E_BADARG;
+
+  if (key.Q.from_bin(key.curve, mem_t(Q_bin.data(), Q_bin.size())) != SUCCESS) return E_CRYPTO;
+  key.x_share = bn_t::from_bin(mem_t(x_share_bin.data(), x_share_bin.size()));
+  key.c_key = bn_t::from_bin(mem_t(c_key_bin.data(), c_key_bin.size()));
+
+  return SUCCESS;
+}
+
+// ECDSA 2P key serialization
+int cbmpc_ecdsa2p_key_serialize(const void *key, cmem_t *out) {
+  if (!key || !out) return E_BADARG;
+
+  const auto *k = static_cast<const coinbase::mpc::ecdsa2pc::key_t *>(key);
+  buf_t serialized = serialize_ecdsa2p_key(*k);
+  if (serialized.size() == 0) return E_CRYPTO;
+
+  *out = alloc_and_copy(serialized.data(), static_cast<size_t>(serialized.size()));
+  if (!out->data && serialized.size() > 0) return E_BADARG;
+
+  return 0;
+}
+
+// ECDSA 2P key deserialization
+int cbmpc_ecdsa2p_key_deserialize(cmem_t serialized, void **key) {
+  if (!serialized.data || serialized.size <= 0 || !key) return E_BADARG;
+
+  auto k = std::make_unique<coinbase::mpc::ecdsa2pc::key_t>();
+  error_t rv = deserialize_ecdsa2p_key(mem_t(serialized.data, serialized.size), *k);
+  if (rv != SUCCESS) return rv;
+
+  *key = k.release();
+  return 0;
+}
+
+// Free ECDSA 2P key
+void cbmpc_ecdsa2p_key_free(void *key) {
+  delete static_cast<coinbase::mpc::ecdsa2pc::key_t *>(key);
+}
+
+// Get public key from serialized ECDSA 2P key
+int cbmpc_ecdsa2p_key_get_public_key(cmem_t serialized_key, cmem_t *out) {
+  if (!serialized_key.data || serialized_key.size <= 0 || !out) return E_BADARG;
+
+  coinbase::mpc::ecdsa2pc::key_t key;
+  error_t rv = deserialize_ecdsa2p_key(mem_t(serialized_key.data, serialized_key.size), key);
+  if (rv != SUCCESS) return rv;
+
+  buf_t pub_key_buf = key.Q.to_compressed_bin();
+  *out = alloc_and_copy(pub_key_buf.data(), static_cast<size_t>(pub_key_buf.size()));
+  if (!out->data && pub_key_buf.size() > 0) return E_BADARG;
+
+  return 0;
+}
+
+// Get curve NID from serialized ECDSA 2P key
+int cbmpc_ecdsa2p_key_get_curve_nid(cmem_t serialized_key, int *nid) {
+  if (!serialized_key.data || serialized_key.size <= 0 || !nid) return E_BADARG;
+
+  coinbase::mpc::ecdsa2pc::key_t key;
+  error_t rv = deserialize_ecdsa2p_key(mem_t(serialized_key.data, serialized_key.size), key);
+  if (rv != SUCCESS) return rv;
+
+  *nid = key.curve.get_openssl_code();
+  return 0;
+}
+
+// ECDSA 2P DKG
+int cbmpc_ecdsa2p_dkg(cbmpc_job2p *j, int curve_nid, cmem_t *key_out) {
+  auto wrapper = reinterpret_cast<go_job2p *>(j);
+  if (!wrapper || !wrapper->job || !key_out) return E_BADARG;
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  coinbase::mpc::ecdsa2pc::key_t key;
+  error_t rv = coinbase::mpc::ecdsa2pc::dkg(*wrapper->job, curve, key);
+  if (rv != SUCCESS) {
+    return rv;
+  }
+
+  // Serialize key
+  return cbmpc_ecdsa2p_key_serialize(&key, key_out);
+}
+
+// ECDSA 2P Refresh
+int cbmpc_ecdsa2p_refresh(cbmpc_job2p *j, cmem_t key_in, cmem_t *key_out) {
+  auto wrapper = reinterpret_cast<go_job2p *>(j);
+  if (!wrapper || !wrapper->job || !key_in.data || key_in.size <= 0 || !key_out) return E_BADARG;
+
+  // Deserialize input key
+  coinbase::mpc::ecdsa2pc::key_t old_key;
+  error_t rv = deserialize_ecdsa2p_key(mem_t(key_in.data, key_in.size), old_key);
+  if (rv != SUCCESS) return rv;
+
+  // Refresh
+  coinbase::mpc::ecdsa2pc::key_t new_key;
+  rv = coinbase::mpc::ecdsa2pc::refresh(*wrapper->job, old_key, new_key);
+  if (rv != SUCCESS) return rv;
+
+  // Serialize new key
+  buf_t serialized = serialize_ecdsa2p_key(new_key);
+  if (serialized.size() == 0) return E_CRYPTO;
+
+  *key_out = alloc_and_copy(serialized.data(), static_cast<size_t>(serialized.size()));
+  if (!key_out->data && serialized.size() > 0) return E_BADARG;
+
+  return 0;
+}
+
+// ECDSA 2P Sign
+int cbmpc_ecdsa2p_sign(cbmpc_job2p *j, cmem_t sid_in, cmem_t key, cmem_t msg, cmem_t *sid_out, cmem_t *sig_out) {
+  auto wrapper = reinterpret_cast<go_job2p *>(j);
+  if (!wrapper || !wrapper->job || !key.data || key.size <= 0 ||
+      !msg.data || msg.size <= 0 || !sid_out || !sig_out) return E_BADARG;
+
+  // Deserialize key
+  coinbase::mpc::ecdsa2pc::key_t signing_key;
+  error_t rv = deserialize_ecdsa2p_key(mem_t(key.data, key.size), signing_key);
+  if (rv != SUCCESS) return rv;
+
+  // Create mutable sid
+  buf_t sid;
+  if (sid_in.data && sid_in.size > 0) {
+    sid = buf_t(sid_in.data, sid_in.size);
+  }
+
+  // Sign
+  buf_t signature;
+  mem_t msg_mem(msg.data, msg.size);
+  rv = coinbase::mpc::ecdsa2pc::sign(*wrapper->job, sid, signing_key, msg_mem, signature);
+  if (rv != SUCCESS) return rv;
+
+  // Copy outputs
+  *sid_out = alloc_and_copy(sid.data(), static_cast<size_t>(sid.size()));
+  if (!sid_out->data && sid.size() > 0) return E_BADARG;
+
+  *sig_out = alloc_and_copy(signature.data(), static_cast<size_t>(signature.size()));
+  if (!sig_out->data && signature.size() > 0) {
+    free_cmem_view(*sid_out);
+    return E_BADARG;
+  }
+
   return 0;
 }
 

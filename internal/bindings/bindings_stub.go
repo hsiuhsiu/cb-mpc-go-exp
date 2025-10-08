@@ -43,3 +43,23 @@ func WeakMultiAgreeRandom(unsafe.Pointer, int) ([]byte, error) {
 func MultiPairwiseAgreeRandom(unsafe.Pointer, int) ([][]byte, error) {
 	return nil, ErrNotBuilt
 }
+
+func ECDSA2PKeyGetPublicKey([]byte) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func ECDSA2PKeyGetCurveNID([]byte) (int, error) {
+	return 0, ErrNotBuilt
+}
+
+func ECDSA2PDKG(unsafe.Pointer, int) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func ECDSA2PRefresh(unsafe.Pointer, []byte) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func ECDSA2PSign(unsafe.Pointer, []byte, []byte, []byte) ([]byte, []byte, error) {
+	return nil, nil, ErrNotBuilt
+}

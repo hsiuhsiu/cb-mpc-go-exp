@@ -62,3 +62,24 @@ func cmemsToGoByteSlices(cmems C.cmems_t) [][]byte {
 
 	return result
 }
+
+// goBytesToCmem converts a Go []byte slice to a C.cmem_t.
+// Allocates C memory and copies the data. Caller is responsible for freeing the memory.
+func goBytesToCmem(data []byte) C.cmem_t {
+	var cmem C.cmem_t
+	if len(data) == 0 {
+		cmem.data = nil
+		cmem.size = 0
+		return cmem
+	}
+
+	cmem.size = C.int(len(data))
+	cmem.data = (*C.uint8_t)(C.malloc(C.size_t(len(data))))
+	if cmem.data == nil {
+		cmem.size = 0
+		return cmem
+	}
+
+	C.memcpy(unsafe.Pointer(cmem.data), unsafe.Pointer(&data[0]), C.size_t(len(data)))
+	return cmem
+}
