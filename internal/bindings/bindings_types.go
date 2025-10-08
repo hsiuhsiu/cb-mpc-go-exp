@@ -29,3 +29,36 @@ func cmemToGoBytes(cmem C.cmem_t) []byte {
 
 	return result
 }
+
+// cmemsToGoByteSlices converts a C.cmems_t to a Go [][]byte slice and takes ownership of the C memory.
+// Securely zeros and frees the C memory. Caller must not access the C memory after calling.
+func cmemsToGoByteSlices(cmems C.cmems_t) [][]byte {
+	if cmems.count <= 0 {
+		return nil
+	}
+
+	// Convert the C array of sizes to a Go slice
+	cSizesArray := (*[1 << 30]C.int)(unsafe.Pointer(cmems.sizes))[:cmems.count:cmems.count]
+
+	result := make([][]byte, cmems.count)
+	offset := 0
+	for i := range result {
+		size := int(cSizesArray[i])
+		if size > 0 && cmems.data != nil {
+			// Copy the data for this element
+			result[i] = C.GoBytes(unsafe.Pointer(uintptr(unsafe.Pointer(cmems.data))+uintptr(offset)), C.int(size))
+			offset += size
+		}
+	}
+
+	// Securely zero and free the memory
+	if cmems.data != nil && offset > 0 {
+		C.memset(unsafe.Pointer(cmems.data), 0, C.size_t(offset))
+		C.free(unsafe.Pointer(cmems.data))
+	}
+	if cmems.sizes != nil {
+		C.free(unsafe.Pointer(cmems.sizes))
+	}
+
+	return result
+}

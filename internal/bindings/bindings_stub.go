@@ -35,3 +35,11 @@ func AgreeRandom2P(unsafe.Pointer, int) ([]byte, error) {
 func AgreeRandomMP(unsafe.Pointer, int) ([]byte, error) {
 	return nil, ErrNotBuilt
 }
+
+func WeakMultiAgreeRandom(unsafe.Pointer, int) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func MultiPairwiseAgreeRandom(unsafe.Pointer, int) ([][]byte, error) {
+	return nil, ErrNotBuilt
+}
