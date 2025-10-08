@@ -17,7 +17,7 @@ if ! command -v "${DOCKER_BIN}" >/dev/null 2>&1; then
 fi
 
 DOCKER_IMAGE="${CBMPC_DOCKER_IMAGE:-cb-mpc-go/dev}"
-DOCKERFILE="${CBMPC_DOCKERFILE:-docker/dev.Dockerfile}"
+DOCKERFILE="${CBMPC_DOCKERFILE:-Dockerfile}"
 ENV_FLAVOR="${CBMPC_ENV_FLAVOR:-docker}"
 
 mkdir -p build/.cache/go-build-${ENV_FLAVOR} build/.cache/go-mod-${ENV_FLAVOR} \

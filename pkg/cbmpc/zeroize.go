@@ -1,23 +1,21 @@
 package cbmpc
 
-// ZeroizeBytes overwrites the provided slice with zeros. It is a best-effort
-// helper that keeps sensitive buffers from hanging around in heap snapshots
-// while we work towards a proper native implementation.
+import "runtime"
+
+// ZeroizeBytes overwrites the provided slice with zeros and prevents compiler
+// dead store elimination using runtime.KeepAlive.
+//
+// This follows the pattern recommended in golang/go#33325 and used by security-
+// focused libraries. While this cannot guarantee complete memory sanitization
+// due to Go's garbage collector and potential copies made by crypto libraries,
+// it represents current best practice in the Go ecosystem for sensitive memory.
+//
+// The underlying cb-mpc C++ library also performs its own secure zeroization
+// of internal buffers using OpenSSL's OPENSSL_cleanse or platform-specific APIs.
 func ZeroizeBytes(buf []byte) {
 	for i := range buf {
 		buf[i] = 0
 	}
-}
-
-// ZeroizeString overwrites the contents of the provided string by copying it
-// into a mutable byte slice before zeroing. The helper is intentionally naive
-// but good enough for placeholder logic.
-func ZeroizeString(s *string) {
-	if s == nil {
-		return
-	}
-
-	bytes := []byte(*s)
-	ZeroizeBytes(bytes)
-	*s = string(bytes)
+	// Prevent dead store elimination per golang/go#33325
+	runtime.KeepAlive(buf)
 }

@@ -1,4 +1,4 @@
-FROM golang:1.23-bullseye@sha256:161b8513c09cbfa4c174fd32e46eddc5eddf487a43958b9cf8b07d628e9e0f85
+FROM golang:1.25
 
 ARG GOLANGCI_LINT_VERSION=v1.64.8
 

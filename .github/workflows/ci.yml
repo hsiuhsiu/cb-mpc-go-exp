@@ -80,7 +80,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/.buildx-cache
-          key: buildx-linux-${{ matrix.arch }}-${{ hashFiles('docker/dev.Dockerfile') }}-${{ steps.cbmpc.outputs.rev }}
+          key: buildx-linux-${{ matrix.arch }}-${{ hashFiles('Dockerfile') }}-${{ steps.cbmpc.outputs.rev }}
           restore-keys: |
             buildx-linux-${{ matrix.arch }}-
 
@@ -95,7 +95,7 @@ jobs:
             --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max \
             --load \
             -t cb-mpc-go/dev \
-            -f docker/dev.Dockerfile .
+            -f Dockerfile .
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 

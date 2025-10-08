@@ -12,18 +12,20 @@ implementing the bindings, to avoid disruptive rework later.
 
 ## Decision
 
-- The top-level API centres around three types:
-  - `Library`: manages the process-wide cb-mpc instance and owns native
-    resources (already stubbed in `pkg/cbmpc/lib.go`).
-  - `KeySet`: wraps long-lived public/private key material. TODO: scaffolding
-    arrives in follow-on tasks but the ADR records the intent.
-  - `Signer`: offers stateless signing operations parameterized by a `KeySet`.
+- The API is organized around job-based MPC protocols:
+  - `Job2P` and `JobMP`: manage two-party and multi-party MPC sessions respectively,
+    handling transport and native resource lifecycle.
+  - Protocol functions (e.g., `AgreeRandom`, `MultiAgreeRandom`): stateless operations
+    that accept a job and perform MPC computations.
+  - `Transport` interface: allows users to provide custom network implementations.
+  - Future types (`KeySet`, `Signer`): will follow similar patterns for key management
+    and signing operations.
 - Every exported method that may block or perform native work accepts a
   `context.Context` as the first parameter. This allows cancellation and aligns
   with other Coinbase Go APIs.
-- The package uses sentinel errors (`ErrCGONotEnabled`, `ErrNotBuilt`, etc.) and
-  `errors.Is` for classification; additional error values (e.g.
-  `ErrInvalidKey`, `ErrSigningFailed`) will follow the same pattern.
+- The package uses standard Go errors with descriptive messages; additional sentinel
+  errors (e.g., `ErrInvalidBits`, `ErrBadPeers`) are defined as needed for specific
+  error conditions.
 - Cryptographically sensitive comparisons use constant-time helpers from
   `crypto/subtle`.
 - Logging flows use a small wrapper around `log/slog`; secrets must be redacted via helper functions (no raw `%x`).

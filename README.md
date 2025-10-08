@@ -5,9 +5,10 @@ A production-focused Go wrapper around [Coinbase's cb-mpc](https://github.com/co
 ## Repository layout
 
 - `cb-mpc`: git submodule tracking the upstream C++ library.
-- `pkg/cbmpc`: public Go API surface; will grow as bindings are implemented.
-- `cmd/cbmpc-go`: placeholder command-line entry point useful for manual smoke testing during development.
-- `docker/`: container images that match the CI environment for linting and testing.
+- `pkg/cbmpc`: public Go API surface with MPC protocol implementations.
+- `internal/bindings`: CGO bridge to the C++ cb-mpc library.
+- `examples/`: example programs demonstrating MPC protocols (agree-random-2p, agree-random-mp, etc.).
+- `Dockerfile`: development container image that matches the CI environment.
 - `.github/workflows/`: GitHub Actions pipelines for linting and testing pull requests.
 
 ## Getting started
@@ -63,11 +64,11 @@ A production-focused Go wrapper around [Coinbase's cb-mpc](https://github.com/co
 
 - `make bootstrap` runs Git LFS setup, syncs submodules, and performs the initial cb-mpc build.
 - `make lint-fix` formats and auto-fixes lint findings when supported by `golangci-lint`.
-- `make vuln` executes `govulncheck ./...` with the pinned toolchain, while `make sec` wraps `gosec` with exclusions for generated cgo shims.
+- `make vuln` executes `govulncheck ./...` with the pinned toolchain, while `make sec` wraps `gosec` with exclusions for generated cgo shims. Run `make tools` once to install the pinned security tools into `build/tools/bin`.
 - `make tidy-check` ensures `go.mod` and `go.sum` stay clean by running `go mod tidy` and failing on diffs.
 - `make clean` removes all generated build artefacts, including the local cb-mpc build directory.
 - Tool shims bootstrap pinned Go and `golangci-lint` toolchains automatically and keep separate caches per environment flavour (`*-host` vs `*-docker`) so you can switch between native macOS and Linux container runs without manual cleanup. Export `CBMPC_USE_DOCKER=1` to run the same workflow inside the dev container.
-- The Dockerfiles under `docker/` mirror the tooling used in CI, allowing local validation via `docker build -f docker/dev.Dockerfile .`.
+- The `Dockerfile` mirrors the tooling used in CI, allowing local validation via `docker build .`.
 
 ## Continuous integration
 

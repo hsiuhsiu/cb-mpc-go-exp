@@ -1,17 +1,37 @@
-//go:build !cgo && !windows
-// +build !cgo,!windows
+//go:build !cgo || windows
 
 package bindings
 
-// Open is the non-cgo stub that reports the lack of native support.
-func Open(Config) (Handle, error) {
-	return 0, ErrCGONotEnabled
+import (
+	"context"
+	"unsafe"
+)
+
+// Stub implementations for non-CGO builds or Windows.
+// These allow the package to compile but return ErrNotBuilt when called.
+
+type transport interface {
+	Send(context.Context, uint32, []byte) error
+	Receive(context.Context, uint32) ([]byte, error)
+	ReceiveAll(context.Context, []uint32) (map[uint32][]byte, error)
 }
 
-// Close reports the same cgo-disabled error.
-func Close(Handle) error {
-	return ErrCGONotEnabled
+func NewJob2P(transport, uint32, []string) (unsafe.Pointer, uintptr, error) {
+	return nil, 0, ErrNotBuilt
 }
 
-// Version returns an empty string when the native bindings are unavailable.
-func Version() string { return "" }
+func FreeJob2P(unsafe.Pointer, uintptr) {}
+
+func NewJobMP(transport, uint32, []string) (unsafe.Pointer, uintptr, error) {
+	return nil, 0, ErrNotBuilt
+}
+
+func FreeJobMP(unsafe.Pointer, uintptr) {}
+
+func AgreeRandom2P(unsafe.Pointer, int) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func AgreeRandomMP(unsafe.Pointer, int) ([]byte, error) {
+	return nil, ErrNotBuilt
+}

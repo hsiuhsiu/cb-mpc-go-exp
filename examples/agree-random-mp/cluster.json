@@ -1,0 +1,23 @@
+{
+  "ca_cert": "examples/agree-random-mp/certs/rootCA.pem",
+  "parties": [
+    {
+      "name": "p0",
+      "address": "127.0.0.1:9441",
+      "cert": "examples/agree-random-mp/certs/p0-cert.pem",
+      "key": "examples/agree-random-mp/certs/p0-key.pem"
+    },
+    {
+      "name": "p1",
+      "address": "127.0.0.1:9442",
+      "cert": "examples/agree-random-mp/certs/p1-cert.pem",
+      "key": "examples/agree-random-mp/certs/p1-key.pem"
+    },
+    {
+      "name": "p2",
+      "address": "127.0.0.1:9443",
+      "cert": "examples/agree-random-mp/certs/p2-cert.pem",
+      "key": "examples/agree-random-mp/certs/p2-key.pem"
+    }
+  ]
+}
