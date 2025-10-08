@@ -4,7 +4,6 @@ package cbmpc_test
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -12,13 +11,6 @@ import (
 	cbmpc "github.com/coinbase/cb-mpc-go/pkg/cbmpc"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/mocknet"
 )
-
-func skipIfUnlinked(t *testing.T, err error) {
-	t.Helper()
-	if errors.Is(err, cbmpc.ErrNotBuilt) || errors.Is(err, cbmpc.ErrCGONotEnabled) {
-		t.Skipf("native bindings unavailable: %v", err)
-	}
-}
 
 func TestAgreeRandom2PNative(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -33,7 +25,6 @@ func TestAgreeRandom2PNative(t *testing.T) {
 
 	job1, err := cbmpc.NewJob2P(p1, cbmpc.RoleP1, names)
 	if err != nil {
-		skipIfUnlinked(t, err)
 		t.Fatalf("NewJob2P p1: %v", err)
 	}
 	defer func() {
@@ -43,7 +34,6 @@ func TestAgreeRandom2PNative(t *testing.T) {
 	job2, err := cbmpc.NewJob2P(p2, cbmpc.RoleP2, names)
 	if err != nil {
 		_ = job1.Close()
-		skipIfUnlinked(t, err)
 		t.Fatalf("NewJob2P p2: %v", err)
 	}
 	defer func() {
@@ -117,7 +107,6 @@ func TestMultiAgreeRandomNative(t *testing.T) {
 					_ = jobs[j].Close()
 				}
 			}
-			skipIfUnlinked(t, err)
 			t.Fatalf("NewJobMP role %d: %v", self, err)
 		}
 		jobs[i] = job

@@ -4,13 +4,10 @@
 //
 // The package is organized as follows:
 //   - bindings.go: CGO build configuration (this file)
-//   - bindings_types.go: Type conversions, transport interface, and CGO export callbacks
-//   - bindings_job.go: Job lifecycle management (NewJob2P, FreeJob2P, NewJobMP, FreeJobMP)
+//   - bindings_types.go: Type conversions (cmemToGoBytes) and common types
+//   - bindings_job.go: Transport interface, handle registry, CGO export callbacks, and job lifecycle management
 //   - bindings_protocol.go: MPC protocol implementations (AgreeRandom2P, AgreeRandomMP)
-//
-// The CGO export callbacks (cbmpc_go_send, cbmpc_go_receive, cbmpc_go_receive_all)
-// are defined in bindings_types.go and allow the C++ library to call back into Go
-// for network operations.
+//   - bindings_stub.go: Stub implementations for non-CGO builds or Windows
 package bindings
 
 /*
