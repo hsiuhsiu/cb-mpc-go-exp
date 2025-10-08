@@ -30,8 +30,8 @@ using coinbase::mpc::job_mp_t;
 using coinbase::mpc::party_idx_t;
 using coinbase::mpc::party_t;
 
-thread_local std::vector<std::pair<void *, size_t>> g_scratch;
-
+// Allocate and copy data to a new cmem_t that the caller owns.
+// The caller is responsible for freeing this memory.
 static inline cmem_t alloc_and_copy(const uint8_t *src, size_t n) {
   uint8_t *p = nullptr;
   if (n > 0) {
@@ -44,21 +44,10 @@ static inline cmem_t alloc_and_copy(const uint8_t *src, size_t n) {
     }
     if (src) std::memcpy(p, src, n);
   }
-  g_scratch.emplace_back(p, n);
   cmem_t view{};
   view.data = p;
   view.size = static_cast<int>(n);
   return view;
-}
-
-static inline void scratch_free_all() {
-  for (auto &kv : g_scratch) {
-    if (kv.first && kv.second) {
-      coinbase::secure_bzero(static_cast<uint8_t *>(kv.first), static_cast<int>(kv.second));
-    }
-    std::free(kv.first);
-  }
-  g_scratch.clear();
 }
 
 static inline void free_cmem_view(cmem_t &view) {
@@ -177,8 +166,6 @@ cbmpc_go_transport cbmpc_make_go_transport(void *ctx) {
   return t;
 }
 
-void cbmpc_last_call_scratch_free(void) { scratch_free_all(); }
-
 cbmpc_job2p *cbmpc_job2p_new(const cbmpc_go_transport *t,
                              cbmpc_role_id self,
                              const char *const *names) {
@@ -237,11 +224,9 @@ void cbmpc_jobmp_free(cbmpc_jobmp *j) {
 int cbmpc_agree_random_2p(cbmpc_job2p *j, int bitlen, cmem_t *out) {
   auto wrapper = reinterpret_cast<go_job2p *>(j);
   if (!wrapper || !wrapper->job || !out) return E_BADARG;
-  scratch_free_all();
   buf_t result;
   error_t rv = coinbase::mpc::agree_random(*wrapper->job, bitlen, result);
   if (rv != SUCCESS) {
-    scratch_free_all();
     return rv;
   }
   *out = alloc_and_copy(result.data(), static_cast<size_t>(result.size()));
@@ -251,11 +236,9 @@ int cbmpc_agree_random_2p(cbmpc_job2p *j, int bitlen, cmem_t *out) {
 int cbmpc_multi_agree_random(cbmpc_jobmp *j, int bitlen, cmem_t *out) {
   auto wrapper = reinterpret_cast<go_jobmp *>(j);
   if (!wrapper || !wrapper->job || !out) return E_BADARG;
-  scratch_free_all();
   buf_t result;
   error_t rv = coinbase::mpc::multi_agree_random(*wrapper->job, bitlen, result);
   if (rv != SUCCESS) {
-    scratch_free_all();
     return rv;
   }
   *out = alloc_and_copy(result.data(), static_cast<size_t>(result.size()));

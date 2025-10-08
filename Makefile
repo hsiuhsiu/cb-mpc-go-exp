@@ -7,7 +7,7 @@ GOLANGCI_RUNNER := scripts/run_golangci.sh
 GO_PACKAGES := ./cmd/... ./pkg/...
 GO_LINT_TARGETS := ./cmd/... ./pkg/...
 GOLANGCI_CONFIG := .golangci.yml
-GOVULNCHECK_VERSION := v1.1.4
+GOVULNCHECK_VERSION := latest
 GOSEC_VERSION := v2.22.9
 GOSEC_EXCLUDES := -exclude-dir=cb-mpc -exclude-dir=build -exclude-dir=pkg/cbmpc/internal/cgo
 TOOLS_BIN := $(abspath build/tools/bin)
@@ -75,7 +75,7 @@ lint-fix:
 .PHONY: vuln
 ## Run govulncheck against the module packages.
 vuln:
-	CGO_ENABLED=0 GOFLAGS=-mod=mod $(GO_RUNNER) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) $(VULN_PACKAGES)
+	GOTOOLCHAIN=go1.25.2 CGO_ENABLED=0 GOFLAGS=-mod=mod $(GO_RUNNER) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) $(VULN_PACKAGES)
 
 .PHONY: sec
 ## Run gosec with exclusions for generated cgo stubs and vendored code.

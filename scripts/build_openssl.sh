@@ -8,7 +8,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FLAVOR="${CBMPC_ENV_FLAVOR:-host}"
 DEFAULT_PREFIX="${REPO_ROOT}/build/openssl-${ENV_FLAVOR}"
-INSTALL_ROOT="${1:-${DEFAULT_PREFIX}}"
+INSTALL_ROOT_ARG="${1:-${DEFAULT_PREFIX}}"
+
+# Convert to absolute path if relative
+if [[ "${INSTALL_ROOT_ARG}" == /* ]]; then
+  INSTALL_ROOT="${INSTALL_ROOT_ARG}"
+else
+  INSTALL_ROOT="$(cd "${REPO_ROOT}" && pwd)/${INSTALL_ROOT_ARG}"
+fi
 
 # Skip if already built.
 if [[ -f "${INSTALL_ROOT}/lib/libcrypto.a" || -f "${INSTALL_ROOT}/lib64/libcrypto.a" ]]; then
