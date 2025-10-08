@@ -5,8 +5,9 @@ A production-focused Go wrapper around [Coinbase's cb-mpc](https://github.com/co
 ## Repository layout
 
 - `cb-mpc`: git submodule tracking the upstream C++ library.
-- `pkg/cbmpc`: public Go API surface; will grow as bindings are implemented.
-- `cmd/cbmpc-go`: placeholder command-line entry point useful for manual smoke testing during development.
+- `pkg/cbmpc`: public Go API surface with MPC protocol implementations.
+- `internal/bindings`: CGO bridge to the C++ cb-mpc library.
+- `examples/`: example programs demonstrating MPC protocols (agree-random-2p, agree-random-mp, etc.).
 - `Dockerfile`: development container image that matches the CI environment.
 - `.github/workflows/`: GitHub Actions pipelines for linting and testing pull requests.
 
