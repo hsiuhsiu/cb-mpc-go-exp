@@ -2,7 +2,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
-#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -10,16 +9,12 @@
 #include "capi.h"
 
 #include "cbmpc/core/buf.h"
+#include "cbmpc/core/convert.h"
 #include "cbmpc/core/error.h"
+#include "cbmpc/crypto/base_ecc.h"
 #include "cbmpc/protocol/agree_random.h"
+#include "cbmpc/protocol/ecdsa_2p.h"
 #include "cbmpc/protocol/mpc_job.h"
-
-extern "C" {
-int cbmpc_go_send(void *ctx, cbmpc_role_id to, uint8_t *ptr, size_t len);
-int cbmpc_go_receive(void *ctx, cbmpc_role_id from, cmem_t *out);
-int cbmpc_go_receive_all(void *ctx, cbmpc_role_id *from, size_t n, cmem_t *outs);
-cbmpc_go_transport cbmpc_make_go_transport(void *ctx);
-}
 
 namespace {
 
@@ -27,8 +22,6 @@ using coinbase::buf_t;
 using coinbase::mem_t;
 using coinbase::mpc::job_2p_t;
 using coinbase::mpc::job_mp_t;
-using coinbase::mpc::party_idx_t;
-using coinbase::mpc::party_t;
 
 // Allocate and copy data to a new cmem_t that the caller owns.
 // The caller is responsible for freeing this memory.
@@ -50,15 +43,6 @@ static inline cmem_t alloc_and_copy(const uint8_t *src, size_t n) {
   return view;
 }
 
-static inline void free_cmem_view(cmem_t &view) {
-  if (view.data && view.size > 0) {
-    coinbase::secure_bzero(view.data, view.size);
-  }
-  coinbase::cgo_free(view.data);
-  view.data = nullptr;
-  view.size = 0;
-}
-
 // Allocate and copy a vector of buf_t to a new cmems_t that the caller owns.
 // The caller is responsible for freeing this memory.
 static inline cmems_t alloc_and_copy_vector(const std::vector<buf_t> &vec) {
@@ -78,16 +62,21 @@ static inline cmems_t alloc_and_copy_vector(const std::vector<buf_t> &vec) {
     total_size += static_cast<size_t>(buf.size());
   }
 
+  // If all buffers are empty (e.g., P2 in ECDSA 2P), return empty result
+  if (total_size == 0) {
+    result.data = nullptr;
+    result.sizes = nullptr;
+    result.count = 0;
+    return result;
+  }
+
   // Allocate contiguous buffer for all data
-  uint8_t *data = nullptr;
-  if (total_size > 0) {
-    data = static_cast<uint8_t *>(std::malloc(total_size));
-    if (!data) {
-      result.data = nullptr;
-      result.sizes = nullptr;
-      result.count = 0;
-      return result;
-    }
+  uint8_t *data = static_cast<uint8_t *>(std::malloc(total_size));
+  if (!data) {
+    result.data = nullptr;
+    result.sizes = nullptr;
+    result.count = 0;
+    return result;
   }
 
   // Allocate array for sizes
@@ -116,88 +105,6 @@ static inline cmems_t alloc_and_copy_vector(const std::vector<buf_t> &vec) {
   return result;
 }
 
-class go_transport_base : public coinbase::mpc::data_transport_interface_t {
- public:
-  go_transport_base(const cbmpc_go_transport *table, std::vector<cbmpc_role_id> mapping)
-      : vtable(*table), index_to_role(std::move(mapping)) {}
-
-  error_t send(party_idx_t receiver, mem_t msg) override {
-    if (!vtable.send) return E_NET_GENERAL;
-    auto role = role_for(receiver);
-    if (!role.has_value()) return E_BADARG;
-    size_t len = static_cast<size_t>(msg.size);
-    uint8_t *ptr = reinterpret_cast<uint8_t *>(msg.data);
-    int rc = vtable.send(vtable.ctx, *role, ptr, len);
-    return rc == 0 ? SUCCESS : E_NET_GENERAL;
-  }
-
-  error_t receive(party_idx_t sender, buf_t &msg) override {
-    if (!vtable.receive) return E_NET_GENERAL;
-    auto role = role_for(sender);
-    if (!role.has_value()) return E_BADARG;
-    cmem_t out{};
-    int rc = vtable.receive(vtable.ctx, *role, &out);
-    if (rc != 0) {
-      free_cmem_view(out);
-      return E_NET_GENERAL;
-    }
-    msg = buf_t(out.data, out.size);
-    free_cmem_view(out);
-    return SUCCESS;
-  }
-
- protected:
-  const cbmpc_go_transport vtable;
-  const std::vector<cbmpc_role_id> index_to_role;
-
-  std::optional<cbmpc_role_id> role_for(party_idx_t idx) const {
-    if (idx < 0) return std::nullopt;
-    auto uidx = static_cast<size_t>(idx);
-    if (uidx >= index_to_role.size()) return std::nullopt;
-    return index_to_role[uidx];
-  }
-};
-
-class go_transport_2p : public go_transport_base {
- public:
-  using go_transport_base::go_transport_base;
-
-  error_t receive_all(const std::vector<party_idx_t> &senders, std::vector<buf_t> &message) override {
-    if (senders.size() != 1) return E_BADARG;
-    message.resize(1);
-    return go_transport_base::receive(senders[0], message[0]);
-  }
-};
-
-class go_transport_mp : public go_transport_base {
- public:
-  using go_transport_base::go_transport_base;
-
-  error_t receive_all(const std::vector<party_idx_t> &senders, std::vector<buf_t> &message) override {
-    if (!vtable.receive_all) return E_NET_GENERAL;
-    size_t n = senders.size();
-    message.resize(n);
-    if (n == 0) return SUCCESS;
-    std::vector<cbmpc_role_id> roles(n);
-    for (size_t i = 0; i < n; ++i) {
-      auto role = role_for(senders[i]);
-      if (!role.has_value()) return E_BADARG;
-      roles[i] = *role;
-    }
-    std::vector<cmem_t> outs(n);
-    int rc = vtable.receive_all(vtable.ctx, roles.data(), n, outs.data());
-    if (rc != 0) {
-      for (auto &view : outs) free_cmem_view(view);
-      return E_NET_GENERAL;
-    }
-    for (size_t i = 0; i < n; ++i) {
-      message[i] = buf_t(outs[i].data, outs[i].size);
-      free_cmem_view(outs[i]);
-    }
-    return SUCCESS;
-  }
-};
-
 struct go_job2p {
   std::shared_ptr<coinbase::mpc::data_transport_interface_t> transport;
   std::unique_ptr<job_2p_t> job;
@@ -213,70 +120,6 @@ struct go_jobmp {
 }  // namespace
 
 extern "C" {
-
-cbmpc_go_transport cbmpc_make_go_transport(void *ctx) {
-  cbmpc_go_transport t;
-  t.ctx = ctx;
-  t.send = cbmpc_go_send;
-  t.receive = cbmpc_go_receive;
-  t.receive_all = cbmpc_go_receive_all;
-  return t;
-}
-
-cbmpc_job2p *cbmpc_job2p_new(const cbmpc_go_transport *t,
-                             cbmpc_role_id self,
-                             const char *const *names) {
-  if (!t || !names) return nullptr;
-  if (self > 1) return nullptr;
-  if (!names[0] || !names[1]) return nullptr;
-
-  std::vector<cbmpc_role_id> roles{0, 1};
-  auto transport = std::make_shared<go_transport_2p>(t, roles);
-
-  party_t party = (self == 0) ? party_t::p1 : party_t::p2;
-  auto job = std::make_unique<job_2p_t>(party, std::string(names[0]), std::string(names[1]), transport);
-
-  auto wrapper = std::make_unique<go_job2p>();
-  wrapper->transport = std::move(transport);
-  wrapper->job = std::move(job);
-  wrapper->roles = std::move(roles);
-  return reinterpret_cast<cbmpc_job2p *>(wrapper.release());
-}
-
-void cbmpc_job2p_free(cbmpc_job2p *j) {
-  delete reinterpret_cast<go_job2p *>(j);
-}
-
-cbmpc_jobmp *cbmpc_jobmp_new(const cbmpc_go_transport *t,
-                             cbmpc_role_id self,
-                             size_t n_parties,
-                             const char *const *names) {
-  if (!t || !names) return nullptr;
-  if (n_parties < 2) return nullptr;
-  if (self >= n_parties) return nullptr;
-
-  std::vector<cbmpc_role_id> roles(n_parties);
-  std::vector<coinbase::crypto::pname_t> pname;
-  pname.reserve(n_parties);
-  for (size_t i = 0; i < n_parties; ++i) {
-    if (!names[i]) return nullptr;
-    roles[i] = static_cast<cbmpc_role_id>(i);
-    pname.emplace_back(names[i]);
-  }
-
-  auto transport = std::make_shared<go_transport_mp>(t, roles);
-  auto job = std::make_unique<job_mp_t>(static_cast<int>(self), pname, transport);
-
-  auto wrapper = std::make_unique<go_jobmp>();
-  wrapper->transport = std::move(transport);
-  wrapper->job = std::move(job);
-  wrapper->roles = std::move(roles);
-  return reinterpret_cast<cbmpc_jobmp *>(wrapper.release());
-}
-
-void cbmpc_jobmp_free(cbmpc_jobmp *j) {
-  delete reinterpret_cast<go_jobmp *>(j);
-}
 
 int cbmpc_agree_random_2p(cbmpc_job2p *j, int bitlen, cmem_t *out) {
   auto wrapper = reinterpret_cast<go_job2p *>(j);
@@ -323,6 +166,206 @@ int cbmpc_multi_pairwise_agree_random(cbmpc_jobmp *j, int bitlen, cmems_t *out) 
     return rv;
   }
   *out = alloc_and_copy_vector(result);
+  return 0;
+}
+
+// Helper function to find ecurve_t by NID
+static inline coinbase::crypto::ecurve_t find_curve_by_nid(int nid) {
+  return coinbase::crypto::ecurve_t::find(nid);
+}
+
+// ECDSA 2P DKG
+int cbmpc_ecdsa2p_dkg(cbmpc_job2p *j, int curve_nid, cbmpc_ecdsa2p_key **key_out) {
+  auto wrapper = reinterpret_cast<go_job2p *>(j);
+  if (!wrapper || !wrapper->job || !key_out) return E_BADARG;
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  auto key = std::make_unique<coinbase::mpc::ecdsa2pc::key_t>();
+  error_t rv = coinbase::mpc::ecdsa2pc::dkg(*wrapper->job, curve, *key);
+  if (rv != SUCCESS) return rv;
+
+  auto key_wrapper = new cbmpc_ecdsa2p_key;
+  key_wrapper->opaque = key.release();
+  *key_out = key_wrapper;
+  return 0;
+}
+
+// ECDSA 2P Refresh
+int cbmpc_ecdsa2p_refresh(cbmpc_job2p *j, const cbmpc_ecdsa2p_key *key_in, cbmpc_ecdsa2p_key **key_out) {
+  auto wrapper = reinterpret_cast<go_job2p *>(j);
+  if (!wrapper || !wrapper->job || !key_in || !key_in->opaque || !key_out) return E_BADARG;
+
+  const auto *old_key = static_cast<const coinbase::mpc::ecdsa2pc::key_t *>(key_in->opaque);
+
+  auto new_key = std::make_unique<coinbase::mpc::ecdsa2pc::key_t>();
+  error_t rv = coinbase::mpc::ecdsa2pc::refresh(*wrapper->job, *old_key, *new_key);
+  if (rv != SUCCESS) return rv;
+
+  auto key_wrapper = new cbmpc_ecdsa2p_key;
+  key_wrapper->opaque = new_key.release();
+  *key_out = key_wrapper;
+  return 0;
+}
+
+// ECDSA 2P Sign
+int cbmpc_ecdsa2p_sign(cbmpc_job2p *j, cmem_t sid_in, const cbmpc_ecdsa2p_key *key, cmem_t msg, cmem_t *sid_out, cmem_t *sig_out) {
+  auto wrapper = reinterpret_cast<go_job2p *>(j);
+  if (!wrapper || !wrapper->job || !key || !key->opaque ||
+      !msg.data || msg.size <= 0 || !sid_out || !sig_out) return E_BADARG;
+
+  const auto *signing_key = static_cast<const coinbase::mpc::ecdsa2pc::key_t *>(key->opaque);
+
+  // Create mutable sid
+  buf_t sid;
+  if (sid_in.data && sid_in.size > 0) {
+    sid = buf_t(sid_in.data, sid_in.size);
+  }
+
+  // Sign
+  buf_t signature;
+  mem_t msg_mem(msg.data, msg.size);
+  error_t rv = coinbase::mpc::ecdsa2pc::sign(*wrapper->job, sid, *signing_key, msg_mem, signature);
+  if (rv != SUCCESS) return rv;
+
+  // Copy outputs
+  *sid_out = alloc_and_copy(sid.data(), static_cast<size_t>(sid.size()));
+  if (!sid_out->data && sid.size() > 0) return E_BADARG;
+
+  *sig_out = alloc_and_copy(signature.data(), static_cast<size_t>(signature.size()));
+  if (!sig_out->data && signature.size() > 0) {
+    coinbase::secure_bzero(sid_out->data, sid_out->size);
+    coinbase::cgo_free(sid_out->data);
+    sid_out->data = nullptr;
+    sid_out->size = 0;
+    return E_BADARG;
+  }
+
+  return 0;
+}
+
+// ECDSA 2P Sign Batch
+int cbmpc_ecdsa2p_sign_batch(cbmpc_job2p *j, cmem_t sid_in, const cbmpc_ecdsa2p_key *key, cmems_t msgs, cmem_t *sid_out, cmems_t *sigs_out) {
+  auto wrapper = reinterpret_cast<go_job2p *>(j);
+  if (!wrapper || !wrapper->job || !key || !key->opaque || !sid_out || !sigs_out) return E_BADARG;
+  if (msgs.count <= 0 || !msgs.data || !msgs.sizes) return E_BADARG;
+
+  const auto *signing_key = static_cast<const coinbase::mpc::ecdsa2pc::key_t *>(key->opaque);
+
+  // Create mutable sid
+  buf_t sid;
+  if (sid_in.data && sid_in.size > 0) {
+    sid = buf_t(sid_in.data, sid_in.size);
+  }
+
+  // Convert cmems_t to std::vector<mem_t>
+  std::vector<mem_t> msg_vec;
+  msg_vec.reserve(msgs.count);
+  size_t offset = 0;
+  for (int i = 0; i < msgs.count; ++i) {
+    int size = msgs.sizes[i];
+    if (size > 0) {
+      msg_vec.emplace_back(msgs.data + offset, size);
+      offset += size;
+    } else {
+      msg_vec.emplace_back(nullptr, 0);
+    }
+  }
+
+  // Sign batch
+  std::vector<buf_t> signatures;
+  error_t rv = coinbase::mpc::ecdsa2pc::sign_batch(*wrapper->job, sid, *signing_key, msg_vec, signatures);
+  if (rv != SUCCESS) return rv;
+
+  // Copy outputs
+  *sid_out = alloc_and_copy(sid.data(), static_cast<size_t>(sid.size()));
+  if (!sid_out->data && sid.size() > 0) return E_BADARG;
+
+  *sigs_out = alloc_and_copy_vector(signatures);
+  // Note: sigs_out->data can be nullptr if all signatures are empty (total_size=0)
+  // This is normal for P2, so we don't check for allocation failure here
+
+  return 0;
+}
+
+// ECDSA 2P Sign with Global Abort
+int cbmpc_ecdsa2p_sign_with_global_abort(cbmpc_job2p *j, cmem_t sid_in, const cbmpc_ecdsa2p_key *key, cmem_t msg, cmem_t *sid_out, cmem_t *sig_out) {
+  auto wrapper = reinterpret_cast<go_job2p *>(j);
+  if (!wrapper || !wrapper->job || !key || !key->opaque ||
+      !msg.data || msg.size <= 0 || !sid_out || !sig_out) return E_BADARG;
+
+  const auto *signing_key = static_cast<const coinbase::mpc::ecdsa2pc::key_t *>(key->opaque);
+
+  // Create mutable sid
+  buf_t sid;
+  if (sid_in.data && sid_in.size > 0) {
+    sid = buf_t(sid_in.data, sid_in.size);
+  }
+
+  // Sign with global abort
+  buf_t signature;
+  mem_t msg_mem(msg.data, msg.size);
+  error_t rv = coinbase::mpc::ecdsa2pc::sign_with_global_abort(*wrapper->job, sid, *signing_key, msg_mem, signature);
+  if (rv != SUCCESS) return rv;
+
+  // Copy outputs
+  *sid_out = alloc_and_copy(sid.data(), static_cast<size_t>(sid.size()));
+  if (!sid_out->data && sid.size() > 0) return E_BADARG;
+
+  *sig_out = alloc_and_copy(signature.data(), static_cast<size_t>(signature.size()));
+  if (!sig_out->data && signature.size() > 0) {
+    coinbase::secure_bzero(sid_out->data, sid_out->size);
+    coinbase::cgo_free(sid_out->data);
+    sid_out->data = nullptr;
+    sid_out->size = 0;
+    return E_BADARG;
+  }
+
+  return 0;
+}
+
+// ECDSA 2P Sign with Global Abort Batch
+int cbmpc_ecdsa2p_sign_with_global_abort_batch(cbmpc_job2p *j, cmem_t sid_in, const cbmpc_ecdsa2p_key *key, cmems_t msgs, cmem_t *sid_out, cmems_t *sigs_out) {
+  auto wrapper = reinterpret_cast<go_job2p *>(j);
+  if (!wrapper || !wrapper->job || !key || !key->opaque || !sid_out || !sigs_out) return E_BADARG;
+  if (msgs.count <= 0 || !msgs.data || !msgs.sizes) return E_BADARG;
+
+  const auto *signing_key = static_cast<const coinbase::mpc::ecdsa2pc::key_t *>(key->opaque);
+
+  // Create mutable sid
+  buf_t sid;
+  if (sid_in.data && sid_in.size > 0) {
+    sid = buf_t(sid_in.data, sid_in.size);
+  }
+
+  // Convert cmems_t to std::vector<mem_t>
+  std::vector<mem_t> msg_vec;
+  msg_vec.reserve(msgs.count);
+  size_t offset = 0;
+  for (int i = 0; i < msgs.count; ++i) {
+    int size = msgs.sizes[i];
+    if (size > 0) {
+      msg_vec.emplace_back(msgs.data + offset, size);
+      offset += size;
+    } else {
+      msg_vec.emplace_back(nullptr, 0);
+    }
+  }
+
+  // Sign batch with global abort
+  std::vector<buf_t> signatures;
+  error_t rv = coinbase::mpc::ecdsa2pc::sign_with_global_abort_batch(*wrapper->job, sid, *signing_key, msg_vec, signatures);
+  if (rv != SUCCESS) return rv;
+
+  // Copy outputs
+  *sid_out = alloc_and_copy(sid.data(), static_cast<size_t>(sid.size()));
+  if (!sid_out->data && sid.size() > 0) return E_BADARG;
+
+  *sigs_out = alloc_and_copy_vector(signatures);
+  // Note: sigs_out->data can be nullptr if all signatures are empty (total_size=0)
+  // This is normal for P2, so we don't check for allocation failure here
+
   return 0;
 }
 
