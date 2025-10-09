@@ -4,7 +4,7 @@ package bindings
 
 /*
 #include <stdlib.h>
-#include "cbmpc_key.h"
+#include "ctypes.h"
 #include "cbmpc/core/cmem.h"
 */
 import "C"

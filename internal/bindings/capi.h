@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 #include "cbmpc/core/cmem.h"
-#include "cbmpc_key.h"
+#include "ctypes.h"
 #include "cjob.h"
 
 #ifdef __cplusplus

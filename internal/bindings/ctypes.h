@@ -1,5 +1,5 @@
-#ifndef CBMPC_KEY_H
-#define CBMPC_KEY_H
+#ifndef CBMPC_CTYPES_H
+#define CBMPC_CTYPES_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -38,4 +38,4 @@ int cbmpc_ecdsa2p_key_deserialize(cmem_t serialized, cbmpc_ecdsa2p_key **key);
 }
 #endif
 
-#endif  // CBMPC_KEY_H
+#endif  // CBMPC_CTYPES_H
