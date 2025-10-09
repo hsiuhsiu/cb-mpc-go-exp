@@ -58,9 +58,14 @@ bootstrap:
 	$(MAKE) build-cbmpc
 
 .PHONY: test
-## Build cb-mpc and run Go unit tests.
+## Build cb-mpc and run Go unit tests. Use RUN=TestName to run specific tests. Use V=1 for verbose output.
 test: build-cbmpc
-	$(GO_RUNNER) test -ldflags "$(GO_LDFLAGS)" $(GO_PACKAGES)
+	$(GO_RUNNER) test $(if $(V),-v,) -ldflags "$(GO_LDFLAGS)" $(if $(RUN),-run $(RUN),) $(GO_PACKAGES)
+
+.PHONY: test-nocache
+## Build cb-mpc and run Go unit tests without using cached results. Use RUN=TestName to run specific tests. Use V=1 for verbose output.
+test-nocache: build-cbmpc
+	$(GO_RUNNER) test $(if $(V),-v,) -count=1 -ldflags "$(GO_LDFLAGS)" $(if $(RUN),-run $(RUN),) $(GO_PACKAGES)
 
 .PHONY: lint
 ## Run static analysis.

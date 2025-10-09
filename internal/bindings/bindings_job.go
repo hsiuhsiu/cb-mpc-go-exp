@@ -37,22 +37,30 @@ type handle uintptr
 var (
 	mu   sync.Mutex
 	next handle = 1
-	reg         = map[handle]any{}
+	reg  = map[handle]any{}
 )
 
 // put registers a Go value and returns a handle that can be passed to C code.
 // The handle must be freed with del() when no longer needed.
-func put(v any) (handle, unsafe.Pointer) {
+//
+// IMPORTANT: This returns unsafe.Pointer(uintptr(h)) which is explicitly allowed
+// by CGO when the conversion happens in a single expression passed to a C function.
+// See https://pkg.go.dev/cmd/cgo#hdr-Passing_pointers
+func put(v any) (handle, uintptr) {
 	mu.Lock()
+	defer mu.Unlock()
 	h := next
 	next++
 	reg[h] = v
-	mu.Unlock()
-	return h, unsafe.Pointer(uintptr(h))
+	return h, uintptr(h)
 }
 
-// get retrieves a registered Go value from its handle.
+// get retrieves a registered Go value from its handle pointer.
+// The ptr is a void* from C that contains a handle value cast as a pointer.
 func get(ptr unsafe.Pointer) (any, bool) {
+	if ptr == nil {
+		return nil, false
+	}
 	h := handle(uintptr(ptr))
 	mu.Lock()
 	v, ok := reg[h]
@@ -195,7 +203,9 @@ func NewJob2P(t transport, self uint32, names []string) (unsafe.Pointer, uintptr
 	}
 
 	h, ctx := put(t)
-	goTransport := C.cbmpc_make_go_transport(ctx)
+	// Convert uintptr to unsafe.Pointer inline when passing to C.
+	// This is explicitly allowed by CGO rules when done in the call expression.
+	goTransport := C.cbmpc_make_go_transport(unsafe.Pointer(ctx))
 
 	cNames := make([]*C.char, len(names))
 	for i, name := range names {
@@ -271,7 +281,9 @@ func NewJobMP(t transport, self uint32, names []string) (unsafe.Pointer, uintptr
 	}
 
 	h, ctx := put(t)
-	goTransport := C.cbmpc_make_go_transport(ctx)
+	// Convert uintptr to unsafe.Pointer inline when passing to C.
+	// This is explicitly allowed by CGO rules when done in the call expression.
+	goTransport := C.cbmpc_make_go_transport(unsafe.Pointer(ctx))
 
 	cNames := make([]*C.char, len(names))
 	for i, name := range names {

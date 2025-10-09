@@ -44,22 +44,32 @@ func MultiPairwiseAgreeRandom(unsafe.Pointer, int) ([][]byte, error) {
 	return nil, ErrNotBuilt
 }
 
-func ECDSA2PKeyGetPublicKey([]byte) ([]byte, error) {
+func ECDSA2PKeyFree(unsafe.Pointer) {}
+
+func ECDSA2PKeyGetPublicKey(unsafe.Pointer) ([]byte, error) {
 	return nil, ErrNotBuilt
 }
 
-func ECDSA2PKeyGetCurveNID([]byte) (int, error) {
+func ECDSA2PKeyGetCurveNID(unsafe.Pointer) (int, error) {
 	return 0, ErrNotBuilt
 }
 
-func ECDSA2PDKG(unsafe.Pointer, int) ([]byte, error) {
+func ECDSA2PKeySerialize(unsafe.Pointer) ([]byte, error) {
 	return nil, ErrNotBuilt
 }
 
-func ECDSA2PRefresh(unsafe.Pointer, []byte) ([]byte, error) {
+func ECDSA2PKeyDeserialize([]byte) (unsafe.Pointer, error) {
 	return nil, ErrNotBuilt
 }
 
-func ECDSA2PSign(unsafe.Pointer, []byte, []byte, []byte) ([]byte, []byte, error) {
+func ECDSA2PDKG(unsafe.Pointer, int) (unsafe.Pointer, error) {
+	return nil, ErrNotBuilt
+}
+
+func ECDSA2PRefresh(unsafe.Pointer, unsafe.Pointer) (unsafe.Pointer, error) {
+	return nil, ErrNotBuilt
+}
+
+func ECDSA2PSign(unsafe.Pointer, unsafe.Pointer, []byte, []byte) ([]byte, []byte, error) {
 	return nil, nil, ErrNotBuilt
 }
