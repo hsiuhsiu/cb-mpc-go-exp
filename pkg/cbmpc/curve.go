@@ -36,3 +36,22 @@ func (c Curve) String() string {
 		return "Unknown"
 	}
 }
+
+// MaxHashSize returns the maximum hash size in bytes for this curve.
+// This is the size of the curve order, which is the maximum valid message hash size.
+func (c Curve) MaxHashSize() int {
+	switch c.nid {
+	case 415: // P-256
+		return 32
+	case 715: // P-384
+		return 48
+	case 716: // P-521
+		return 66
+	case 714: // secp256k1
+		return 32
+	case 1087: // Ed25519
+		return 32
+	default:
+		return 0
+	}
+}

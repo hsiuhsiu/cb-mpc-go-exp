@@ -62,16 +62,21 @@ static inline cmems_t alloc_and_copy_vector(const std::vector<buf_t> &vec) {
     total_size += static_cast<size_t>(buf.size());
   }
 
+  // If all buffers are empty (e.g., P2 in ECDSA 2P), return empty result
+  if (total_size == 0) {
+    result.data = nullptr;
+    result.sizes = nullptr;
+    result.count = 0;
+    return result;
+  }
+
   // Allocate contiguous buffer for all data
-  uint8_t *data = nullptr;
-  if (total_size > 0) {
-    data = static_cast<uint8_t *>(std::malloc(total_size));
-    if (!data) {
-      result.data = nullptr;
-      result.sizes = nullptr;
-      result.count = 0;
-      return result;
-    }
+  uint8_t *data = static_cast<uint8_t *>(std::malloc(total_size));
+  if (!data) {
+    result.data = nullptr;
+    result.sizes = nullptr;
+    result.count = 0;
+    return result;
   }
 
   // Allocate array for sizes
@@ -236,6 +241,130 @@ int cbmpc_ecdsa2p_sign(cbmpc_job2p *j, cmem_t sid_in, const cbmpc_ecdsa2p_key *k
     sid_out->size = 0;
     return E_BADARG;
   }
+
+  return 0;
+}
+
+// ECDSA 2P Sign Batch
+int cbmpc_ecdsa2p_sign_batch(cbmpc_job2p *j, cmem_t sid_in, const cbmpc_ecdsa2p_key *key, cmems_t msgs, cmem_t *sid_out, cmems_t *sigs_out) {
+  auto wrapper = reinterpret_cast<go_job2p *>(j);
+  if (!wrapper || !wrapper->job || !key || !key->opaque || !sid_out || !sigs_out) return E_BADARG;
+  if (msgs.count <= 0 || !msgs.data || !msgs.sizes) return E_BADARG;
+
+  const auto *signing_key = static_cast<const coinbase::mpc::ecdsa2pc::key_t *>(key->opaque);
+
+  // Create mutable sid
+  buf_t sid;
+  if (sid_in.data && sid_in.size > 0) {
+    sid = buf_t(sid_in.data, sid_in.size);
+  }
+
+  // Convert cmems_t to std::vector<mem_t>
+  std::vector<mem_t> msg_vec;
+  msg_vec.reserve(msgs.count);
+  size_t offset = 0;
+  for (int i = 0; i < msgs.count; ++i) {
+    int size = msgs.sizes[i];
+    if (size > 0) {
+      msg_vec.emplace_back(msgs.data + offset, size);
+      offset += size;
+    } else {
+      msg_vec.emplace_back(nullptr, 0);
+    }
+  }
+
+  // Sign batch
+  std::vector<buf_t> signatures;
+  error_t rv = coinbase::mpc::ecdsa2pc::sign_batch(*wrapper->job, sid, *signing_key, msg_vec, signatures);
+  if (rv != SUCCESS) return rv;
+
+  // Copy outputs
+  *sid_out = alloc_and_copy(sid.data(), static_cast<size_t>(sid.size()));
+  if (!sid_out->data && sid.size() > 0) return E_BADARG;
+
+  *sigs_out = alloc_and_copy_vector(signatures);
+  // Note: sigs_out->data can be nullptr if all signatures are empty (total_size=0)
+  // This is normal for P2, so we don't check for allocation failure here
+
+  return 0;
+}
+
+// ECDSA 2P Sign with Global Abort
+int cbmpc_ecdsa2p_sign_with_global_abort(cbmpc_job2p *j, cmem_t sid_in, const cbmpc_ecdsa2p_key *key, cmem_t msg, cmem_t *sid_out, cmem_t *sig_out) {
+  auto wrapper = reinterpret_cast<go_job2p *>(j);
+  if (!wrapper || !wrapper->job || !key || !key->opaque ||
+      !msg.data || msg.size <= 0 || !sid_out || !sig_out) return E_BADARG;
+
+  const auto *signing_key = static_cast<const coinbase::mpc::ecdsa2pc::key_t *>(key->opaque);
+
+  // Create mutable sid
+  buf_t sid;
+  if (sid_in.data && sid_in.size > 0) {
+    sid = buf_t(sid_in.data, sid_in.size);
+  }
+
+  // Sign with global abort
+  buf_t signature;
+  mem_t msg_mem(msg.data, msg.size);
+  error_t rv = coinbase::mpc::ecdsa2pc::sign_with_global_abort(*wrapper->job, sid, *signing_key, msg_mem, signature);
+  if (rv != SUCCESS) return rv;
+
+  // Copy outputs
+  *sid_out = alloc_and_copy(sid.data(), static_cast<size_t>(sid.size()));
+  if (!sid_out->data && sid.size() > 0) return E_BADARG;
+
+  *sig_out = alloc_and_copy(signature.data(), static_cast<size_t>(signature.size()));
+  if (!sig_out->data && signature.size() > 0) {
+    coinbase::secure_bzero(sid_out->data, sid_out->size);
+    coinbase::cgo_free(sid_out->data);
+    sid_out->data = nullptr;
+    sid_out->size = 0;
+    return E_BADARG;
+  }
+
+  return 0;
+}
+
+// ECDSA 2P Sign with Global Abort Batch
+int cbmpc_ecdsa2p_sign_with_global_abort_batch(cbmpc_job2p *j, cmem_t sid_in, const cbmpc_ecdsa2p_key *key, cmems_t msgs, cmem_t *sid_out, cmems_t *sigs_out) {
+  auto wrapper = reinterpret_cast<go_job2p *>(j);
+  if (!wrapper || !wrapper->job || !key || !key->opaque || !sid_out || !sigs_out) return E_BADARG;
+  if (msgs.count <= 0 || !msgs.data || !msgs.sizes) return E_BADARG;
+
+  const auto *signing_key = static_cast<const coinbase::mpc::ecdsa2pc::key_t *>(key->opaque);
+
+  // Create mutable sid
+  buf_t sid;
+  if (sid_in.data && sid_in.size > 0) {
+    sid = buf_t(sid_in.data, sid_in.size);
+  }
+
+  // Convert cmems_t to std::vector<mem_t>
+  std::vector<mem_t> msg_vec;
+  msg_vec.reserve(msgs.count);
+  size_t offset = 0;
+  for (int i = 0; i < msgs.count; ++i) {
+    int size = msgs.sizes[i];
+    if (size > 0) {
+      msg_vec.emplace_back(msgs.data + offset, size);
+      offset += size;
+    } else {
+      msg_vec.emplace_back(nullptr, 0);
+    }
+  }
+
+  // Sign batch with global abort
+  std::vector<buf_t> signatures;
+  error_t rv = coinbase::mpc::ecdsa2pc::sign_with_global_abort_batch(*wrapper->job, sid, *signing_key, msg_vec, signatures);
+  if (rv != SUCCESS) return rv;
+
+  // Copy outputs
+  *sid_out = alloc_and_copy(sid.data(), static_cast<size_t>(sid.size()));
+  if (!sid_out->data && sid.size() > 0) return E_BADARG;
+
+  *sigs_out = alloc_and_copy_vector(signatures);
+  // Note: sigs_out->data can be nullptr if all signatures are empty (total_size=0)
+  // This is normal for P2, so we don't check for allocation failure here
 
   return 0;
 }

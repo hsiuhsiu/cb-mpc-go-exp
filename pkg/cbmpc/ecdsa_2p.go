@@ -3,6 +3,7 @@ package cbmpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"runtime"
 	"unsafe"
 
@@ -178,7 +179,7 @@ func Refresh(_ context.Context, j *Job2P, params *RefreshParams) (*RefreshResult
 type SignParams struct {
 	SessionID []byte      // Session ID (in/out parameter)
 	Key       *ECDSA2PKey // Key share to sign with
-	Message   []byte      // Message hash to sign (must be pre-hashed)
+	Message   []byte      // Message hash to sign (must be pre-hashed, max size = curve order size)
 }
 
 // SignResult contains the output of 2-party ECDSA signing.
@@ -201,6 +202,19 @@ func Sign(_ context.Context, j *Job2P, params *SignParams) (*SignResult, error) 
 	if params.Key == nil || params.Key.ptr == nil {
 		return nil, errors.New("nil or closed key")
 	}
+	if len(params.Message) == 0 {
+		return nil, errors.New("empty message hash")
+	}
+
+	// Validate message hash size
+	curve, err := params.Key.Curve()
+	if err != nil {
+		return nil, err
+	}
+	maxSize := curve.MaxHashSize()
+	if maxSize > 0 && len(params.Message) > maxSize {
+		return nil, errors.New("message hash exceeds curve order size")
+	}
 
 	ptr, err := j.ptr()
 	if err != nil {
@@ -217,5 +231,166 @@ func Sign(_ context.Context, j *Job2P, params *SignParams) (*SignResult, error) 
 	return &SignResult{
 		SessionID: newSID,
 		Signature: sig,
+	}, nil
+}
+
+// SignBatchParams contains parameters for 2-party ECDSA batch signing.
+type SignBatchParams struct {
+	SessionID []byte      // Session ID (in/out parameter)
+	Key       *ECDSA2PKey // Key share to sign with
+	Messages  [][]byte    // Message hashes to sign (must be pre-hashed, max size = curve order size)
+}
+
+// SignBatchResult contains the output of 2-party ECDSA batch signing.
+type SignBatchResult struct {
+	SessionID  []byte   // Updated session ID
+	Signatures [][]byte // ECDSA signatures (one per message)
+}
+
+// SignBatch performs 2-party ECDSA batch signing.
+// See cb-mpc/src/cbmpc/protocol/ecdsa_2p.h for protocol details.
+func SignBatch(_ context.Context, j *Job2P, params *SignBatchParams) (*SignBatchResult, error) {
+	if j == nil {
+		return nil, errors.New("nil job")
+	}
+	if params == nil {
+		return nil, errors.New("nil params")
+	}
+	if params.Key == nil || params.Key.ptr == nil {
+		return nil, errors.New("nil or closed key")
+	}
+	if len(params.Messages) == 0 {
+		return nil, errors.New("empty messages")
+	}
+
+	// Validate all message hash sizes
+	curve, err := params.Key.Curve()
+	if err != nil {
+		return nil, err
+	}
+	maxSize := curve.MaxHashSize()
+	if maxSize > 0 {
+		for i, msg := range params.Messages {
+			if len(msg) == 0 {
+				return nil, fmt.Errorf("empty message hash at index %d", i)
+			}
+			if len(msg) > maxSize {
+				return nil, fmt.Errorf("message hash exceeds curve order size at index %d", i)
+			}
+		}
+	}
+
+	ptr, err := j.ptr()
+	if err != nil {
+		return nil, err
+	}
+
+	newSID, sigs, err := bindings.ECDSA2PSignBatch(ptr, params.Key.ptr, params.SessionID, params.Messages)
+	if err != nil {
+		return nil, remapError(err)
+	}
+	runtime.KeepAlive(j)
+	runtime.KeepAlive(params.Key)
+
+	return &SignBatchResult{
+		SessionID:  newSID,
+		Signatures: sigs,
+	}, nil
+}
+
+// SignWithGlobalAbort performs 2-party ECDSA signing with global abort mode.
+// Returns ErrBitLeak if signature verification fails (indicates potential key leak).
+// See cb-mpc/src/cbmpc/protocol/ecdsa_2p.h for protocol details.
+func SignWithGlobalAbort(_ context.Context, j *Job2P, params *SignParams) (*SignResult, error) {
+	if j == nil {
+		return nil, errors.New("nil job")
+	}
+	if params == nil {
+		return nil, errors.New("nil params")
+	}
+	if params.Key == nil || params.Key.ptr == nil {
+		return nil, errors.New("nil or closed key")
+	}
+	if len(params.Message) == 0 {
+		return nil, errors.New("empty message hash")
+	}
+
+	// Validate message hash size
+	curve, err := params.Key.Curve()
+	if err != nil {
+		return nil, err
+	}
+	maxSize := curve.MaxHashSize()
+	if maxSize > 0 && len(params.Message) > maxSize {
+		return nil, errors.New("message hash exceeds curve order size")
+	}
+
+	ptr, err := j.ptr()
+	if err != nil {
+		return nil, err
+	}
+
+	newSID, sig, err := bindings.ECDSA2PSignWithGlobalAbort(ptr, params.Key.ptr, params.SessionID, params.Message)
+	if err != nil {
+		return nil, remapError(err)
+	}
+	runtime.KeepAlive(j)
+	runtime.KeepAlive(params.Key)
+
+	return &SignResult{
+		SessionID: newSID,
+		Signature: sig,
+	}, nil
+}
+
+// SignWithGlobalAbortBatch performs 2-party ECDSA batch signing with global abort mode.
+// Returns ErrBitLeak if signature verification fails (indicates potential key leak).
+// See cb-mpc/src/cbmpc/protocol/ecdsa_2p.h for protocol details.
+func SignWithGlobalAbortBatch(_ context.Context, j *Job2P, params *SignBatchParams) (*SignBatchResult, error) {
+	if j == nil {
+		return nil, errors.New("nil job")
+	}
+	if params == nil {
+		return nil, errors.New("nil params")
+	}
+	if params.Key == nil || params.Key.ptr == nil {
+		return nil, errors.New("nil or closed key")
+	}
+	if len(params.Messages) == 0 {
+		return nil, errors.New("empty messages")
+	}
+
+	// Validate all message hash sizes
+	curve, err := params.Key.Curve()
+	if err != nil {
+		return nil, err
+	}
+	maxSize := curve.MaxHashSize()
+	if maxSize > 0 {
+		for i, msg := range params.Messages {
+			if len(msg) == 0 {
+				return nil, fmt.Errorf("empty message hash at index %d", i)
+			}
+			if len(msg) > maxSize {
+				return nil, fmt.Errorf("message hash exceeds curve order size at index %d", i)
+			}
+		}
+	}
+
+	ptr, err := j.ptr()
+	if err != nil {
+		return nil, err
+	}
+
+	newSID, sigs, err := bindings.ECDSA2PSignWithGlobalAbortBatch(ptr, params.Key.ptr, params.SessionID, params.Messages)
+	if err != nil {
+		return nil, remapError(err)
+	}
+	runtime.KeepAlive(j)
+	runtime.KeepAlive(params.Key)
+
+	return &SignBatchResult{
+		SessionID:  newSID,
+		Signatures: sigs,
 	}, nil
 }

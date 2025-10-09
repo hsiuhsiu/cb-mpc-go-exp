@@ -11,6 +11,7 @@ import "C"
 
 import (
 	"errors"
+	"fmt"
 	"unsafe"
 )
 
@@ -119,4 +120,88 @@ func ECDSA2PSign(cj, key unsafe.Pointer, sidIn, msg []byte) ([]byte, []byte, err
 	}
 
 	return cmemToGoBytes(sidOut), cmemToGoBytes(sigOut), nil
+}
+
+// ECDSA2PSignBatch signs multiple messages with an ECDSA 2P key (batch mode).
+func ECDSA2PSignBatch(cj, key unsafe.Pointer, sidIn []byte, msgs [][]byte) ([]byte, [][]byte, error) {
+	if cj == nil {
+		return nil, nil, errors.New("nil job")
+	}
+	if key == nil {
+		return nil, nil, errors.New("nil key")
+	}
+	if len(msgs) == 0 {
+		return nil, nil, errors.New("empty messages")
+	}
+
+	sidMem := goBytesToCmem(sidIn)
+	msgsMem := goBytesSliceToCmems(msgs)
+	defer freeCmems(msgsMem)
+
+	var sidOut C.cmem_t
+	var sigsOut C.cmems_t
+	rc := C.cbmpc_ecdsa2p_sign_batch((*C.cbmpc_job2p)(cj), sidMem, (*C.cbmpc_ecdsa2p_key)(key), msgsMem, &sidOut, &sigsOut)
+	if rc != 0 {
+		return nil, nil, fmt.Errorf("ecdsa2p_sign_batch failed with code %d (0x%x)", rc, rc)
+	}
+
+	return cmemToGoBytes(sidOut), cmemsToGoByteSlices(sigsOut), nil
+}
+
+// ECDSA2PSignWithGlobalAbort signs a message with an ECDSA 2P key using global abort mode.
+// Returns ErrBitLeak if signature verification fails (indicates potential key leak).
+func ECDSA2PSignWithGlobalAbort(cj, key unsafe.Pointer, sidIn, msg []byte) ([]byte, []byte, error) {
+	if cj == nil {
+		return nil, nil, errors.New("nil job")
+	}
+	if key == nil {
+		return nil, nil, errors.New("nil key")
+	}
+	if len(msg) == 0 {
+		return nil, nil, errors.New("empty message")
+	}
+
+	sidMem := goBytesToCmem(sidIn)
+	msgMem := goBytesToCmem(msg)
+
+	var sidOut, sigOut C.cmem_t
+	rc := C.cbmpc_ecdsa2p_sign_with_global_abort((*C.cbmpc_job2p)(cj), sidMem, (*C.cbmpc_ecdsa2p_key)(key), msgMem, &sidOut, &sigOut)
+	if rc != 0 {
+		if C.uint(rc) == C.uint(E_ECDSA_2P_BIT_LEAK) {
+			return nil, nil, ErrBitLeak
+		}
+		return nil, nil, errors.New("ecdsa2p_sign_with_global_abort failed")
+	}
+
+	return cmemToGoBytes(sidOut), cmemToGoBytes(sigOut), nil
+}
+
+// ECDSA2PSignWithGlobalAbortBatch signs multiple messages with an ECDSA 2P key using global abort mode (batch mode).
+// Returns ErrBitLeak if signature verification fails (indicates potential key leak).
+func ECDSA2PSignWithGlobalAbortBatch(cj, key unsafe.Pointer, sidIn []byte, msgs [][]byte) ([]byte, [][]byte, error) {
+	if cj == nil {
+		return nil, nil, errors.New("nil job")
+	}
+	if key == nil {
+		return nil, nil, errors.New("nil key")
+	}
+	if len(msgs) == 0 {
+		return nil, nil, errors.New("empty messages")
+	}
+
+	sidMem := goBytesToCmem(sidIn)
+	msgsMem := goBytesSliceToCmems(msgs)
+	defer freeCmems(msgsMem)
+
+	var sidOut C.cmem_t
+	var sigsOut C.cmems_t
+	rc := C.cbmpc_ecdsa2p_sign_with_global_abort_batch((*C.cbmpc_job2p)(cj), sidMem, (*C.cbmpc_ecdsa2p_key)(key), msgsMem, &sidOut, &sigsOut)
+	if rc != 0 {
+		if C.uint(rc) == C.uint(E_ECDSA_2P_BIT_LEAK) {
+			return nil, nil, ErrBitLeak
+		}
+		return nil, nil, fmt.Errorf("ecdsa2p_sign_with_global_abort_batch failed with code %d (0x%x)", rc, rc)
+	}
+
+	return cmemToGoBytes(sidOut), cmemsToGoByteSlices(sigsOut), nil
 }

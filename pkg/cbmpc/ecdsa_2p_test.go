@@ -895,3 +895,407 @@ func TestECDSA2PMultipleSignatures(t *testing.T) {
 		}
 	}
 }
+
+func TestECDSA2PSignBatch(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	net := mocknet.New()
+	names := [2]string{"party1", "party2"}
+	curve := cbmpc.CurveP256
+
+	// First, perform DKG to get keys
+	var wg sync.WaitGroup
+	keys := make([]*cbmpc.ECDSA2PKey, 2)
+	errors := make([]error, 2)
+
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(partyID int) {
+			defer wg.Done()
+
+			role := cbmpc.RoleP1
+			if partyID == 1 {
+				role = cbmpc.RoleP2
+			}
+			peer := cbmpc.RoleID(1 - partyID)
+			transport := net.Ep2P(cbmpc.RoleID(partyID), peer)
+
+			job, err := cbmpc.NewJob2P(transport, role, names)
+			if err != nil {
+				errors[partyID] = err
+				return
+			}
+			defer func() { _ = job.Close() }()
+
+			result, err := cbmpc.DKG(ctx, job, &cbmpc.DKGParams{Curve: curve})
+			if err != nil {
+				errors[partyID] = err
+				return
+			}
+			keys[partyID] = result.Key
+		}(i)
+	}
+
+	wg.Wait()
+
+	for i, err := range errors {
+		if err != nil {
+			t.Fatalf("Party %d DKG failed: %v", i, err)
+		}
+	}
+
+	// Sign batch of messages
+	messages := []string{"Message 1", "Message 2", "Message 3"}
+	messageHashes := make([][]byte, len(messages))
+	for i, msg := range messages {
+		hash := sha256.Sum256([]byte(msg))
+		messageHashes[i] = hash[:]
+	}
+
+	signatureBatches := make([][][]byte, 2)
+	sessionIDs := make([][]byte, 2)
+	errors = make([]error, 2)
+
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(partyID int) {
+			defer wg.Done()
+
+			role := cbmpc.RoleP1
+			if partyID == 1 {
+				role = cbmpc.RoleP2
+			}
+			peer := cbmpc.RoleID(1 - partyID)
+			transport := net.Ep2P(cbmpc.RoleID(partyID), peer)
+
+			job, err := cbmpc.NewJob2P(transport, role, names)
+			if err != nil {
+				errors[partyID] = err
+				return
+			}
+			defer func() { _ = job.Close() }()
+
+			result, err := cbmpc.SignBatch(ctx, job, &cbmpc.SignBatchParams{
+				SessionID: nil,
+				Key:       keys[partyID],
+				Messages:  messageHashes,
+			})
+			if err != nil {
+				errors[partyID] = err
+				return
+			}
+			signatureBatches[partyID] = result.Signatures
+			sessionIDs[partyID] = result.SessionID
+		}(i)
+	}
+
+	wg.Wait()
+
+	for i, err := range errors {
+		if err != nil {
+			t.Fatalf("Party %d SignBatch failed: %v", i, err)
+		}
+	}
+
+	// Only Party 0 (P1) receives the final signatures
+	if len(signatureBatches[0]) != len(messages) {
+		t.Fatalf("Party 0 should receive %d signatures but got %d", len(messages), len(signatureBatches[0]))
+	}
+	if len(signatureBatches[1]) != 0 {
+		t.Fatalf("Party 1 (P2) should not receive signatures, got: %d", len(signatureBatches[1]))
+	}
+
+	// Verify all signatures
+	pubKeyBytes, err := keys[0].PublicKey()
+	if err != nil {
+		t.Fatalf("Failed to get public key: %v", err)
+	}
+
+	for i, sig := range signatureBatches[0] {
+		valid, err := verifySignature(curve, pubKeyBytes, messageHashes[i], sig)
+		if err != nil {
+			t.Fatalf("Failed to verify signature %d: %v", i, err)
+		}
+		if !valid {
+			t.Fatalf("Signature verification failed for message %d", i)
+		}
+		t.Logf("Signature %d verified: %s", i, abbrevHex(sig))
+	}
+
+	t.Logf("Batch signing successful, %d signatures verified", len(messages))
+
+	// Clean up keys
+	for _, key := range keys {
+		if key != nil {
+			_ = key.Close()
+		}
+	}
+}
+
+func TestECDSA2PSignWithGlobalAbort(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	net := mocknet.New()
+	names := [2]string{"party1", "party2"}
+	curve := cbmpc.CurveSecp256k1
+
+	// First, perform DKG to get keys
+	var wg sync.WaitGroup
+	keys := make([]*cbmpc.ECDSA2PKey, 2)
+	errors := make([]error, 2)
+
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(partyID int) {
+			defer wg.Done()
+
+			role := cbmpc.RoleP1
+			if partyID == 1 {
+				role = cbmpc.RoleP2
+			}
+			peer := cbmpc.RoleID(1 - partyID)
+			transport := net.Ep2P(cbmpc.RoleID(partyID), peer)
+
+			job, err := cbmpc.NewJob2P(transport, role, names)
+			if err != nil {
+				errors[partyID] = err
+				return
+			}
+			defer func() { _ = job.Close() }()
+
+			result, err := cbmpc.DKG(ctx, job, &cbmpc.DKGParams{Curve: curve})
+			if err != nil {
+				errors[partyID] = err
+				return
+			}
+			keys[partyID] = result.Key
+		}(i)
+	}
+
+	wg.Wait()
+
+	for i, err := range errors {
+		if err != nil {
+			t.Fatalf("Party %d DKG failed: %v", i, err)
+		}
+	}
+
+	// Sign with global abort
+	message := []byte("Test message with global abort")
+	messageHash := sha256.Sum256(message)
+
+	signatures := make([][]byte, 2)
+	sessionIDs := make([][]byte, 2)
+	errors = make([]error, 2)
+
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(partyID int) {
+			defer wg.Done()
+
+			role := cbmpc.RoleP1
+			if partyID == 1 {
+				role = cbmpc.RoleP2
+			}
+			peer := cbmpc.RoleID(1 - partyID)
+			transport := net.Ep2P(cbmpc.RoleID(partyID), peer)
+
+			job, err := cbmpc.NewJob2P(transport, role, names)
+			if err != nil {
+				errors[partyID] = err
+				return
+			}
+			defer func() { _ = job.Close() }()
+
+			result, err := cbmpc.SignWithGlobalAbort(ctx, job, &cbmpc.SignParams{
+				SessionID: nil,
+				Key:       keys[partyID],
+				Message:   messageHash[:],
+			})
+			if err != nil {
+				errors[partyID] = err
+				return
+			}
+			signatures[partyID] = result.Signature
+			sessionIDs[partyID] = result.SessionID
+		}(i)
+	}
+
+	wg.Wait()
+
+	for i, err := range errors {
+		if err != nil {
+			t.Fatalf("Party %d SignWithGlobalAbort failed: %v", i, err)
+		}
+	}
+
+	// Only Party 0 (P1) receives the final signature
+	if len(signatures[0]) == 0 {
+		t.Fatalf("Party 0 (P1) should receive signature but got empty")
+	}
+	if len(signatures[1]) != 0 {
+		t.Fatalf("Party 1 (P2) should not receive signature, got: %x", signatures[1])
+	}
+
+	// Verify signature
+	pubKeyBytes, err := keys[0].PublicKey()
+	if err != nil {
+		t.Fatalf("Failed to get public key: %v", err)
+	}
+
+	valid, err := verifySignature(curve, pubKeyBytes, messageHash[:], signatures[0])
+	if err != nil {
+		t.Fatalf("Failed to verify signature: %v", err)
+	}
+	if !valid {
+		t.Fatalf("Signature verification failed")
+	}
+
+	t.Logf("SignWithGlobalAbort successful, signature: %s", abbrevHex(signatures[0]))
+
+	// Clean up keys
+	for _, key := range keys {
+		if key != nil {
+			_ = key.Close()
+		}
+	}
+}
+
+func TestECDSA2PSignWithGlobalAbortBatch(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	net := mocknet.New()
+	names := [2]string{"party1", "party2"}
+	curve := cbmpc.CurveP256
+
+	// First, perform DKG to get keys
+	var wg sync.WaitGroup
+	keys := make([]*cbmpc.ECDSA2PKey, 2)
+	errors := make([]error, 2)
+
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(partyID int) {
+			defer wg.Done()
+
+			role := cbmpc.RoleP1
+			if partyID == 1 {
+				role = cbmpc.RoleP2
+			}
+			peer := cbmpc.RoleID(1 - partyID)
+			transport := net.Ep2P(cbmpc.RoleID(partyID), peer)
+
+			job, err := cbmpc.NewJob2P(transport, role, names)
+			if err != nil {
+				errors[partyID] = err
+				return
+			}
+			defer func() { _ = job.Close() }()
+
+			result, err := cbmpc.DKG(ctx, job, &cbmpc.DKGParams{Curve: curve})
+			if err != nil {
+				errors[partyID] = err
+				return
+			}
+			keys[partyID] = result.Key
+		}(i)
+	}
+
+	wg.Wait()
+
+	for i, err := range errors {
+		if err != nil {
+			t.Fatalf("Party %d DKG failed: %v", i, err)
+		}
+	}
+
+	// Sign batch with global abort
+	messages := []string{"GA Message 1", "GA Message 2", "GA Message 3"}
+	messageHashes := make([][]byte, len(messages))
+	for i, msg := range messages {
+		hash := sha256.Sum256([]byte(msg))
+		messageHashes[i] = hash[:]
+	}
+
+	signatureBatches := make([][][]byte, 2)
+	sessionIDs := make([][]byte, 2)
+	errors = make([]error, 2)
+
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(partyID int) {
+			defer wg.Done()
+
+			role := cbmpc.RoleP1
+			if partyID == 1 {
+				role = cbmpc.RoleP2
+			}
+			peer := cbmpc.RoleID(1 - partyID)
+			transport := net.Ep2P(cbmpc.RoleID(partyID), peer)
+
+			job, err := cbmpc.NewJob2P(transport, role, names)
+			if err != nil {
+				errors[partyID] = err
+				return
+			}
+			defer func() { _ = job.Close() }()
+
+			result, err := cbmpc.SignWithGlobalAbortBatch(ctx, job, &cbmpc.SignBatchParams{
+				SessionID: nil,
+				Key:       keys[partyID],
+				Messages:  messageHashes,
+			})
+			if err != nil {
+				errors[partyID] = err
+				return
+			}
+			signatureBatches[partyID] = result.Signatures
+			sessionIDs[partyID] = result.SessionID
+		}(i)
+	}
+
+	wg.Wait()
+
+	for i, err := range errors {
+		if err != nil {
+			t.Fatalf("Party %d SignWithGlobalAbortBatch failed: %v", i, err)
+		}
+	}
+
+	// Only Party 0 (P1) receives the final signatures
+	if len(signatureBatches[0]) != len(messages) {
+		t.Fatalf("Party 0 should receive %d signatures but got %d", len(messages), len(signatureBatches[0]))
+	}
+	if len(signatureBatches[1]) != 0 {
+		t.Fatalf("Party 1 (P2) should not receive signatures, got: %d", len(signatureBatches[1]))
+	}
+
+	// Verify all signatures
+	pubKeyBytes, err := keys[0].PublicKey()
+	if err != nil {
+		t.Fatalf("Failed to get public key: %v", err)
+	}
+
+	for i, sig := range signatureBatches[0] {
+		valid, err := verifySignature(curve, pubKeyBytes, messageHashes[i], sig)
+		if err != nil {
+			t.Fatalf("Failed to verify signature %d: %v", i, err)
+		}
+		if !valid {
+			t.Fatalf("Signature verification failed for message %d", i)
+		}
+		t.Logf("Global abort signature %d verified: %s", i, abbrevHex(sig))
+	}
+
+	t.Logf("Global abort batch signing successful, %d signatures verified", len(messages))
+
+	// Clean up keys
+	for _, key := range keys {
+		if key != nil {
+			_ = key.Close()
+		}
+	}
+}

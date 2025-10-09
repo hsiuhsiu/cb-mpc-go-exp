@@ -73,3 +73,15 @@ func ECDSA2PRefresh(unsafe.Pointer, unsafe.Pointer) (unsafe.Pointer, error) {
 func ECDSA2PSign(unsafe.Pointer, unsafe.Pointer, []byte, []byte) ([]byte, []byte, error) {
 	return nil, nil, ErrNotBuilt
 }
+
+func ECDSA2PSignBatch(unsafe.Pointer, unsafe.Pointer, []byte, [][]byte) ([]byte, [][]byte, error) {
+	return nil, nil, ErrNotBuilt
+}
+
+func ECDSA2PSignWithGlobalAbort(unsafe.Pointer, unsafe.Pointer, []byte, []byte) ([]byte, []byte, error) {
+	return nil, nil, ErrNotBuilt
+}
+
+func ECDSA2PSignWithGlobalAbortBatch(unsafe.Pointer, unsafe.Pointer, []byte, [][]byte) ([]byte, [][]byte, error) {
+	return nil, nil, ErrNotBuilt
+}
