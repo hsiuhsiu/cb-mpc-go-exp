@@ -7,7 +7,7 @@
 //
 // The package is organized in layers:
 //   - pkg/cbmpc/ - Public Go API (this package)
-//   - internal/bindings/ - CGO bindings layer
+//   - pkg/cbmpc/internal/backend/ - CGO bindings layer
 //   - cb-mpc/ - C++ MPC protocol implementations (git submodule)
 //
 // # Build Requirements

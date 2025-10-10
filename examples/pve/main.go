@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/kem/rsa"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/pve"
 )
 
@@ -31,7 +32,7 @@ func main() {
 
 	// Step 1: Create production-grade RSA KEM (3072-bit for long-term security)
 	fmt.Println("Step 1: Creating RSA KEM (3072-bit)...")
-	kem, err := cbmpc.NewRSAKEM(3072)
+	kem, err := rsa.New(3072)
 	if err != nil {
 		log.Fatalf("Failed to create RSA KEM: %v", err)
 	}

@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"unsafe"
 
-	"github.com/coinbase/cb-mpc-go/internal/bindings"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/backend"
 )
 
 var (
@@ -76,7 +76,7 @@ func NewJob2P(t Transport, self Role, names [2]string) (*Job2P, error) {
 	}
 
 	adapter := transportAdapter{inner: t}
-	cjob, h, err := bindings.NewJob2P(adapter, uint32(self.roleID()), []string{names[0], names[1]})
+	cjob, h, err := backend.NewJob2P(adapter, uint32(self.roleID()), []string{names[0], names[1]})
 	if err != nil {
 		return nil, RemapError(err)
 	}
@@ -95,7 +95,7 @@ func (j *Job2P) Close() error {
 	}
 
 	runtime.SetFinalizer(j, nil)
-	bindings.FreeJob2P(j.cptr, j.hptr)
+	backend.FreeJob2P(j.cptr, j.hptr)
 	j.cptr = nil
 	j.hptr = 0
 	return nil
@@ -127,7 +127,7 @@ func NewJobMP(t Transport, self RoleID, names []string) (*JobMP, error) {
 	}
 
 	adapter := transportAdapter{inner: t}
-	cjob, h, err := bindings.NewJobMP(adapter, uint32(self), names)
+	cjob, h, err := backend.NewJobMP(adapter, uint32(self), names)
 	if err != nil {
 		return nil, RemapError(err)
 	}
@@ -146,7 +146,7 @@ func (j *JobMP) Close() error {
 	}
 
 	runtime.SetFinalizer(j, nil)
-	bindings.FreeJobMP(j.cptr, j.hptr)
+	backend.FreeJobMP(j.cptr, j.hptr)
 	j.cptr = nil
 	j.hptr = 0
 	return nil

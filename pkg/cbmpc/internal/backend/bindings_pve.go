@@ -1,6 +1,6 @@
 //go:build cgo && !windows
 
-package bindings
+package backend
 
 /*
 #include <stdlib.h>
@@ -101,6 +101,7 @@ func registerHandle(obj any) unsafe.Pointer {
 	nextHandleID++
 	handleRegistry[id] = obj
 
+	//nolint:govet // Converting uintptr to unsafe.Pointer is intentional for CGO handle passing
 	return unsafe.Pointer(uintptr(id))
 }
 
@@ -289,7 +290,6 @@ func PVEEncrypt(ekBytes, label []byte, curveNID int, xBytes []byte) ([]byte, err
 	return cmemToGoBytes(out), nil
 }
 
-
 // PVEDecrypt is a C binding wrapper for PVE decrypt.
 func PVEDecrypt(dkHandle unsafe.Pointer, ekBytes, pveCT, label []byte, curveNID int) ([]byte, error) {
 	if dkHandle == nil {
@@ -320,7 +320,6 @@ func PVEDecrypt(dkHandle unsafe.Pointer, ekBytes, pveCT, label []byte, curveNID 
 
 	return cmemToGoBytes(out), nil
 }
-
 
 // PVEGetLabel is a C binding wrapper to extract label from PVE ciphertext.
 func PVEGetLabel(pveCT []byte) ([]byte, error) {
@@ -484,6 +483,8 @@ func PVEGetQPoint(pveCT []byte) (ECCPoint, error) {
 
 // PVEVerifyWithPoint verifies a PVE ciphertext using an ecc_point_t directly.
 // This is more efficient than PVEVerify as it avoids serialization/deserialization.
+//
+//nolint:gocritic // QPoint follows Go convention for acronym capitalization
 func PVEVerifyWithPoint(ekBytes, pveCT []byte, QPoint ECCPoint, label []byte) error {
 	if len(ekBytes) == 0 {
 		return errors.New("empty ek bytes")

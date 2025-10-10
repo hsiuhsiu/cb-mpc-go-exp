@@ -1,4 +1,4 @@
-package cbmpc
+package curve
 
 // Curve represents an elliptic curve for cryptographic operations.
 type Curve struct {
@@ -7,11 +7,11 @@ type Curve struct {
 
 // Standard curves supported by the MPC protocols.
 var (
-	CurveP256      = Curve{nid: 415}  // NID_X9_62_prime256v1
-	CurveP384      = Curve{nid: 715}  // NID_secp384r1
-	CurveP521      = Curve{nid: 716}  // NID_secp521r1
-	CurveSecp256k1 = Curve{nid: 714}  // NID_secp256k1
-	CurveEd25519   = Curve{nid: 1087} // NID_ED25519
+	P256      = Curve{nid: 415}  // NID_X9_62_prime256v1
+	P384      = Curve{nid: 715}  // NID_secp384r1
+	P521      = Curve{nid: 716}  // NID_secp521r1
+	Secp256k1 = Curve{nid: 714}  // NID_secp256k1
+	Ed25519   = Curve{nid: 1087} // NID_ED25519
 )
 
 // NID returns the OpenSSL NID (numeric identifier) for the curve.
@@ -19,9 +19,9 @@ func (c Curve) NID() int {
 	return c.nid
 }
 
-// NewCurveFromNID creates a Curve from an OpenSSL NID.
+// NewFromNID creates a Curve from an OpenSSL NID.
 // This is exported for use by protocol subpackages.
-func NewCurveFromNID(nid int) Curve {
+func NewFromNID(nid int) Curve {
 	return Curve{nid: nid}
 }
 

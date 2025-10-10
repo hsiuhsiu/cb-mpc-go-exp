@@ -5,8 +5,8 @@ import (
 	"errors"
 	"runtime"
 
-	"github.com/coinbase/cb-mpc-go/internal/bindings"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/backend"
 )
 
 // AgreeRandom is a Go wrapper for coinbase::mpc::agree_random.
@@ -21,7 +21,7 @@ func AgreeRandom(_ context.Context, j *cbmpc.Job2P, bitlen int) ([]byte, error) 
 		return nil, err
 	}
 
-	out, err := bindings.AgreeRandom2P(ptr, bitlen)
+	out, err := backend.AgreeRandom2P(ptr, bitlen)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -41,7 +41,7 @@ func MultiAgreeRandom(_ context.Context, j *cbmpc.JobMP, bitlen int) ([]byte, er
 		return nil, err
 	}
 
-	out, err := bindings.AgreeRandomMP(ptr, bitlen)
+	out, err := backend.AgreeRandomMP(ptr, bitlen)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -61,7 +61,7 @@ func WeakMultiAgreeRandom(_ context.Context, j *cbmpc.JobMP, bitlen int) ([]byte
 		return nil, err
 	}
 
-	out, err := bindings.WeakMultiAgreeRandom(ptr, bitlen)
+	out, err := backend.WeakMultiAgreeRandom(ptr, bitlen)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -82,7 +82,7 @@ func MultiPairwiseAgreeRandom(_ context.Context, j *cbmpc.JobMP, bitlen int) ([]
 		return nil, err
 	}
 
-	out, err := bindings.MultiPairwiseAgreeRandom(ptr, bitlen)
+	out, err := backend.MultiPairwiseAgreeRandom(ptr, bitlen)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}

@@ -1,6 +1,6 @@
 //go:build !cgo || windows
 
-package bindings
+package backend
 
 import (
 	"context"

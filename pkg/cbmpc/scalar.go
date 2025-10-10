@@ -6,7 +6,7 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/coinbase/cb-mpc-go/internal/bindings"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/backend"
 )
 
 // Scalar represents a cryptographic scalar value.
@@ -30,14 +30,14 @@ func NewScalarFromBytes(bytes []byte) (*Scalar, error) {
 
 	// Validate by converting to C++ bn_t and back
 	// This ensures the bytes represent a valid scalar
-	ptr, err := bindings.ScalarFromBytes(bytes)
+	ptr, err := backend.ScalarFromBytes(bytes)
 	if err != nil {
 		return nil, RemapError(err)
 	}
-	defer bindings.ScalarFree(ptr)
+	defer backend.ScalarFree(ptr)
 
 	// Convert back to bytes to get normalized form
-	normalizedBytes, err := bindings.ScalarToBytes(ptr)
+	normalizedBytes, err := backend.ScalarToBytes(ptr)
 	if err != nil {
 		return nil, RemapError(err)
 	}
@@ -52,14 +52,14 @@ func NewScalarFromString(str string) (*Scalar, error) {
 	}
 
 	// Convert string to C++ bn_t
-	ptr, err := bindings.ScalarFromString(str)
+	ptr, err := backend.ScalarFromString(str)
 	if err != nil {
 		return nil, RemapError(err)
 	}
-	defer bindings.ScalarFree(ptr)
+	defer backend.ScalarFree(ptr)
 
 	// Convert to bytes for storage
-	bytes, err := bindings.ScalarToBytes(ptr)
+	bytes, err := backend.ScalarToBytes(ptr)
 	if err != nil {
 		return nil, RemapError(err)
 	}

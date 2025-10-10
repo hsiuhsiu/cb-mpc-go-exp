@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/coinbase/cb-mpc-go/internal/bindings"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/backend"
 )
 
 // Key represents a 2-party ECDSA key share.
@@ -26,13 +26,13 @@ import (
 //	defer result.Key.Close()
 type Key struct {
 	// ckey stores the C pointer as returned from bindings layer
-	// The bindings layer uses *C.cbmpc_ecdsa2p_key (aliased as bindings.ECDSA2PKey)
+	// The bindings layer uses *C.cbmpc_ecdsa2p_key (aliased as backend.ECDSA2PKey)
 	// The alias itself is a pointer type, so we store it directly (not as a pointer to it)
-	ckey bindings.ECDSA2PKey
+	ckey backend.ECDSA2PKey
 }
 
 // newKey creates a new Key from a C pointer and sets up a finalizer.
-func newKey(ckey bindings.ECDSA2PKey) *Key {
+func newKey(ckey backend.ECDSA2PKey) *Key {
 	k := &Key{ckey: ckey}
 	runtime.SetFinalizer(k, func(key *Key) {
 		_ = key.Close()
@@ -46,7 +46,7 @@ func (k *Key) Close() error {
 	if k == nil || k.ckey == nil {
 		return nil
 	}
-	bindings.ECDSA2PKeyFree(k.ckey)
+	backend.ECDSA2PKeyFree(k.ckey)
 	k.ckey = nil
 	runtime.SetFinalizer(k, nil)
 	return nil
@@ -57,7 +57,7 @@ func (k *Key) Bytes() ([]byte, error) {
 	if k == nil || k.ckey == nil {
 		return nil, errors.New("nil or closed key")
 	}
-	data, err := bindings.ECDSA2PKeySerialize(k.ckey)
+	data, err := backend.ECDSA2PKeySerialize(k.ckey)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -67,7 +67,7 @@ func (k *Key) Bytes() ([]byte, error) {
 // LoadKey deserializes a key from bytes.
 // The returned key must be freed with Close() when no longer needed.
 func LoadKey(data []byte) (*Key, error) {
-	ckey, err := bindings.ECDSA2PKeyDeserialize(data)
+	ckey, err := backend.ECDSA2PKeyDeserialize(data)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -80,7 +80,7 @@ func (k *Key) PublicKey() ([]byte, error) {
 	if k == nil || k.ckey == nil {
 		return nil, errors.New("nil or closed key")
 	}
-	pubKey, err := bindings.ECDSA2PKeyGetPublicKey(k.ckey)
+	pubKey, err := backend.ECDSA2PKeyGetPublicKey(k.ckey)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -92,7 +92,7 @@ func (k *Key) Curve() (cbmpc.Curve, error) {
 	if k == nil || k.ckey == nil {
 		return cbmpc.Curve{}, errors.New("nil or closed key")
 	}
-	nid, err := bindings.ECDSA2PKeyGetCurveNID(k.ckey)
+	nid, err := backend.ECDSA2PKeyGetCurveNID(k.ckey)
 	if err != nil {
 		return cbmpc.Curve{}, cbmpc.RemapError(err)
 	}
@@ -125,7 +125,7 @@ func DKG(_ context.Context, j *cbmpc.Job2P, params *DKGParams) (*DKGResult, erro
 		return nil, err
 	}
 
-	keyPtr, err := bindings.ECDSA2PDKG(ptr, params.Curve.NID())
+	keyPtr, err := backend.ECDSA2PDKG(ptr, params.Curve.NID())
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -166,7 +166,7 @@ func Refresh(_ context.Context, j *cbmpc.Job2P, params *RefreshParams) (*Refresh
 		return nil, err
 	}
 
-	newKeyCkey, err := bindings.ECDSA2PRefresh(ptr, params.Key.ckey)
+	newKeyCkey, err := backend.ECDSA2PRefresh(ptr, params.Key.ckey)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -224,7 +224,7 @@ func Sign(_ context.Context, j *cbmpc.Job2P, params *SignParams) (*SignResult, e
 		return nil, err
 	}
 
-	newSID, sig, err := bindings.ECDSA2PSign(ptr, params.Key.ckey, params.SessionID, params.Message)
+	newSID, sig, err := backend.ECDSA2PSign(ptr, params.Key.ckey, params.SessionID, params.Message)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -288,7 +288,7 @@ func SignBatch(_ context.Context, j *cbmpc.Job2P, params *SignBatchParams) (*Sig
 		return nil, err
 	}
 
-	newSID, sigs, err := bindings.ECDSA2PSignBatch(ptr, params.Key.ckey, params.SessionID, params.Messages)
+	newSID, sigs, err := backend.ECDSA2PSignBatch(ptr, params.Key.ckey, params.SessionID, params.Messages)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -333,7 +333,7 @@ func SignWithGlobalAbort(_ context.Context, j *cbmpc.Job2P, params *SignParams) 
 		return nil, err
 	}
 
-	newSID, sig, err := bindings.ECDSA2PSignWithGlobalAbort(ptr, params.Key.ckey, params.SessionID, params.Message)
+	newSID, sig, err := backend.ECDSA2PSignWithGlobalAbort(ptr, params.Key.ckey, params.SessionID, params.Message)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -385,7 +385,7 @@ func SignWithGlobalAbortBatch(_ context.Context, j *cbmpc.Job2P, params *SignBat
 		return nil, err
 	}
 
-	newSID, sigs, err := bindings.ECDSA2PSignWithGlobalAbortBatch(ptr, params.Key.ckey, params.SessionID, params.Messages)
+	newSID, sigs, err := backend.ECDSA2PSignWithGlobalAbortBatch(ptr, params.Key.ckey, params.SessionID, params.Messages)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}

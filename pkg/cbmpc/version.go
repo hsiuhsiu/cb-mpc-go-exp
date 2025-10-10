@@ -1,6 +1,6 @@
 package cbmpc
 
-import "github.com/coinbase/cb-mpc-go/internal/bindings"
+import "github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/backend"
 
 var (
 	Version     = "v0.0.0-in-progress"
@@ -17,7 +17,7 @@ func WrapperVersion() string {
 // UpstreamVersion returns the version string reported by the native bindings if
 // available; otherwise it falls back to the pinned upstream commit SHA.
 func UpstreamVersion() string {
-	if v := bindings.Version(); v != "" {
+	if v := backend.Version(); v != "" {
 		return v
 	}
 	return UpstreamSHA

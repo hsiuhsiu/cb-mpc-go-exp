@@ -98,12 +98,12 @@ tidy-check:
 	git diff --exit-code go.mod go.sum
 
 .PHONY: check-boundary
-## Fail if import "C" appears outside internal/bindings.
+## Fail if import "C" appears outside pkg/cbmpc/internal/backend.
 check-boundary:
-	@files=$$(git ls-files '*.go' | grep -v '^internal/bindings/' | grep -v '^cb-mpc/' || true); \
+	@files=$$(git ls-files '*.go' | grep -v '^pkg/cbmpc/internal/backend/' | grep -v '^cb-mpc/' || true); \
 	if [ -n "$$files" ]; then \
 		if grep -n 'import "C"' $$files; then \
-			echo 'Error: import "C" used outside internal/bindings' >&2; \
+			echo 'Error: import "C" used outside pkg/cbmpc/internal/backend' >&2; \
 			exit 1; \
 		fi; \
 	fi

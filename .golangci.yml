@@ -34,3 +34,10 @@ issues:
   exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0
+  exclude-rules:
+    # Exclude dupSubExpr warnings for CGO C function calls in backend bindings.
+    # These are false positives - the linter doesn't understand C function signatures.
+    - linters:
+        - gocritic
+      text: "dupSubExpr.*suspicious identical LHS and RHS"
+      path: "pkg/cbmpc/internal/backend/bindings_.*\\.go"

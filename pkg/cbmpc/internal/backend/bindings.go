@@ -8,12 +8,12 @@
 //   - bindings_job.go: Transport interface, handle registry, CGO export callbacks, and job lifecycle management
 //   - bindings_protocol.go: MPC protocol implementations (AgreeRandom2P, AgreeRandomMP)
 //   - bindings_stub.go: Stub implementations for non-CGO builds or Windows
-package bindings
+package backend
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/../../cb-mpc/src -I${SRCDIR}/../../cb-mpc/src/cbmpc -Wno-parentheses
-#cgo CXXFLAGS: -std=c++17 -I${SRCDIR}/../../cb-mpc/src -I${SRCDIR}/../../cb-mpc/src/cbmpc -Wno-parentheses
-#cgo LDFLAGS: -L${SRCDIR}/../../cb-mpc/lib/Release -lcbmpc -lcrypto -ldl
+#cgo CFLAGS: -I${SRCDIR}/../../../../cb-mpc/src -I${SRCDIR}/../../../../cb-mpc/src/cbmpc -Wno-parentheses
+#cgo CXXFLAGS: -std=c++17 -I${SRCDIR}/../../../../cb-mpc/src -I${SRCDIR}/../../../../cb-mpc/src/cbmpc -Wno-parentheses
+#cgo LDFLAGS: -L${SRCDIR}/../../../../cb-mpc/lib/Release -lcbmpc -lcrypto -ldl
 
 // OpenSSL paths are set via CGO_CFLAGS, CGO_CXXFLAGS, and CGO_LDFLAGS environment variables.
 // These are configured by the build scripts based on CBMPC_ENV_FLAVOR (host or docker).

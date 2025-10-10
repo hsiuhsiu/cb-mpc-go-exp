@@ -1,6 +1,6 @@
 //go:build cgo && !windows
 
-package cbmpc
+package rsa
 
 import (
 	"crypto/rand"
@@ -9,36 +9,11 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 )
 
-// KEM is the interface for Key Encapsulation Mechanisms used by PVE.
-// Implementations provide encryption key generation, encapsulation, and decapsulation.
-//
-// This interface allows plugging in custom KEM schemes (e.g., ML-KEM, RSA-KEM, etc.)
-// for use with publicly verifiable encryption.
-//
-// Note: The Decapsulate method's skHandle parameter can be any Go type, including
-// types containing Go pointers. The bindings layer automatically handles converting
-// this to a CGO-safe handle when passing through C code.
-type KEM interface {
-	// Encapsulate generates a ciphertext and shared secret for the given public key.
-	// rho is a 32-byte random seed for deterministic encapsulation.
-	// Returns (ciphertext, shared_secret, error).
-	Encapsulate(ek []byte, rho [32]byte) (ct, ss []byte, err error)
-
-	// Decapsulate recovers the shared secret from a ciphertext using the private key.
-	// skHandle can be any Go value representing the private key.
-	// Returns (shared_secret, error).
-	Decapsulate(skHandle any, ct []byte) (ss []byte, err error)
-
-	// DerivePub derives the public key from a private key reference.
-	// skRef is a serialized reference to the private key.
-	// Returns (public_key, error).
-	DerivePub(skRef []byte) ([]byte, error)
-}
-
-// RSAKEM is a production-grade RSA-based Key Encapsulation Mechanism.
+// KEM is a production-grade RSA-based Key Encapsulation Mechanism.
 // It uses RSA-OAEP with SHA-256 for secure key encapsulation.
 //
 // Security considerations:
@@ -49,28 +24,28 @@ type KEM interface {
 //   - Private keys are stored encrypted in memory
 //
 // This KEM is suitable for production use with PVE encryption.
-type RSAKEM struct {
+type KEM struct {
 	keySize int
 }
 
-// NewRSAKEM creates a new production-grade RSA KEM.
+// New creates a new production-grade RSA KEM.
 // Recommended key sizes:
 //   - 2048: Minimum for current use
 //   - 3072: Recommended for long-term security
 //   - 4096: High security applications
-func NewRSAKEM(keySize int) (*RSAKEM, error) {
+func New(keySize int) (*KEM, error) {
 	if keySize < 2048 {
 		return nil, errors.New("key size must be at least 2048 bits")
 	}
 	if keySize%1024 != 0 {
 		return nil, errors.New("key size must be a multiple of 1024")
 	}
-	return &RSAKEM{keySize: keySize}, nil
+	return &KEM{keySize: keySize}, nil
 }
 
-// rsaPrivateKeyHandle represents a handle to an RSA private key.
+// privateKeyHandle represents a handle to an RSA private key.
 // The private key is stored in DER format for security.
-type rsaPrivateKeyHandle struct {
+type privateKeyHandle struct {
 	mu        sync.RWMutex
 	keyDER    []byte // PKCS#8 DER encoding
 	publicKey []byte // PKIX DER encoding
@@ -81,7 +56,7 @@ type rsaPrivateKeyHandle struct {
 //   - skRef: Private key reference (PKCS#8 DER format)
 //   - ek: Public key (PKIX DER format)
 //   - err: Any error that occurred
-func (k *RSAKEM) Generate() (skRef []byte, ek []byte, err error) {
+func (k *KEM) Generate() (skRef []byte, ek []byte, err error) {
 	// Generate RSA key pair
 	privateKey, err := rsa.GenerateKey(rand.Reader, k.keySize)
 	if err != nil {
@@ -114,7 +89,7 @@ func (k *RSAKEM) Generate() (skRef []byte, ek []byte, err error) {
 //   - ct: Ciphertext (RSA-OAEP encrypted shared secret)
 //   - ss: Shared secret (32 bytes)
 //   - err: Any error that occurred
-func (k *RSAKEM) Encapsulate(ek []byte, rho [32]byte) (ct, ss []byte, err error) {
+func (k *KEM) Encapsulate(ek []byte, rho [32]byte) (ct, ss []byte, err error) {
 	// Parse public key
 	pubKeyInterface, err := x509.ParsePKIXPublicKey(ek)
 	if err != nil {
@@ -150,16 +125,16 @@ func (k *RSAKEM) Encapsulate(ek []byte, rho [32]byte) (ct, ss []byte, err error)
 // Uses RSA-OAEP with SHA-256 for decryption.
 //
 // Parameters:
-//   - skHandle: Private key handle (must be *rsaPrivateKeyHandle)
+//   - skHandle: Private key handle (must be *privateKeyHandle)
 //   - ct: Ciphertext to decrypt
 //
 // Returns:
 //   - ss: Shared secret (32 bytes)
 //   - err: Any error that occurred
-func (k *RSAKEM) Decapsulate(skHandle any, ct []byte) (ss []byte, err error) {
-	handle, ok := skHandle.(*rsaPrivateKeyHandle)
+func (k *KEM) Decapsulate(skHandle any, ct []byte) (ss []byte, err error) {
+	handle, ok := skHandle.(*privateKeyHandle)
 	if !ok {
-		return nil, errors.New("invalid handle type: expected *rsaPrivateKeyHandle")
+		return nil, errors.New("invalid handle type: expected *privateKeyHandle")
 	}
 
 	// Parse private key from DER
@@ -170,13 +145,13 @@ func (k *RSAKEM) Decapsulate(skHandle any, ct []byte) (ss []byte, err error) {
 
 	keyInterface, err := x509.ParsePKCS8PrivateKey(keyDER)
 	if err != nil {
-		ZeroizeBytes(keyDER)
+		zeroizeBytes(keyDER)
 		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
 
 	privateKey, ok := keyInterface.(*rsa.PrivateKey)
 	if !ok {
-		ZeroizeBytes(keyDER)
+		zeroizeBytes(keyDER)
 		return nil, errors.New("not an RSA private key")
 	}
 
@@ -184,7 +159,7 @@ func (k *RSAKEM) Decapsulate(skHandle any, ct []byte) (ss []byte, err error) {
 	ss, err = rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, ct, nil)
 
 	// Zeroize sensitive data
-	ZeroizeBytes(keyDER)
+	zeroizeBytes(keyDER)
 	// Note: privateKey fields are not easily zeroizable in Go
 	// The GC will eventually clean up the memory
 
@@ -203,7 +178,7 @@ func (k *RSAKEM) Decapsulate(skHandle any, ct []byte) (ss []byte, err error) {
 // Returns:
 //   - Public key in PKIX DER format
 //   - Any error that occurred
-func (k *RSAKEM) DerivePub(skRef []byte) ([]byte, error) {
+func (k *KEM) DerivePub(skRef []byte) ([]byte, error) {
 	// Parse private key
 	keyInterface, err := x509.ParsePKCS8PrivateKey(skRef)
 	if err != nil {
@@ -228,7 +203,7 @@ func (k *RSAKEM) DerivePub(skRef []byte) ([]byte, error) {
 // Returns:
 //   - Handle that can be passed to Decapsulate
 //   - Any error that occurred
-func (k *RSAKEM) NewPrivateKeyHandle(skRef []byte) (any, error) {
+func (k *KEM) NewPrivateKeyHandle(skRef []byte) (any, error) {
 	// Validate by parsing
 	keyInterface, err := x509.ParsePKCS8PrivateKey(skRef)
 	if err != nil {
@@ -253,7 +228,7 @@ func (k *RSAKEM) NewPrivateKeyHandle(skRef []byte) (any, error) {
 	}
 
 	// Create handle with DER-encoded key
-	handle := &rsaPrivateKeyHandle{
+	handle := &privateKeyHandle{
 		keyDER:    make([]byte, len(skRef)),
 		publicKey: publicKey,
 	}
@@ -264,20 +239,30 @@ func (k *RSAKEM) NewPrivateKeyHandle(skRef []byte) (any, error) {
 
 // FreePrivateKeyHandle securely frees a private key handle.
 // This zeroizes the private key material from memory.
-func (k *RSAKEM) FreePrivateKeyHandle(handle any) error {
-	h, ok := handle.(*rsaPrivateKeyHandle)
+func (k *KEM) FreePrivateKeyHandle(handle any) error {
+	h, ok := handle.(*privateKeyHandle)
 	if !ok {
-		return errors.New("invalid handle type: expected *rsaPrivateKeyHandle")
+		return errors.New("invalid handle type: expected *privateKeyHandle")
 	}
 
 	// Zeroize private key material
 	h.mu.Lock()
-	ZeroizeBytes(h.keyDER)
+	zeroizeBytes(h.keyDER)
 	h.keyDER = nil
 	h.publicKey = nil
 	h.mu.Unlock()
 
 	return nil
+}
+
+// zeroizeBytes overwrites the provided slice with zeros and prevents compiler
+// dead store elimination using runtime.KeepAlive.
+func zeroizeBytes(buf []byte) {
+	for i := range buf {
+		buf[i] = 0
+	}
+	// Prevent dead store elimination per golang/go#33325
+	runtime.KeepAlive(buf)
 }
 
 // deterministicReader is a reader that generates deterministic "random" bytes
