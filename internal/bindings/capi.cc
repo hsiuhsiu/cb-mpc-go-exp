@@ -12,9 +12,12 @@
 #include "cbmpc/core/convert.h"
 #include "cbmpc/core/error.h"
 #include "cbmpc/crypto/base_ecc.h"
+#include "cbmpc/crypto/base_pki.h"
 #include "cbmpc/protocol/agree_random.h"
 #include "cbmpc/protocol/ecdsa_2p.h"
 #include "cbmpc/protocol/mpc_job.h"
+#include "cbmpc/protocol/pve.h"
+#include "cbmpc/protocol/pve_base.h"
 
 namespace {
 
@@ -367,6 +370,272 @@ int cbmpc_ecdsa2p_sign_with_global_abort_batch(cbmpc_job2p *j, cmem_t sid_in, co
   // This is normal for P2, so we don't check for allocation failure here
 
   return 0;
+}
+
+// PVE Encrypt
+int cbmpc_pve_encrypt(cmem_t ek_bytes, cmem_t label, int curve_nid, cmem_t x_bytes, cmem_t *pve_ct_out) {
+  if (!ek_bytes.data || ek_bytes.size <= 0 || !label.data || label.size <= 0 || !x_bytes.data || x_bytes.size <= 0 || !pve_ct_out) {
+    return E_BADARG;
+  }
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  // Deserialize scalar x from bytes
+  coinbase::crypto::bn_t x = coinbase::crypto::bn_t::from_bin(mem_t(x_bytes.data, x_bytes.size));
+
+  // Create PVE ciphertext using FFI KEM policy
+  coinbase::mpc::ec_pve_t pve(coinbase::mpc::kem_pve_base_pke<coinbase::crypto::kem_policy_ffi_t>());
+
+  // Construct ffi_kem_ek_t from the EK bytes
+  // ffi_kem_ek_t is just a buf_t
+  coinbase::crypto::ffi_kem_ek_t ek(ek_bytes.data, static_cast<size_t>(ek_bytes.size));
+
+  pve.encrypt(&ek, mem_t(label.data, label.size), curve, x);
+
+  // Serialize the PVE ciphertext
+  buf_t pve_serialized = coinbase::ser(pve);
+  *pve_ct_out = alloc_and_copy(pve_serialized.data(), static_cast<size_t>(pve_serialized.size()));
+
+  return 0;
+}
+
+// PVE Verify
+int cbmpc_pve_verify(cmem_t ek_bytes, cmem_t pve_ct, cmem_t Q_bytes, cmem_t label) {
+  if (!ek_bytes.data || ek_bytes.size <= 0 || !pve_ct.data || pve_ct.size <= 0 || !Q_bytes.data || Q_bytes.size <= 0 || !label.data || label.size <= 0) {
+    return E_BADARG;
+  }
+
+  // Deserialize PVE ciphertext
+  coinbase::mpc::ec_pve_t pve(coinbase::mpc::kem_pve_base_pke<coinbase::crypto::kem_policy_ffi_t>());
+  error_t rv = coinbase::deser(mem_t(pve_ct.data, pve_ct.size), pve);
+  if (rv != SUCCESS) return rv;
+
+  // Get curve from the stored Q point
+  const auto& stored_Q = pve.get_Q();
+  auto curve = stored_Q.get_curve();
+
+  // Deserialize Q from bytes
+  coinbase::crypto::ecc_point_t Q;
+  rv = Q.from_oct(curve, mem_t(Q_bytes.data, Q_bytes.size));
+  if (rv != SUCCESS) return rv;
+
+  // Construct ffi_kem_ek_t from the EK bytes
+  coinbase::crypto::ffi_kem_ek_t ek(ek_bytes.data, static_cast<size_t>(ek_bytes.size));
+
+  // Verify
+  rv = pve.verify(&ek, Q, mem_t(label.data, label.size));
+  return rv;
+}
+
+// PVE Decrypt
+int cbmpc_pve_decrypt(const void *dk_handle, cmem_t ek_bytes, cmem_t pve_ct, cmem_t label, int curve_nid, cmem_t *x_bytes_out) {
+  if (!dk_handle || !ek_bytes.data || ek_bytes.size <= 0 || !pve_ct.data || pve_ct.size <= 0 || !label.data || label.size <= 0 || !x_bytes_out) {
+    return E_BADARG;
+  }
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  // Deserialize PVE ciphertext
+  coinbase::mpc::ec_pve_t pve(coinbase::mpc::kem_pve_base_pke<coinbase::crypto::kem_policy_ffi_t>());
+  error_t rv = coinbase::deser(mem_t(pve_ct.data, pve_ct.size), pve);
+  if (rv != SUCCESS) return rv;
+
+  // The dk_handle is an opaque Go pointer that will be passed to FFI callbacks.
+  // We need to wrap it in an ffi_kem_dk_t struct.
+  coinbase::crypto::ffi_kem_dk_t dk(const_cast<void*>(dk_handle));
+
+  // Construct ffi_kem_ek_t from the EK bytes
+  coinbase::crypto::ffi_kem_ek_t ek(ek_bytes.data, static_cast<size_t>(ek_bytes.size));
+
+  // Decrypt
+  coinbase::crypto::bn_t x;
+  rv = pve.decrypt(&dk, &ek, mem_t(label.data, label.size), curve, x);
+  if (rv != SUCCESS) return rv;
+
+  // Serialize x to bytes
+  buf_t x_serialized = x.to_bin();
+  *x_bytes_out = alloc_and_copy(x_serialized.data(), static_cast<size_t>(x_serialized.size()));
+
+  return 0;
+}
+
+// PVE Get Q
+int cbmpc_pve_get_Q(cmem_t pve_ct, cmem_t *Q_bytes_out) {
+  if (!pve_ct.data || pve_ct.size <= 0 || !Q_bytes_out) {
+    return E_BADARG;
+  }
+
+  // Deserialize PVE ciphertext (using unified PKE as placeholder since we only need Q)
+  coinbase::mpc::ec_pve_t pve(coinbase::mpc::pve_base_pke_unified());
+  error_t rv = coinbase::deser(mem_t(pve_ct.data, pve_ct.size), pve);
+  if (rv != SUCCESS) return rv;
+
+  // Get Q and serialize to bytes
+  const auto& Q = pve.get_Q();
+  buf_t Q_serialized = Q.to_oct();
+  *Q_bytes_out = alloc_and_copy(Q_serialized.data(), static_cast<size_t>(Q_serialized.size()));
+
+  return 0;
+}
+
+// PVE Get Label
+int cbmpc_pve_get_label(cmem_t pve_ct, cmem_t *label_out) {
+  if (!pve_ct.data || pve_ct.size <= 0 || !label_out) {
+    return E_BADARG;
+  }
+
+  // Deserialize PVE ciphertext (using unified PKE as placeholder since we only need label)
+  coinbase::mpc::ec_pve_t pve(coinbase::mpc::pve_base_pke_unified());
+  error_t rv = coinbase::deser(mem_t(pve_ct.data, pve_ct.size), pve);
+  if (rv != SUCCESS) return rv;
+
+  // Get label
+  const auto& label = pve.get_Label();
+  *label_out = alloc_and_copy(label.data(), static_cast<size_t>(label.size()));
+
+  return 0;
+}
+
+// Scalar operations - wrapping bn_t
+int cbmpc_scalar_from_bytes(cmem_t bytes, cmem_t *scalar_out) {
+  if (!bytes.data || bytes.size <= 0 || !scalar_out) {
+    return E_BADARG;
+  }
+
+  // Create bn_t from bytes
+  auto bn = std::make_unique<coinbase::crypto::bn_t>();
+  *bn = coinbase::crypto::bn_t::from_bin(mem_t(bytes.data, bytes.size));
+
+  // Return pointer to bn_t as cmem_t (opaque handle)
+  scalar_out->data = reinterpret_cast<uint8_t*>(bn.release());
+  scalar_out->size = 0; // Size of 0 indicates this is an opaque pointer
+  return 0;
+}
+
+int cbmpc_scalar_from_string(const char *str, cmem_t *scalar_out) {
+  if (!str || !scalar_out) {
+    return E_BADARG;
+  }
+
+  // Create bn_t from decimal string
+  auto bn = std::make_unique<coinbase::crypto::bn_t>();
+  *bn = coinbase::crypto::bn_t::from_string(str);
+
+  // Return pointer to bn_t as cmem_t (opaque handle)
+  scalar_out->data = reinterpret_cast<uint8_t*>(bn.release());
+  scalar_out->size = 0; // Size of 0 indicates this is an opaque pointer
+  return 0;
+}
+
+int cbmpc_scalar_to_bytes(cmem_t scalar, cmem_t *bytes_out) {
+  if (!scalar.data || !bytes_out) {
+    return E_BADARG;
+  }
+
+  // Cast to bn_t pointer
+  const auto* bn = reinterpret_cast<const coinbase::crypto::bn_t*>(scalar.data);
+
+  // Serialize to bytes
+  buf_t bytes = bn->to_bin();
+  *bytes_out = alloc_and_copy(bytes.data(), static_cast<size_t>(bytes.size()));
+
+  return 0;
+}
+
+void cbmpc_scalar_free(cmem_t scalar) {
+  if (scalar.data) {
+    auto* bn = reinterpret_cast<coinbase::crypto::bn_t*>(scalar.data);
+    delete bn;
+  }
+}
+
+// ECC Point operations - wrapping ecc_point_t
+int cbmpc_ecc_point_from_bytes(int curve_nid, cmem_t bytes, cbmpc_ecc_point *point_out) {
+  if (!bytes.data || bytes.size <= 0 || !point_out) {
+    return E_BADARG;
+  }
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  // Create ecc_point_t from compressed bytes
+  auto point = std::make_unique<coinbase::crypto::ecc_point_t>();
+  error_t rv = point->from_oct(curve, mem_t(bytes.data, bytes.size));
+  if (rv != SUCCESS) return rv;
+
+  *point_out = reinterpret_cast<cbmpc_ecc_point>(point.release());
+  return 0;
+}
+
+int cbmpc_ecc_point_to_bytes(cbmpc_ecc_point point, cmem_t *bytes_out) {
+  if (!point || !bytes_out) {
+    return E_BADARG;
+  }
+
+  const auto* ecc_point = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(point);
+
+  // Serialize to compressed format
+  buf_t bytes = ecc_point->to_oct();
+  *bytes_out = alloc_and_copy(bytes.data(), static_cast<size_t>(bytes.size()));
+
+  return 0;
+}
+
+void cbmpc_ecc_point_free(cbmpc_ecc_point point) {
+  if (point) {
+    auto* ecc_point = reinterpret_cast<coinbase::crypto::ecc_point_t*>(point);
+    delete ecc_point;
+  }
+}
+
+int cbmpc_ecc_point_get_curve_nid(cbmpc_ecc_point point) {
+  if (!point) return 0;
+  const auto* ecc_point = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(point);
+  auto curve = ecc_point->get_curve();
+  if (!curve) return 0;
+  return curve.get_openssl_code();
+}
+
+// PVE operations using ecc_point_t directly
+int cbmpc_pve_get_Q_point(cmem_t pve_ct, cbmpc_ecc_point *Q_point_out) {
+  if (!pve_ct.data || pve_ct.size <= 0 || !Q_point_out) {
+    return E_BADARG;
+  }
+
+  // Deserialize PVE ciphertext (using unified PKE as placeholder since we only need Q)
+  auto pve_ptr = std::make_unique<coinbase::mpc::ec_pve_t>(coinbase::mpc::pve_base_pke_unified());
+  error_t rv = coinbase::deser(mem_t(pve_ct.data, pve_ct.size), *pve_ptr);
+  if (rv != SUCCESS) return rv;
+
+  // Get Q reference and create a new copy
+  const auto& Q = pve_ptr->get_Q();
+  auto point_copy = std::make_unique<coinbase::crypto::ecc_point_t>(Q);
+
+  *Q_point_out = reinterpret_cast<cbmpc_ecc_point>(point_copy.release());
+  return 0;
+}
+
+int cbmpc_pve_verify_with_point(cmem_t ek_bytes, cmem_t pve_ct, cbmpc_ecc_point Q_point, cmem_t label) {
+  if (!ek_bytes.data || ek_bytes.size <= 0 || !pve_ct.data || pve_ct.size <= 0 || !Q_point || !label.data || label.size <= 0) {
+    return E_BADARG;
+  }
+
+  // Deserialize PVE ciphertext
+  coinbase::mpc::ec_pve_t pve(coinbase::mpc::kem_pve_base_pke<coinbase::crypto::kem_policy_ffi_t>());
+  error_t rv = coinbase::deser(mem_t(pve_ct.data, pve_ct.size), pve);
+  if (rv != SUCCESS) return rv;
+
+  // Cast to ecc_point_t
+  const auto* Q = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(Q_point);
+
+  // Construct ffi_kem_ek_t from the EK bytes
+  coinbase::crypto::ffi_kem_ek_t ek(ek_bytes.data, static_cast<size_t>(ek_bytes.size));
+
+  // Verify using the ecc_point_t directly
+  rv = pve.verify(&ek, *Q, mem_t(label.data, label.size));
+  return rv;
 }
 
 }  // extern "C"
