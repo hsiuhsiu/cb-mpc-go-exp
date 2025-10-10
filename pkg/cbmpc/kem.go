@@ -1,6 +1,6 @@
 //go:build cgo && !windows
 
-package pve
+package cbmpc
 
 import (
 	"crypto/rand"
@@ -10,9 +10,33 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-
-	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
 )
+
+// KEM is the interface for Key Encapsulation Mechanisms used by PVE.
+// Implementations provide encryption key generation, encapsulation, and decapsulation.
+//
+// This interface allows plugging in custom KEM schemes (e.g., ML-KEM, RSA-KEM, etc.)
+// for use with publicly verifiable encryption.
+//
+// Note: The Decapsulate method's skHandle parameter can be any Go type, including
+// types containing Go pointers. The bindings layer automatically handles converting
+// this to a CGO-safe handle when passing through C code.
+type KEM interface {
+	// Encapsulate generates a ciphertext and shared secret for the given public key.
+	// rho is a 32-byte random seed for deterministic encapsulation.
+	// Returns (ciphertext, shared_secret, error).
+	Encapsulate(ek []byte, rho [32]byte) (ct, ss []byte, err error)
+
+	// Decapsulate recovers the shared secret from a ciphertext using the private key.
+	// skHandle can be any Go value representing the private key.
+	// Returns (shared_secret, error).
+	Decapsulate(skHandle any, ct []byte) (ss []byte, err error)
+
+	// DerivePub derives the public key from a private key reference.
+	// skRef is a serialized reference to the private key.
+	// Returns (public_key, error).
+	DerivePub(skRef []byte) ([]byte, error)
+}
 
 // RSAKEM is a production-grade RSA-based Key Encapsulation Mechanism.
 // It uses RSA-OAEP with SHA-256 for secure key encapsulation.
@@ -146,13 +170,13 @@ func (k *RSAKEM) Decapsulate(skHandle any, ct []byte) (ss []byte, err error) {
 
 	keyInterface, err := x509.ParsePKCS8PrivateKey(keyDER)
 	if err != nil {
-		cbmpc.ZeroizeBytes(keyDER)
+		ZeroizeBytes(keyDER)
 		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
 
 	privateKey, ok := keyInterface.(*rsa.PrivateKey)
 	if !ok {
-		cbmpc.ZeroizeBytes(keyDER)
+		ZeroizeBytes(keyDER)
 		return nil, errors.New("not an RSA private key")
 	}
 
@@ -160,7 +184,7 @@ func (k *RSAKEM) Decapsulate(skHandle any, ct []byte) (ss []byte, err error) {
 	ss, err = rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, ct, nil)
 
 	// Zeroize sensitive data
-	cbmpc.ZeroizeBytes(keyDER)
+	ZeroizeBytes(keyDER)
 	// Note: privateKey fields are not easily zeroizable in Go
 	// The GC will eventually clean up the memory
 
@@ -248,7 +272,7 @@ func (k *RSAKEM) FreePrivateKeyHandle(handle any) error {
 
 	// Zeroize private key material
 	h.mu.Lock()
-	cbmpc.ZeroizeBytes(h.keyDER)
+	ZeroizeBytes(h.keyDER)
 	h.keyDER = nil
 	h.publicKey = nil
 	h.mu.Unlock()

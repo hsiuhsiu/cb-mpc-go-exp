@@ -9,41 +9,15 @@ import (
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
 )
 
-// KEM is the interface for Key Encapsulation Mechanisms used by PVE.
-// Implementations provide encryption key generation, encapsulation, and decapsulation.
-//
-// This interface allows plugging in custom KEM schemes (e.g., ML-KEM, RSA-KEM, etc.)
-// for use with publicly verifiable encryption.
-//
-// Note: The Decapsulate method's skHandle parameter can be any Go type, including
-// types containing Go pointers. The bindings layer automatically handles converting
-// this to a CGO-safe handle when passing through C code.
-type KEM interface {
-	// Encapsulate generates a ciphertext and shared secret for the given public key.
-	// rho is a 32-byte random seed for deterministic encapsulation.
-	// Returns (ciphertext, shared_secret, error).
-	Encapsulate(ek []byte, rho [32]byte) (ct, ss []byte, err error)
-
-	// Decapsulate recovers the shared secret from a ciphertext using the private key.
-	// skHandle can be any Go value representing the private key.
-	// Returns (shared_secret, error).
-	Decapsulate(skHandle any, ct []byte) (ss []byte, err error)
-
-	// DerivePub derives the public key from a private key reference.
-	// skRef is a serialized reference to the private key.
-	// Returns (public_key, error).
-	DerivePub(skRef []byte) ([]byte, error)
-}
-
 // PVE represents a Publicly Verifiable Encryption instance with a specific KEM.
 // Multiple PVE instances can coexist with different KEMs.
 type PVE struct {
-	kem KEM
+	kem cbmpc.KEM
 }
 
 // New creates a new PVE instance with the specified KEM.
 // See cb-mpc/src/cbmpc/protocol/pve.h for protocol details.
-func New(kem KEM) (*PVE, error) {
+func New(kem cbmpc.KEM) (*PVE, error) {
 	if kem == nil {
 		return nil, errors.New("nil KEM")
 	}
@@ -51,24 +25,16 @@ func New(kem KEM) (*PVE, error) {
 }
 
 // Ciphertext represents a publicly verifiable encryption ciphertext.
-// The ciphertext is stored in serialized form and all operations are delegated to C++.
-type Ciphertext struct {
-	serialized []byte
-}
-
-// Bytes returns the serialized ciphertext.
-func (ct *Ciphertext) Bytes() []byte {
-	return ct.serialized
-}
+type Ciphertext []byte
 
 // Q extracts the public key point Q from the ciphertext.
 // See cb-mpc/src/cbmpc/protocol/pve.h for protocol details.
-func (ct *Ciphertext) Q() (*cbmpc.CurvePoint, error) {
-	if ct == nil || len(ct.serialized) == 0 {
-		return nil, errors.New("nil or empty ciphertext")
+func (ct Ciphertext) Q() (*cbmpc.CurvePoint, error) {
+	if len(ct) == 0 {
+		return nil, errors.New("empty ciphertext")
 	}
 
-	cpoint, err := bindings.PVEGetQPoint(ct.serialized)
+	cpoint, err := bindings.PVEGetQPoint(ct)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -78,11 +44,11 @@ func (ct *Ciphertext) Q() (*cbmpc.CurvePoint, error) {
 
 // Label extracts the label from the ciphertext.
 // See cb-mpc/src/cbmpc/protocol/pve.h for protocol details.
-func (ct *Ciphertext) Label() ([]byte, error) {
-	if ct == nil || len(ct.serialized) == 0 {
-		return nil, errors.New("nil or empty ciphertext")
+func (ct Ciphertext) Label() ([]byte, error) {
+	if len(ct) == 0 {
+		return nil, errors.New("empty ciphertext")
 	}
-	return bindings.PVEGetLabel(ct.serialized)
+	return bindings.PVEGetLabel(ct)
 }
 
 // EncryptParams contains parameters for PVE encryption.
@@ -105,7 +71,7 @@ type EncryptParams struct {
 // EncryptResult contains the result of PVE encryption.
 type EncryptResult struct {
 	// Ciphertext is the PVE ciphertext.
-	Ciphertext *Ciphertext
+	Ciphertext Ciphertext
 }
 
 // Encrypt encrypts a scalar x using publicly verifiable encryption.
@@ -138,7 +104,7 @@ func (pve *PVE) Encrypt(_ context.Context, params *EncryptParams) (*EncryptResul
 	}
 
 	return &EncryptResult{
-		Ciphertext: &Ciphertext{serialized: ctBytes},
+		Ciphertext: Ciphertext(ctBytes),
 	}, nil
 }
 
@@ -148,7 +114,7 @@ type VerifyParams struct {
 	EK []byte
 
 	// Ciphertext is the PVE ciphertext to verify.
-	Ciphertext *Ciphertext
+	Ciphertext Ciphertext
 
 	// Q is the expected public key point.
 	Q *cbmpc.CurvePoint
@@ -169,8 +135,8 @@ func (pve *PVE) Verify(_ context.Context, params *VerifyParams) error {
 	if len(params.EK) == 0 {
 		return errors.New("empty encryption key")
 	}
-	if params.Ciphertext == nil || len(params.Ciphertext.serialized) == 0 {
-		return errors.New("nil or empty ciphertext")
+	if len(params.Ciphertext) == 0 {
+		return errors.New("empty ciphertext")
 	}
 	if params.Q == nil {
 		return errors.New("nil Q")
@@ -183,7 +149,7 @@ func (pve *PVE) Verify(_ context.Context, params *VerifyParams) error {
 	cleanup := bindings.SetKEM(pve.kem)
 	defer cleanup()
 
-	err := bindings.PVEVerifyWithPoint(params.EK, params.Ciphertext.serialized, params.Q.CPtr(), params.Label)
+	err := bindings.PVEVerifyWithPoint(params.EK, params.Ciphertext, params.Q.CPtr(), params.Label)
 	if err != nil {
 		return cbmpc.RemapError(err)
 	}
@@ -202,7 +168,7 @@ type DecryptParams struct {
 	EK []byte
 
 	// Ciphertext is the PVE ciphertext to decrypt.
-	Ciphertext *Ciphertext
+	Ciphertext Ciphertext
 
 	// Label is the expected label.
 	Label []byte
@@ -232,8 +198,8 @@ func (pve *PVE) Decrypt(_ context.Context, params *DecryptParams) (*DecryptResul
 	if len(params.EK) == 0 {
 		return nil, errors.New("empty encryption key")
 	}
-	if params.Ciphertext == nil || len(params.Ciphertext.serialized) == 0 {
-		return nil, errors.New("nil or empty ciphertext")
+	if len(params.Ciphertext) == 0 {
+		return nil, errors.New("empty ciphertext")
 	}
 	if len(params.Label) == 0 {
 		return nil, errors.New("empty label")
@@ -247,7 +213,7 @@ func (pve *PVE) Decrypt(_ context.Context, params *DecryptParams) (*DecryptResul
 	dkHandle := bindings.RegisterHandle(params.DK)
 	defer bindings.FreeHandle(dkHandle)
 
-	xBytes, err := bindings.PVEDecrypt(dkHandle, params.EK, params.Ciphertext.serialized, params.Label, params.Curve.NID())
+	xBytes, err := bindings.PVEDecrypt(dkHandle, params.EK, params.Ciphertext, params.Label, params.Curve.NID())
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}

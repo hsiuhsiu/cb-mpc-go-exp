@@ -58,7 +58,7 @@ func TestPVEEncryptDecrypt(t *testing.T) {
 	}
 
 	ct := encryptResult.Ciphertext
-	if len(ct.Bytes()) == 0 {
+	if len(ct) == 0 {
 		t.Fatal("Ciphertext is empty")
 	}
 
@@ -399,7 +399,7 @@ func TestPVEDifferentLabels(t *testing.T) {
 	}
 
 	// Ciphertexts should be different
-	if string(encryptResult1.Ciphertext.Bytes()) == string(encryptResult2.Ciphertext.Bytes()) {
+	if string(encryptResult1.Ciphertext) == string(encryptResult2.Ciphertext) {
 		t.Fatal("Ciphertexts with different labels should be different")
 	}
 
@@ -449,7 +449,7 @@ func TestPVECiphertextMethods(t *testing.T) {
 	ct := encryptResult.Ciphertext
 
 	// Test Bytes()
-	bytes := ct.Bytes()
+	bytes := ct
 	if len(bytes) == 0 {
 		t.Fatal("Bytes() returned empty slice")
 	}

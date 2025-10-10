@@ -31,7 +31,7 @@ func main() {
 
 	// Step 1: Create production-grade RSA KEM (3072-bit for long-term security)
 	fmt.Println("Step 1: Creating RSA KEM (3072-bit)...")
-	kem, err := pve.NewRSAKEM(3072)
+	kem, err := cbmpc.NewRSAKEM(3072)
 	if err != nil {
 		log.Fatalf("Failed to create RSA KEM: %v", err)
 	}
@@ -94,7 +94,7 @@ func main() {
 	}
 
 	ciphertext := encryptResult.Ciphertext
-	fmt.Printf("✓ Encryption successful (ciphertext: %d bytes)\n", len(ciphertext.Bytes()))
+	fmt.Printf("✓ Encryption successful (ciphertext: %d bytes)\n", len(ciphertext))
 	fmt.Println()
 
 	// Step 7: Extract Q for verification
