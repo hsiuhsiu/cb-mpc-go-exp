@@ -11,25 +11,27 @@ import "C"
 
 import (
 	"errors"
-	"unsafe"
 )
 
+// ECDSA2PKey is a type alias for *C.cbmpc_ecdsa2p_key
+type ECDSA2PKey = *C.cbmpc_ecdsa2p_key
+
 // ECDSA2PKeyFree frees an ECDSA 2P key.
-func ECDSA2PKeyFree(key unsafe.Pointer) {
+func ECDSA2PKeyFree(key ECDSA2PKey) {
 	if key == nil {
 		return
 	}
-	C.cbmpc_ecdsa2p_key_free((*C.cbmpc_ecdsa2p_key)(key))
+	C.cbmpc_ecdsa2p_key_free(key)
 }
 
 // ECDSA2PKeyGetPublicKey extracts the public key from an ECDSA 2P key.
-func ECDSA2PKeyGetPublicKey(key unsafe.Pointer) ([]byte, error) {
+func ECDSA2PKeyGetPublicKey(key ECDSA2PKey) ([]byte, error) {
 	if key == nil {
 		return nil, errors.New("nil key")
 	}
 
 	var out C.cmem_t
-	rc := C.cbmpc_ecdsa2p_key_get_public_key((*C.cbmpc_ecdsa2p_key)(key), &out)
+	rc := C.cbmpc_ecdsa2p_key_get_public_key(key, &out)
 	if rc != 0 {
 		return nil, errors.New("failed to get public key")
 	}
@@ -37,13 +39,13 @@ func ECDSA2PKeyGetPublicKey(key unsafe.Pointer) ([]byte, error) {
 }
 
 // ECDSA2PKeyGetCurveNID gets the curve NID from an ECDSA 2P key.
-func ECDSA2PKeyGetCurveNID(key unsafe.Pointer) (int, error) {
+func ECDSA2PKeyGetCurveNID(key ECDSA2PKey) (int, error) {
 	if key == nil {
 		return 0, errors.New("nil key")
 	}
 
 	var nid C.int
-	rc := C.cbmpc_ecdsa2p_key_get_curve_nid((*C.cbmpc_ecdsa2p_key)(key), &nid)
+	rc := C.cbmpc_ecdsa2p_key_get_curve_nid(key, &nid)
 	if rc != 0 {
 		return 0, errors.New("failed to get curve NID")
 	}
@@ -51,13 +53,13 @@ func ECDSA2PKeyGetCurveNID(key unsafe.Pointer) (int, error) {
 }
 
 // ECDSA2PKeySerialize serializes an ECDSA 2P key to bytes.
-func ECDSA2PKeySerialize(key unsafe.Pointer) ([]byte, error) {
+func ECDSA2PKeySerialize(key ECDSA2PKey) ([]byte, error) {
 	if key == nil {
 		return nil, errors.New("nil key")
 	}
 
 	var out C.cmem_t
-	rc := C.cbmpc_ecdsa2p_key_serialize((*C.cbmpc_ecdsa2p_key)(key), &out)
+	rc := C.cbmpc_ecdsa2p_key_serialize(key, &out)
 	if rc != 0 {
 		return nil, errors.New("failed to serialize key")
 	}
@@ -65,16 +67,16 @@ func ECDSA2PKeySerialize(key unsafe.Pointer) ([]byte, error) {
 }
 
 // ECDSA2PKeyDeserialize deserializes an ECDSA 2P key from bytes.
-func ECDSA2PKeyDeserialize(data []byte) (unsafe.Pointer, error) {
+func ECDSA2PKeyDeserialize(data []byte) (ECDSA2PKey, error) {
 	if len(data) == 0 {
 		return nil, errors.New("empty data")
 	}
 
 	dataMem := goBytesToCmem(data)
-	var key *C.cbmpc_ecdsa2p_key
+	var key ECDSA2PKey
 	rc := C.cbmpc_ecdsa2p_key_deserialize(dataMem, &key)
 	if rc != 0 {
 		return nil, errors.New("failed to deserialize key")
 	}
-	return unsafe.Pointer(key), nil
+	return key, nil
 }
