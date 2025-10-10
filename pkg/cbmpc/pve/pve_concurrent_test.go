@@ -1,4 +1,4 @@
-package cbmpc_test
+package pve_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/testkem"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/pve"
 )
 
 // TestPVEConcurrentOperations tests that multiple PVE instances with different KEMs
@@ -29,7 +30,7 @@ func TestPVEConcurrentOperations(t *testing.T) {
 
 			// Each goroutine creates its own KEM and PVE instance
 			kem := testkem.NewToyRSAKEM(2048)
-			pve, err := cbmpc.NewPVE(kem)
+			pveInstance, err := pve.New(kem)
 			if err != nil {
 				errors <- fmt.Errorf("goroutine %d: failed to create PVE: %v", id, err)
 				return
@@ -59,7 +60,7 @@ func TestPVEConcurrentOperations(t *testing.T) {
 			defer x.Free()
 
 			// Encrypt
-			encryptResult, err := pve.Encrypt(ctx, &cbmpc.EncryptParams{
+			encryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 				EK:    ek,
 				Label: []byte(fmt.Sprintf("test-%d", id)),
 				Curve: cbmpc.CurveP256,
@@ -71,7 +72,7 @@ func TestPVEConcurrentOperations(t *testing.T) {
 			}
 
 			// Decrypt
-			decryptResult, err := pve.Decrypt(ctx, &cbmpc.DecryptParams{
+			decryptResult, err := pveInstance.Decrypt(ctx, &pve.DecryptParams{
 				DK:         dkHandle,
 				EK:         ek,
 				Ciphertext: encryptResult.Ciphertext,

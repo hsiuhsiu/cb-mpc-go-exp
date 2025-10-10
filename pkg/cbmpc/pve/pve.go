@@ -1,4 +1,4 @@
-package cbmpc
+package pve
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"runtime"
 
 	"github.com/coinbase/cb-mpc-go/internal/bindings"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
 )
 
 // KEM is the interface for Key Encapsulation Mechanisms used by PVE.
@@ -40,44 +41,44 @@ type PVE struct {
 	kem KEM
 }
 
-// NewPVE creates a new PVE instance with the specified KEM.
+// New creates a new PVE instance with the specified KEM.
 // See cb-mpc/src/cbmpc/protocol/pve.h for protocol details.
-func NewPVE(kem KEM) (*PVE, error) {
+func New(kem KEM) (*PVE, error) {
 	if kem == nil {
 		return nil, errors.New("nil KEM")
 	}
 	return &PVE{kem: kem}, nil
 }
 
-// PVECiphertext represents a publicly verifiable encryption ciphertext.
+// Ciphertext represents a publicly verifiable encryption ciphertext.
 // The ciphertext is stored in serialized form and all operations are delegated to C++.
-type PVECiphertext struct {
+type Ciphertext struct {
 	serialized []byte
 }
 
 // Bytes returns the serialized ciphertext.
-func (ct *PVECiphertext) Bytes() []byte {
+func (ct *Ciphertext) Bytes() []byte {
 	return ct.serialized
 }
 
 // Q extracts the public key point Q from the ciphertext.
 // See cb-mpc/src/cbmpc/protocol/pve.h for protocol details.
-func (ct *PVECiphertext) Q() (*CurvePoint, error) {
+func (ct *Ciphertext) Q() (*cbmpc.CurvePoint, error) {
 	if ct == nil || len(ct.serialized) == 0 {
 		return nil, errors.New("nil or empty ciphertext")
 	}
 
 	cpoint, err := bindings.PVEGetQPoint(ct.serialized)
 	if err != nil {
-		return nil, remapError(err)
+		return nil, cbmpc.RemapError(err)
 	}
 
-	return newCurvePointFromBindings(cpoint), nil
+	return cbmpc.NewCurvePointFromBindings(cpoint), nil
 }
 
 // Label extracts the label from the ciphertext.
 // See cb-mpc/src/cbmpc/protocol/pve.h for protocol details.
-func (ct *PVECiphertext) Label() ([]byte, error) {
+func (ct *Ciphertext) Label() ([]byte, error) {
 	if ct == nil || len(ct.serialized) == 0 {
 		return nil, errors.New("nil or empty ciphertext")
 	}
@@ -93,18 +94,18 @@ type EncryptParams struct {
 	Label []byte
 
 	// Curve specifies the elliptic curve to use.
-	Curve Curve
+	Curve cbmpc.Curve
 
 	// X is the scalar value to encrypt.
 	// NOTE: X.Bytes contains sensitive data. Consider zeroizing it after encryption
 	// by calling cbmpc.ZeroizeBytes(X.Bytes) to clear it from memory.
-	X *Scalar
+	X *cbmpc.Scalar
 }
 
 // EncryptResult contains the result of PVE encryption.
 type EncryptResult struct {
 	// Ciphertext is the PVE ciphertext.
-	Ciphertext *PVECiphertext
+	Ciphertext *Ciphertext
 }
 
 // Encrypt encrypts a scalar x using publicly verifiable encryption.
@@ -133,11 +134,11 @@ func (pve *PVE) Encrypt(_ context.Context, params *EncryptParams) (*EncryptResul
 	// Use X.Bytes directly
 	ctBytes, err := bindings.PVEEncrypt(params.EK, params.Label, params.Curve.NID(), params.X.Bytes)
 	if err != nil {
-		return nil, remapError(err)
+		return nil, cbmpc.RemapError(err)
 	}
 
 	return &EncryptResult{
-		Ciphertext: &PVECiphertext{serialized: ctBytes},
+		Ciphertext: &Ciphertext{serialized: ctBytes},
 	}, nil
 }
 
@@ -147,10 +148,10 @@ type VerifyParams struct {
 	EK []byte
 
 	// Ciphertext is the PVE ciphertext to verify.
-	Ciphertext *PVECiphertext
+	Ciphertext *Ciphertext
 
 	// Q is the expected public key point.
-	Q *CurvePoint
+	Q *cbmpc.CurvePoint
 
 	// Label is the expected label.
 	Label []byte
@@ -182,9 +183,9 @@ func (pve *PVE) Verify(_ context.Context, params *VerifyParams) error {
 	cleanup := bindings.SetKEM(pve.kem)
 	defer cleanup()
 
-	err := bindings.PVEVerifyWithPoint(params.EK, params.Ciphertext.serialized, params.Q.cPtr(), params.Label)
+	err := bindings.PVEVerifyWithPoint(params.EK, params.Ciphertext.serialized, params.Q.CPtr(), params.Label)
 	if err != nil {
-		return remapError(err)
+		return cbmpc.RemapError(err)
 	}
 
 	return nil
@@ -201,19 +202,19 @@ type DecryptParams struct {
 	EK []byte
 
 	// Ciphertext is the PVE ciphertext to decrypt.
-	Ciphertext *PVECiphertext
+	Ciphertext *Ciphertext
 
 	// Label is the expected label.
 	Label []byte
 
 	// Curve specifies the elliptic curve.
-	Curve Curve
+	Curve cbmpc.Curve
 }
 
 // DecryptResult contains the result of PVE decryption.
 type DecryptResult struct {
 	// X is the decrypted scalar value.
-	X *Scalar
+	X *cbmpc.Scalar
 }
 
 // Decrypt decrypts a PVE ciphertext to recover the scalar x.
@@ -248,18 +249,18 @@ func (pve *PVE) Decrypt(_ context.Context, params *DecryptParams) (*DecryptResul
 
 	xBytes, err := bindings.PVEDecrypt(dkHandle, params.EK, params.Ciphertext.serialized, params.Label, params.Curve.NID())
 	if err != nil {
-		return nil, remapError(err)
+		return nil, cbmpc.RemapError(err)
 	}
 
 	// Create Scalar from bytes
-	x, err := NewScalarFromBytes(xBytes)
+	x, err := cbmpc.NewScalarFromBytes(xBytes)
 	if err != nil {
-		ZeroizeBytes(xBytes)
+		cbmpc.ZeroizeBytes(xBytes)
 		return nil, err
 	}
 
 	// Zeroize xBytes after use
-	ZeroizeBytes(xBytes)
+	cbmpc.ZeroizeBytes(xBytes)
 	runtime.KeepAlive(params)
 
 	return &DecryptResult{X: x}, nil

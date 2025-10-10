@@ -26,11 +26,12 @@ func (p *CurvePoint) Curve() Curve {
 
 func (p *CurvePoint) Free() {}
 
-func (p *CurvePoint) cPtr() bindings.ECCPoint {
+// CPtr is a stub for non-CGO builds.
+func (p *CurvePoint) CPtr() bindings.ECCPoint {
 	return nil
 }
 
-// newCurvePointFromBindings is a stub for non-CGO builds.
-func newCurvePointFromBindings(bindings.ECCPoint) *CurvePoint {
+// NewCurvePointFromBindings is a stub for non-CGO builds.
+func NewCurvePointFromBindings(bindings.ECCPoint) *CurvePoint {
 	return &CurvePoint{}
 }

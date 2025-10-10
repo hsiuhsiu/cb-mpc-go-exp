@@ -32,14 +32,14 @@ func NewScalarFromBytes(bytes []byte) (*Scalar, error) {
 	// This ensures the bytes represent a valid scalar
 	ptr, err := bindings.ScalarFromBytes(bytes)
 	if err != nil {
-		return nil, remapError(err)
+		return nil, RemapError(err)
 	}
 	defer bindings.ScalarFree(ptr)
 
 	// Convert back to bytes to get normalized form
 	normalizedBytes, err := bindings.ScalarToBytes(ptr)
 	if err != nil {
-		return nil, remapError(err)
+		return nil, RemapError(err)
 	}
 
 	return &Scalar{Bytes: normalizedBytes}, nil
@@ -54,14 +54,14 @@ func NewScalarFromString(str string) (*Scalar, error) {
 	// Convert string to C++ bn_t
 	ptr, err := bindings.ScalarFromString(str)
 	if err != nil {
-		return nil, remapError(err)
+		return nil, RemapError(err)
 	}
 	defer bindings.ScalarFree(ptr)
 
 	// Convert to bytes for storage
 	bytes, err := bindings.ScalarToBytes(ptr)
 	if err != nil {
-		return nil, remapError(err)
+		return nil, RemapError(err)
 	}
 
 	return &Scalar{Bytes: bytes}, nil

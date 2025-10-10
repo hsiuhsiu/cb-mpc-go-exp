@@ -1,4 +1,4 @@
-package cbmpc
+package ecdsa2p
 
 import (
 	"context"
@@ -7,9 +7,10 @@ import (
 	"runtime"
 
 	"github.com/coinbase/cb-mpc-go/internal/bindings"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
 )
 
-// ECDSA2PKey represents a 2-party ECDSA key share.
+// Key represents a 2-party ECDSA key share.
 //
 // Memory Management:
 // Keys must be explicitly freed by calling Close() when no longer needed.
@@ -18,22 +19,22 @@ import (
 //
 // Example:
 //
-//	result, err := cbmpc.DKG(ctx, job, &cbmpc.DKGParams{Curve: cbmpc.CurveP256})
+//	result, err := ecdsa2p.DKG(ctx, job, &ecdsa2p.DKGParams{Curve: cbmpc.CurveP256})
 //	if err != nil {
 //	    return err
 //	}
 //	defer result.Key.Close()
-type ECDSA2PKey struct {
+type Key struct {
 	// ckey stores the C pointer as returned from bindings layer
 	// The bindings layer uses *C.cbmpc_ecdsa2p_key (aliased as bindings.ECDSA2PKey)
 	// The alias itself is a pointer type, so we store it directly (not as a pointer to it)
 	ckey bindings.ECDSA2PKey
 }
 
-// newECDSA2PKey creates a new ECDSA2PKey from a C pointer and sets up a finalizer.
-func newECDSA2PKey(ckey bindings.ECDSA2PKey) *ECDSA2PKey {
-	k := &ECDSA2PKey{ckey: ckey}
-	runtime.SetFinalizer(k, func(key *ECDSA2PKey) {
+// newKey creates a new Key from a C pointer and sets up a finalizer.
+func newKey(ckey bindings.ECDSA2PKey) *Key {
+	k := &Key{ckey: ckey}
+	runtime.SetFinalizer(k, func(key *Key) {
 		_ = key.Close()
 	})
 	return k
@@ -41,7 +42,7 @@ func newECDSA2PKey(ckey bindings.ECDSA2PKey) *ECDSA2PKey {
 
 // Close frees the underlying C++ key. After calling Close(), the key must not be used.
 // It is safe to call Close() multiple times.
-func (k *ECDSA2PKey) Close() error {
+func (k *Key) Close() error {
 	if k == nil || k.ckey == nil {
 		return nil
 	}
@@ -52,66 +53,66 @@ func (k *ECDSA2PKey) Close() error {
 }
 
 // Bytes returns the serialized key data for persistent storage or network transmission.
-func (k *ECDSA2PKey) Bytes() ([]byte, error) {
+func (k *Key) Bytes() ([]byte, error) {
 	if k == nil || k.ckey == nil {
 		return nil, errors.New("nil or closed key")
 	}
 	data, err := bindings.ECDSA2PKeySerialize(k.ckey)
 	if err != nil {
-		return nil, remapError(err)
+		return nil, cbmpc.RemapError(err)
 	}
 	return data, nil
 }
 
-// LoadECDSA2PKey deserializes a key from bytes.
+// LoadKey deserializes a key from bytes.
 // The returned key must be freed with Close() when no longer needed.
-func LoadECDSA2PKey(data []byte) (*ECDSA2PKey, error) {
+func LoadKey(data []byte) (*Key, error) {
 	ckey, err := bindings.ECDSA2PKeyDeserialize(data)
 	if err != nil {
-		return nil, remapError(err)
+		return nil, cbmpc.RemapError(err)
 	}
-	return newECDSA2PKey(ckey), nil
+	return newKey(ckey), nil
 }
 
 // PublicKey extracts the public key point Q from the key share.
 // Returns the compressed EC point encoding.
-func (k *ECDSA2PKey) PublicKey() ([]byte, error) {
+func (k *Key) PublicKey() ([]byte, error) {
 	if k == nil || k.ckey == nil {
 		return nil, errors.New("nil or closed key")
 	}
 	pubKey, err := bindings.ECDSA2PKeyGetPublicKey(k.ckey)
 	if err != nil {
-		return nil, remapError(err)
+		return nil, cbmpc.RemapError(err)
 	}
 	return pubKey, nil
 }
 
 // Curve returns the elliptic curve used by this key.
-func (k *ECDSA2PKey) Curve() (Curve, error) {
+func (k *Key) Curve() (cbmpc.Curve, error) {
 	if k == nil || k.ckey == nil {
-		return Curve{}, errors.New("nil or closed key")
+		return cbmpc.Curve{}, errors.New("nil or closed key")
 	}
 	nid, err := bindings.ECDSA2PKeyGetCurveNID(k.ckey)
 	if err != nil {
-		return Curve{}, remapError(err)
+		return cbmpc.Curve{}, cbmpc.RemapError(err)
 	}
-	return Curve{nid: nid}, nil
+	return cbmpc.NewCurveFromNID(nid), nil
 }
 
 // DKGParams contains parameters for 2-party ECDSA distributed key generation.
 type DKGParams struct {
-	Curve Curve
+	Curve cbmpc.Curve
 }
 
 // DKGResult contains the output of 2-party ECDSA distributed key generation.
 type DKGResult struct {
-	Key *ECDSA2PKey
+	Key *Key
 }
 
 // DKG performs 2-party ECDSA distributed key generation.
 // The returned key must be freed with Close() when no longer needed.
 // See cb-mpc/src/cbmpc/protocol/ecdsa_2p.h for protocol details.
-func DKG(_ context.Context, j *Job2P, params *DKGParams) (*DKGResult, error) {
+func DKG(_ context.Context, j *cbmpc.Job2P, params *DKGParams) (*DKGResult, error) {
 	if j == nil {
 		return nil, errors.New("nil job")
 	}
@@ -119,37 +120,37 @@ func DKG(_ context.Context, j *Job2P, params *DKGParams) (*DKGResult, error) {
 		return nil, errors.New("nil params")
 	}
 
-	ptr, err := j.ptr()
+	ptr, err := j.Ptr()
 	if err != nil {
 		return nil, err
 	}
 
-	keyPtr, err := bindings.ECDSA2PDKG(ptr, params.Curve.nid)
+	keyPtr, err := bindings.ECDSA2PDKG(ptr, params.Curve.NID())
 	if err != nil {
-		return nil, remapError(err)
+		return nil, cbmpc.RemapError(err)
 	}
 	runtime.KeepAlive(j)
 
 	return &DKGResult{
-		Key: newECDSA2PKey(keyPtr),
+		Key: newKey(keyPtr),
 	}, nil
 }
 
 // RefreshParams contains parameters for 2-party ECDSA key refresh.
 type RefreshParams struct {
-	Key *ECDSA2PKey
+	Key *Key
 }
 
 // RefreshResult contains the output of 2-party ECDSA key refresh.
 type RefreshResult struct {
-	NewKey *ECDSA2PKey
+	NewKey *Key
 }
 
 // Refresh performs 2-party ECDSA key refresh.
 // The returned key must be freed with Close() when no longer needed.
 // The input key is not modified and remains valid.
 // See cb-mpc/src/cbmpc/protocol/ecdsa_2p.h for protocol details.
-func Refresh(_ context.Context, j *Job2P, params *RefreshParams) (*RefreshResult, error) {
+func Refresh(_ context.Context, j *cbmpc.Job2P, params *RefreshParams) (*RefreshResult, error) {
 	if j == nil {
 		return nil, errors.New("nil job")
 	}
@@ -160,28 +161,28 @@ func Refresh(_ context.Context, j *Job2P, params *RefreshParams) (*RefreshResult
 		return nil, errors.New("nil or closed key")
 	}
 
-	ptr, err := j.ptr()
+	ptr, err := j.Ptr()
 	if err != nil {
 		return nil, err
 	}
 
 	newKeyCkey, err := bindings.ECDSA2PRefresh(ptr, params.Key.ckey)
 	if err != nil {
-		return nil, remapError(err)
+		return nil, cbmpc.RemapError(err)
 	}
 	runtime.KeepAlive(j)
 	runtime.KeepAlive(params.Key)
 
 	return &RefreshResult{
-		NewKey: newECDSA2PKey(newKeyCkey),
+		NewKey: newKey(newKeyCkey),
 	}, nil
 }
 
 // SignParams contains parameters for 2-party ECDSA signing.
 type SignParams struct {
-	SessionID []byte      // Session ID (in/out parameter)
-	Key       *ECDSA2PKey // Key share to sign with
-	Message   []byte      // Message hash to sign (must be pre-hashed, max size = curve order size)
+	SessionID []byte // Session ID (in/out parameter)
+	Key       *Key   // Key share to sign with
+	Message   []byte // Message hash to sign (must be pre-hashed, max size = curve order size)
 }
 
 // SignResult contains the output of 2-party ECDSA signing.
@@ -194,7 +195,7 @@ type SignResult struct {
 // The message must be the hash of the actual message to sign.
 // The input key is not modified and remains valid.
 // See cb-mpc/src/cbmpc/protocol/ecdsa_2p.h for protocol details.
-func Sign(_ context.Context, j *Job2P, params *SignParams) (*SignResult, error) {
+func Sign(_ context.Context, j *cbmpc.Job2P, params *SignParams) (*SignResult, error) {
 	if j == nil {
 		return nil, errors.New("nil job")
 	}
@@ -218,14 +219,14 @@ func Sign(_ context.Context, j *Job2P, params *SignParams) (*SignResult, error) 
 		return nil, errors.New("message hash exceeds curve order size")
 	}
 
-	ptr, err := j.ptr()
+	ptr, err := j.Ptr()
 	if err != nil {
 		return nil, err
 	}
 
 	newSID, sig, err := bindings.ECDSA2PSign(ptr, params.Key.ckey, params.SessionID, params.Message)
 	if err != nil {
-		return nil, remapError(err)
+		return nil, cbmpc.RemapError(err)
 	}
 	runtime.KeepAlive(j)
 	runtime.KeepAlive(params.Key)
@@ -238,9 +239,9 @@ func Sign(_ context.Context, j *Job2P, params *SignParams) (*SignResult, error) 
 
 // SignBatchParams contains parameters for 2-party ECDSA batch signing.
 type SignBatchParams struct {
-	SessionID []byte      // Session ID (in/out parameter)
-	Key       *ECDSA2PKey // Key share to sign with
-	Messages  [][]byte    // Message hashes to sign (must be pre-hashed, max size = curve order size)
+	SessionID []byte   // Session ID (in/out parameter)
+	Key       *Key     // Key share to sign with
+	Messages  [][]byte // Message hashes to sign (must be pre-hashed, max size = curve order size)
 }
 
 // SignBatchResult contains the output of 2-party ECDSA batch signing.
@@ -251,7 +252,7 @@ type SignBatchResult struct {
 
 // SignBatch performs 2-party ECDSA batch signing.
 // See cb-mpc/src/cbmpc/protocol/ecdsa_2p.h for protocol details.
-func SignBatch(_ context.Context, j *Job2P, params *SignBatchParams) (*SignBatchResult, error) {
+func SignBatch(_ context.Context, j *cbmpc.Job2P, params *SignBatchParams) (*SignBatchResult, error) {
 	if j == nil {
 		return nil, errors.New("nil job")
 	}
@@ -282,14 +283,14 @@ func SignBatch(_ context.Context, j *Job2P, params *SignBatchParams) (*SignBatch
 		}
 	}
 
-	ptr, err := j.ptr()
+	ptr, err := j.Ptr()
 	if err != nil {
 		return nil, err
 	}
 
 	newSID, sigs, err := bindings.ECDSA2PSignBatch(ptr, params.Key.ckey, params.SessionID, params.Messages)
 	if err != nil {
-		return nil, remapError(err)
+		return nil, cbmpc.RemapError(err)
 	}
 	runtime.KeepAlive(j)
 	runtime.KeepAlive(params.Key)
@@ -303,7 +304,7 @@ func SignBatch(_ context.Context, j *Job2P, params *SignBatchParams) (*SignBatch
 // SignWithGlobalAbort performs 2-party ECDSA signing with global abort mode.
 // Returns ErrBitLeak if signature verification fails (indicates potential key leak).
 // See cb-mpc/src/cbmpc/protocol/ecdsa_2p.h for protocol details.
-func SignWithGlobalAbort(_ context.Context, j *Job2P, params *SignParams) (*SignResult, error) {
+func SignWithGlobalAbort(_ context.Context, j *cbmpc.Job2P, params *SignParams) (*SignResult, error) {
 	if j == nil {
 		return nil, errors.New("nil job")
 	}
@@ -327,14 +328,14 @@ func SignWithGlobalAbort(_ context.Context, j *Job2P, params *SignParams) (*Sign
 		return nil, errors.New("message hash exceeds curve order size")
 	}
 
-	ptr, err := j.ptr()
+	ptr, err := j.Ptr()
 	if err != nil {
 		return nil, err
 	}
 
 	newSID, sig, err := bindings.ECDSA2PSignWithGlobalAbort(ptr, params.Key.ckey, params.SessionID, params.Message)
 	if err != nil {
-		return nil, remapError(err)
+		return nil, cbmpc.RemapError(err)
 	}
 	runtime.KeepAlive(j)
 	runtime.KeepAlive(params.Key)
@@ -348,7 +349,7 @@ func SignWithGlobalAbort(_ context.Context, j *Job2P, params *SignParams) (*Sign
 // SignWithGlobalAbortBatch performs 2-party ECDSA batch signing with global abort mode.
 // Returns ErrBitLeak if signature verification fails (indicates potential key leak).
 // See cb-mpc/src/cbmpc/protocol/ecdsa_2p.h for protocol details.
-func SignWithGlobalAbortBatch(_ context.Context, j *Job2P, params *SignBatchParams) (*SignBatchResult, error) {
+func SignWithGlobalAbortBatch(_ context.Context, j *cbmpc.Job2P, params *SignBatchParams) (*SignBatchResult, error) {
 	if j == nil {
 		return nil, errors.New("nil job")
 	}
@@ -379,14 +380,14 @@ func SignWithGlobalAbortBatch(_ context.Context, j *Job2P, params *SignBatchPara
 		}
 	}
 
-	ptr, err := j.ptr()
+	ptr, err := j.Ptr()
 	if err != nil {
 		return nil, err
 	}
 
 	newSID, sigs, err := bindings.ECDSA2PSignWithGlobalAbortBatch(ptr, params.Key.ckey, params.SessionID, params.Messages)
 	if err != nil {
-		return nil, remapError(err)
+		return nil, cbmpc.RemapError(err)
 	}
 	runtime.KeepAlive(j)
 	runtime.KeepAlive(params.Key)

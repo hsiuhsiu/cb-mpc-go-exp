@@ -1,6 +1,6 @@
 //go:build cgo && !windows
 
-package cbmpc
+package pve
 
 import (
 	"crypto/rand"
@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
 )
 
 // RSAKEM is a production-grade RSA-based Key Encapsulation Mechanism.
@@ -144,13 +146,13 @@ func (k *RSAKEM) Decapsulate(skHandle any, ct []byte) (ss []byte, err error) {
 
 	keyInterface, err := x509.ParsePKCS8PrivateKey(keyDER)
 	if err != nil {
-		ZeroizeBytes(keyDER)
+		cbmpc.ZeroizeBytes(keyDER)
 		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
 
 	privateKey, ok := keyInterface.(*rsa.PrivateKey)
 	if !ok {
-		ZeroizeBytes(keyDER)
+		cbmpc.ZeroizeBytes(keyDER)
 		return nil, errors.New("not an RSA private key")
 	}
 
@@ -158,7 +160,7 @@ func (k *RSAKEM) Decapsulate(skHandle any, ct []byte) (ss []byte, err error) {
 	ss, err = rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, ct, nil)
 
 	// Zeroize sensitive data
-	ZeroizeBytes(keyDER)
+	cbmpc.ZeroizeBytes(keyDER)
 	// Note: privateKey fields are not easily zeroizable in Go
 	// The GC will eventually clean up the memory
 
@@ -246,7 +248,7 @@ func (k *RSAKEM) FreePrivateKeyHandle(handle any) error {
 
 	// Zeroize private key material
 	h.mu.Lock()
-	ZeroizeBytes(h.keyDER)
+	cbmpc.ZeroizeBytes(h.keyDER)
 	h.keyDER = nil
 	h.publicKey = nil
 	h.mu.Unlock()

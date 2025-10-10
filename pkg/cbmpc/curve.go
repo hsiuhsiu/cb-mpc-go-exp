@@ -19,6 +19,12 @@ func (c Curve) NID() int {
 	return c.nid
 }
 
+// NewCurveFromNID creates a Curve from an OpenSSL NID.
+// This is exported for use by protocol subpackages.
+func NewCurveFromNID(nid int) Curve {
+	return Curve{nid: nid}
+}
+
 // String returns a human-readable name for the curve.
 func (c Curve) String() string {
 	switch c.nid {

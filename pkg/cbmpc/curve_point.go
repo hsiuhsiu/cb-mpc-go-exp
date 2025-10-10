@@ -25,7 +25,7 @@ type CurvePoint struct {
 func NewCurvePointFromBytes(curve Curve, bytes []byte) (*CurvePoint, error) {
 	cpoint, err := bindings.ECCPointFromBytes(curve.NID(), bytes)
 	if err != nil {
-		return nil, remapError(err)
+		return nil, RemapError(err)
 	}
 
 	p := &CurvePoint{cpoint: cpoint}
@@ -44,7 +44,7 @@ func (p *CurvePoint) Bytes() ([]byte, error) {
 
 	bytes, err := bindings.ECCPointToBytes(p.cpoint)
 	if err != nil {
-		return nil, remapError(err)
+		return nil, RemapError(err)
 	}
 
 	return bytes, nil
@@ -72,18 +72,18 @@ func (p *CurvePoint) Free() {
 	}
 }
 
-// cPtr returns the internal C pointer for use by bindings.
-// This is package-private and should not be exported.
-func (p *CurvePoint) cPtr() bindings.ECCPoint {
+// CPtr returns the internal C pointer for use by protocol subpackages.
+// This is exported for use by subpackages that need access to the underlying C pointer.
+func (p *CurvePoint) CPtr() bindings.ECCPoint {
 	if p == nil {
 		return nil
 	}
 	return p.cpoint
 }
 
-// newCurvePointFromBindings creates a CurvePoint from a bindings ECCPoint.
-// This is package-private and used internally.
-func newCurvePointFromBindings(cpoint bindings.ECCPoint) *CurvePoint {
+// NewCurvePointFromBindings creates a CurvePoint from a bindings ECCPoint.
+// This is exported for use by protocol subpackages.
+func NewCurvePointFromBindings(cpoint bindings.ECCPoint) *CurvePoint {
 	p := &CurvePoint{cpoint: cpoint}
 	runtime.SetFinalizer(p, (*CurvePoint).Free)
 	return p

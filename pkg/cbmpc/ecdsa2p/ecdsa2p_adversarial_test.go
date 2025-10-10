@@ -1,4 +1,4 @@
-package cbmpc_test
+package ecdsa2p_test
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/ecdsa2p"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/mocknet"
 )
 
@@ -38,7 +39,7 @@ func TestECDSA2PDKGMaliciousP1(t *testing.T) {
 	curve := cbmpc.CurveP256
 
 	var wg sync.WaitGroup
-	results := make([]*cbmpc.DKGResult, 2)
+	results := make([]*ecdsa2p.DKGResult, 2)
 	testErrors := make([]error, 2)
 
 	// P1 (malicious) - uses very short timeout to simulate dropping out
@@ -58,7 +59,7 @@ func TestECDSA2PDKGMaliciousP1(t *testing.T) {
 		maliciousCtx, maliciousCancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
 		defer maliciousCancel()
 
-		result, err := cbmpc.DKG(maliciousCtx, job, &cbmpc.DKGParams{Curve: curve})
+		result, err := ecdsa2p.DKG(maliciousCtx, job, &ecdsa2p.DKGParams{Curve: curve})
 		results[0] = result
 		testErrors[0] = err
 	}()
@@ -76,7 +77,7 @@ func TestECDSA2PDKGMaliciousP1(t *testing.T) {
 		}
 		defer func() { _ = job.Close() }()
 
-		result, err := cbmpc.DKG(ctx, job, &cbmpc.DKGParams{Curve: curve})
+		result, err := ecdsa2p.DKG(ctx, job, &ecdsa2p.DKGParams{Curve: curve})
 		results[1] = result
 		testErrors[1] = err
 	}()
@@ -102,7 +103,7 @@ func TestECDSA2PDKGMaliciousP2(t *testing.T) {
 	curve := cbmpc.CurveP256
 
 	var wg sync.WaitGroup
-	results := make([]*cbmpc.DKGResult, 2)
+	results := make([]*ecdsa2p.DKGResult, 2)
 	testErrors := make([]error, 2)
 
 	// P1 (honest) - should detect the problem and abort gracefully
@@ -118,7 +119,7 @@ func TestECDSA2PDKGMaliciousP2(t *testing.T) {
 		}
 		defer func() { _ = job.Close() }()
 
-		result, err := cbmpc.DKG(ctx, job, &cbmpc.DKGParams{Curve: curve})
+		result, err := ecdsa2p.DKG(ctx, job, &ecdsa2p.DKGParams{Curve: curve})
 		results[0] = result
 		testErrors[0] = err
 	}()
@@ -140,7 +141,7 @@ func TestECDSA2PDKGMaliciousP2(t *testing.T) {
 		maliciousCtx, maliciousCancel := context.WithCancel(context.Background())
 		maliciousCancel() // Cancel immediately - P2 stops participating
 
-		result, err := cbmpc.DKG(maliciousCtx, job, &cbmpc.DKGParams{Curve: curve})
+		result, err := ecdsa2p.DKG(maliciousCtx, job, &ecdsa2p.DKGParams{Curve: curve})
 		results[1] = result
 		testErrors[1] = err
 	}()
@@ -166,7 +167,7 @@ func TestECDSA2PSignMaliciousP1(t *testing.T) {
 
 	// First, perform honest DKG to get keys
 	var wg sync.WaitGroup
-	keys := make([]*cbmpc.ECDSA2PKey, 2)
+	keys := make([]*ecdsa2p.Key, 2)
 	testErrors := make([]error, 2)
 
 	for i := 0; i < 2; i++ {
@@ -188,7 +189,7 @@ func TestECDSA2PSignMaliciousP1(t *testing.T) {
 			}
 			defer func() { _ = job.Close() }()
 
-			result, err := cbmpc.DKG(ctx, job, &cbmpc.DKGParams{Curve: curve})
+			result, err := ecdsa2p.DKG(ctx, job, &ecdsa2p.DKGParams{Curve: curve})
 			if err != nil {
 				testErrors[partyID] = err
 				return
@@ -230,7 +231,7 @@ func TestECDSA2PSignMaliciousP1(t *testing.T) {
 		maliciousCtx, maliciousCancel := context.WithCancel(context.Background())
 		maliciousCancel() // Cancel immediately
 
-		result, err := cbmpc.Sign(maliciousCtx, job, &cbmpc.SignParams{
+		result, err := ecdsa2p.Sign(maliciousCtx, job, &ecdsa2p.SignParams{
 			SessionID: nil,
 			Key:       keys[0],
 			Message:   messageHash[:],
@@ -254,7 +255,7 @@ func TestECDSA2PSignMaliciousP1(t *testing.T) {
 		}
 		defer func() { _ = job.Close() }()
 
-		result, err := cbmpc.Sign(ctx, job, &cbmpc.SignParams{
+		result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
 			SessionID: nil,
 			Key:       keys[1],
 			Message:   messageHash[:],
@@ -293,7 +294,7 @@ func TestECDSA2PSignMaliciousP2(t *testing.T) {
 
 	// First, perform honest DKG to get keys
 	var wg sync.WaitGroup
-	keys := make([]*cbmpc.ECDSA2PKey, 2)
+	keys := make([]*ecdsa2p.Key, 2)
 	testErrors := make([]error, 2)
 
 	for i := 0; i < 2; i++ {
@@ -315,7 +316,7 @@ func TestECDSA2PSignMaliciousP2(t *testing.T) {
 			}
 			defer func() { _ = job.Close() }()
 
-			result, err := cbmpc.DKG(ctx, job, &cbmpc.DKGParams{Curve: curve})
+			result, err := ecdsa2p.DKG(ctx, job, &ecdsa2p.DKGParams{Curve: curve})
 			if err != nil {
 				testErrors[partyID] = err
 				return
@@ -354,7 +355,7 @@ func TestECDSA2PSignMaliciousP2(t *testing.T) {
 		}
 		defer func() { _ = job.Close() }()
 
-		result, err := cbmpc.Sign(ctx, job, &cbmpc.SignParams{
+		result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
 			SessionID: nil,
 			Key:       keys[0],
 			Message:   messageHash[:],
@@ -381,7 +382,7 @@ func TestECDSA2PSignMaliciousP2(t *testing.T) {
 		maliciousCtx, maliciousCancel := context.WithCancel(context.Background())
 		maliciousCancel() // Cancel immediately
 
-		result, err := cbmpc.Sign(maliciousCtx, job, &cbmpc.SignParams{
+		result, err := ecdsa2p.Sign(maliciousCtx, job, &ecdsa2p.SignParams{
 			SessionID: nil,
 			Key:       keys[1],
 			Message:   messageHash[:],

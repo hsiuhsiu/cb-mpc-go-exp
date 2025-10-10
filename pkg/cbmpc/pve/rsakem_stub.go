@@ -1,6 +1,6 @@
 //go:build !cgo || windows
 
-package cbmpc
+package pve
 
 import "errors"
 

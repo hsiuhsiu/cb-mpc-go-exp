@@ -1,4 +1,4 @@
-package cbmpc_test
+package pve_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/testkem"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/pve"
 )
 
 // TestPVEKEMIsolation verifies that KEMs are properly isolated between goroutines
@@ -22,8 +23,8 @@ func TestPVEKEMIsolation(t *testing.T) {
 	kem1 := testkem.NewToyRSAKEM(2048)
 	kem2 := testkem.NewToyRSAKEM(3072)
 
-	pve1, _ := cbmpc.NewPVE(kem1)
-	pve2, _ := cbmpc.NewPVE(kem2)
+	pve1, _ := pve.New(kem1)
+	pve2, _ := pve.New(kem2)
 
 	// Generate separate key pairs
 	skRef1, ek1, _ := kem1.Generate()
@@ -52,7 +53,7 @@ func TestPVEKEMIsolation(t *testing.T) {
 		// Introduce some delay to ensure operations overlap
 		time.Sleep(10 * time.Millisecond)
 
-		encResult, err := pve1.Encrypt(ctx, &cbmpc.EncryptParams{
+		encResult, err := pve1.Encrypt(ctx, &pve.EncryptParams{
 			EK:    ek1,
 			Label: []byte("kem1"),
 			Curve: cbmpc.CurveP256,
@@ -65,7 +66,7 @@ func TestPVEKEMIsolation(t *testing.T) {
 
 		time.Sleep(5 * time.Millisecond) // Allow time for interleaving
 
-		decResult, err := pve1.Decrypt(ctx, &cbmpc.DecryptParams{
+		decResult, err := pve1.Decrypt(ctx, &pve.DecryptParams{
 			DK:         dk1,
 			EK:         ek1,
 			Ciphertext: encResult.Ciphertext,
@@ -95,7 +96,7 @@ func TestPVEKEMIsolation(t *testing.T) {
 		// Different delay pattern
 		time.Sleep(5 * time.Millisecond)
 
-		encResult, err := pve2.Encrypt(ctx, &cbmpc.EncryptParams{
+		encResult, err := pve2.Encrypt(ctx, &pve.EncryptParams{
 			EK:    ek2,
 			Label: []byte("kem2"),
 			Curve: cbmpc.CurveSecp256k1,
@@ -108,7 +109,7 @@ func TestPVEKEMIsolation(t *testing.T) {
 
 		time.Sleep(10 * time.Millisecond) // Allow time for interleaving
 
-		decResult, err := pve2.Decrypt(ctx, &cbmpc.DecryptParams{
+		decResult, err := pve2.Decrypt(ctx, &pve.DecryptParams{
 			DK:         dk2,
 			EK:         ek2,
 			Ciphertext: encResult.Ciphertext,
