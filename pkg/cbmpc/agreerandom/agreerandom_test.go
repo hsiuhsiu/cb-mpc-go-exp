@@ -1,6 +1,6 @@
 //go:build cgo && !windows
 
-package cbmpc_test
+package agreerandom_test
 
 import (
 	"context"
@@ -8,7 +8,8 @@ import (
 	"testing"
 	"time"
 
-	cbmpc "github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/agreerandom"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/mocknet"
 )
 
@@ -51,11 +52,11 @@ func TestAgreeRandom2PNative(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		out1, err1 = cbmpc.AgreeRandom(ctx, job1, 256)
+		out1, err1 = agreerandom.AgreeRandom(ctx, job1, 256)
 	}()
 	go func() {
 		defer wg.Done()
-		out2, err2 = cbmpc.AgreeRandom(ctx, job2, 256)
+		out2, err2 = agreerandom.AgreeRandom(ctx, job2, 256)
 	}()
 	wg.Wait()
 
@@ -124,7 +125,7 @@ func TestMultiAgreeRandomNative(t *testing.T) {
 		i := idx
 		go func() {
 			defer wg.Done()
-			outputs[i].bytes, outputs[i].err = cbmpc.MultiAgreeRandom(ctx, job, bitlen)
+			outputs[i].bytes, outputs[i].err = agreerandom.MultiAgreeRandom(ctx, job, bitlen)
 		}()
 	}
 	wg.Wait()
@@ -196,7 +197,7 @@ func TestWeakMultiAgreeRandomNative(t *testing.T) {
 		i := idx
 		go func() {
 			defer wg.Done()
-			outputs[i].bytes, outputs[i].err = cbmpc.WeakMultiAgreeRandom(ctx, job, bitlen)
+			outputs[i].bytes, outputs[i].err = agreerandom.WeakMultiAgreeRandom(ctx, job, bitlen)
 		}()
 	}
 	wg.Wait()
@@ -268,7 +269,7 @@ func TestMultiPairwiseAgreeRandomNative(t *testing.T) {
 		i := idx
 		go func() {
 			defer wg.Done()
-			outputs[i].bytesSlice, outputs[i].err = cbmpc.MultiPairwiseAgreeRandom(ctx, job, bitlen)
+			outputs[i].bytesSlice, outputs[i].err = agreerandom.MultiPairwiseAgreeRandom(ctx, job, bitlen)
 		}()
 	}
 	wg.Wait()

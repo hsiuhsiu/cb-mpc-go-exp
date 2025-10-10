@@ -38,6 +38,13 @@
 //
 //	// Run protocol
 //	ctx := context.Background()
-//	result1, _ := cbmpc.AgreeRandom(ctx, job1, 256)
-//	result2, _ := cbmpc.AgreeRandom(ctx, job2, 256)
+//	result1, _ := agreerandom.AgreeRandom(ctx, job1, 256)
+//	result2, _ := agreerandom.AgreeRandom(ctx, job2, 256)
+//
+// # Subpackages
+//
+// Protocol implementations are organized into subpackages:
+//   - agreerandom - Agree Random protocols
+//   - ecdsa2p - 2-party ECDSA protocols
+//   - pve - Publicly Verifiable Encryption
 package cbmpc

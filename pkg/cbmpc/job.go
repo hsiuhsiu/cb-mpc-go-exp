@@ -78,7 +78,7 @@ func NewJob2P(t Transport, self Role, names [2]string) (*Job2P, error) {
 	adapter := transportAdapter{inner: t}
 	cjob, h, err := bindings.NewJob2P(adapter, uint32(self.roleID()), []string{names[0], names[1]})
 	if err != nil {
-		return nil, remapError(err)
+		return nil, RemapError(err)
 	}
 
 	j := &Job2P{cptr: cjob, hptr: h}
@@ -129,7 +129,7 @@ func NewJobMP(t Transport, self RoleID, names []string) (*JobMP, error) {
 	adapter := transportAdapter{inner: t}
 	cjob, h, err := bindings.NewJobMP(adapter, uint32(self), names)
 	if err != nil {
-		return nil, remapError(err)
+		return nil, RemapError(err)
 	}
 
 	j := &JobMP{cptr: cjob, hptr: h}
@@ -152,14 +152,18 @@ func (j *JobMP) Close() error {
 	return nil
 }
 
-func (j *Job2P) ptr() (unsafe.Pointer, error) {
+// Ptr returns the unsafe pointer to the underlying C job.
+// This is exported for use by protocol subpackages.
+func (j *Job2P) Ptr() (unsafe.Pointer, error) {
 	if j == nil || j.cptr == nil {
 		return nil, ErrJobClosed
 	}
 	return j.cptr, nil
 }
 
-func (j *JobMP) ptr() (unsafe.Pointer, error) {
+// Ptr returns the unsafe pointer to the underlying C job.
+// This is exported for use by protocol subpackages.
+func (j *JobMP) Ptr() (unsafe.Pointer, error) {
 	if j == nil || j.cptr == nil {
 		return nil, ErrJobClosed
 	}

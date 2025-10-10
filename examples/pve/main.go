@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/pve"
 )
 
 func main() {
@@ -58,7 +59,7 @@ func main() {
 
 	// Step 4: Create PVE instance
 	fmt.Println("Step 4: Creating PVE instance...")
-	pve, err := cbmpc.NewPVE(kem)
+	pveInstance, err := pve.New(kem)
 	if err != nil {
 		log.Fatalf("Failed to create PVE instance: %v", err)
 	}
@@ -82,7 +83,7 @@ func main() {
 
 	// Step 6: Encrypt
 	fmt.Println("Step 6: Encrypting with PVE...")
-	encryptResult, err := pve.Encrypt(ctx, &cbmpc.EncryptParams{
+	encryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: label,
 		Curve: cbmpc.CurveP256,
@@ -93,7 +94,7 @@ func main() {
 	}
 
 	ciphertext := encryptResult.Ciphertext
-	fmt.Printf("✓ Encryption successful (ciphertext: %d bytes)\n", len(ciphertext.Bytes()))
+	fmt.Printf("✓ Encryption successful (ciphertext: %d bytes)\n", len(ciphertext))
 	fmt.Println()
 
 	// Step 7: Extract Q for verification
@@ -109,7 +110,7 @@ func main() {
 
 	// Step 8: Verify ciphertext (proof of correct encryption)
 	fmt.Println("Step 8: Verifying ciphertext...")
-	err = pve.Verify(ctx, &cbmpc.VerifyParams{
+	err = pveInstance.Verify(ctx, &pve.VerifyParams{
 		EK:         ek,
 		Ciphertext: ciphertext,
 		Q:          Q,
@@ -124,7 +125,7 @@ func main() {
 	// Step 9: Test verification failure with wrong label
 	fmt.Println("Step 9: Testing verification with wrong label (should fail)...")
 	wrongLabel := []byte("wrong-label")
-	err = pve.Verify(ctx, &cbmpc.VerifyParams{
+	err = pveInstance.Verify(ctx, &pve.VerifyParams{
 		EK:         ek,
 		Ciphertext: ciphertext,
 		Q:          Q,
@@ -142,7 +143,7 @@ func main() {
 	// Create a different encryption to get a different Q
 	x2, _ := cbmpc.NewScalarFromString("99999")
 	defer x2.Free()
-	encryptResult2, _ := pve.Encrypt(ctx, &cbmpc.EncryptParams{
+	encryptResult2, _ := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: label,
 		Curve: cbmpc.CurveP256,
@@ -151,7 +152,7 @@ func main() {
 	wrongQ, _ := encryptResult2.Ciphertext.Q()
 	defer wrongQ.Free()
 
-	err = pve.Verify(ctx, &cbmpc.VerifyParams{
+	err = pveInstance.Verify(ctx, &pve.VerifyParams{
 		EK:         ek,
 		Ciphertext: ciphertext,
 		Q:          wrongQ, // Wrong Q
@@ -166,7 +167,7 @@ func main() {
 
 	// Step 11: Decrypt
 	fmt.Println("Step 11: Decrypting ciphertext...")
-	decryptResult, err := pve.Decrypt(ctx, &cbmpc.DecryptParams{
+	decryptResult, err := pveInstance.Decrypt(ctx, &pve.DecryptParams{
 		DK:         dkHandle,
 		EK:         ek,
 		Ciphertext: ciphertext,
@@ -191,7 +192,7 @@ func main() {
 
 	// Step 12: Test decryption failure with wrong label
 	fmt.Println("Step 12: Testing decryption with wrong label (should fail)...")
-	_, err = pve.Decrypt(ctx, &cbmpc.DecryptParams{
+	_, err = pveInstance.Decrypt(ctx, &pve.DecryptParams{
 		DK:         dkHandle,
 		EK:         ek,
 		Ciphertext: ciphertext,
@@ -208,7 +209,7 @@ func main() {
 	// Step 13: Test decryption failure with tampered ciphertext
 	fmt.Println("Step 13: Testing decryption with tampered ciphertext (should fail)...")
 	// Note: We can't directly modify the ciphertext, so we'll use a different ciphertext
-	_, err = pve.Decrypt(ctx, &cbmpc.DecryptParams{
+	_, err = pveInstance.Decrypt(ctx, &pve.DecryptParams{
 		DK:         dkHandle,
 		EK:         ek,
 		Ciphertext: encryptResult2.Ciphertext, // Different ciphertext

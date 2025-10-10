@@ -1,4 +1,4 @@
-package cbmpc_test
+package pve_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/testkem"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/pve"
 )
 
 // TestPVEWithHSMKEM tests PVE with a simulated HSM KEM.
@@ -22,7 +23,7 @@ func TestPVEWithHSMKEM(t *testing.T) {
 	hsmKEM := testkem.NewHSMKEM(2048)
 
 	// Create PVE instance with HSM KEM
-	pve, err := cbmpc.NewPVE(hsmKEM)
+	pveInstance, err := pve.New(hsmKEM)
 	if err != nil {
 		t.Fatalf("Failed to create PVE instance: %v", err)
 	}
@@ -51,7 +52,7 @@ func TestPVEWithHSMKEM(t *testing.T) {
 	defer x.Free()
 
 	// Encrypt
-	encryptResult, err := pve.Encrypt(ctx, &cbmpc.EncryptParams{
+	encryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: label,
 		Curve: cbmpc.CurveP256,
@@ -62,7 +63,7 @@ func TestPVEWithHSMKEM(t *testing.T) {
 	}
 
 	// Decrypt (private key operation happens inside HSM)
-	decryptResult, err := pve.Decrypt(ctx, &cbmpc.DecryptParams{
+	decryptResult, err := pveInstance.Decrypt(ctx, &pve.DecryptParams{
 		DK:         dkHandle,
 		EK:         ek,
 		Ciphertext: encryptResult.Ciphertext,
@@ -102,7 +103,7 @@ func TestPVEMultipleKEMsConcurrent(t *testing.T) {
 			defer wg.Done()
 
 			hsmKEM := testkem.NewHSMKEM(2048)
-			pve, err := cbmpc.NewPVE(hsmKEM)
+			pveInstance, err := pve.New(hsmKEM)
 			if err != nil {
 				errors <- fmt.Errorf("HSM %d: failed to create PVE: %v", id, err)
 				return
@@ -132,7 +133,7 @@ func TestPVEMultipleKEMsConcurrent(t *testing.T) {
 			defer x.Free()
 
 			// Encrypt
-			encryptResult, err := pve.Encrypt(ctx, &cbmpc.EncryptParams{
+			encryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 				EK:    ek,
 				Label: []byte(fmt.Sprintf("hsm-%d", id)),
 				Curve: cbmpc.CurveP256,
@@ -144,7 +145,7 @@ func TestPVEMultipleKEMsConcurrent(t *testing.T) {
 			}
 
 			// Decrypt
-			decryptResult, err := pve.Decrypt(ctx, &cbmpc.DecryptParams{
+			decryptResult, err := pveInstance.Decrypt(ctx, &pve.DecryptParams{
 				DK:         dkHandle,
 				EK:         ek,
 				Ciphertext: encryptResult.Ciphertext,
@@ -172,7 +173,7 @@ func TestPVEMultipleKEMsConcurrent(t *testing.T) {
 			defer wg.Done()
 
 			toyKEM := testkem.NewToyRSAKEM(2048)
-			pve, err := cbmpc.NewPVE(toyKEM)
+			pveInstance, err := pve.New(toyKEM)
 			if err != nil {
 				errors <- fmt.Errorf("Toy %d: failed to create PVE: %v", id, err)
 				return
@@ -200,7 +201,7 @@ func TestPVEMultipleKEMsConcurrent(t *testing.T) {
 			defer x.Free()
 
 			// Encrypt
-			encryptResult, err := pve.Encrypt(ctx, &cbmpc.EncryptParams{
+			encryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 				EK:    ek,
 				Label: []byte(fmt.Sprintf("toy-%d", id)),
 				Curve: cbmpc.CurveSecp256k1,
@@ -212,7 +213,7 @@ func TestPVEMultipleKEMsConcurrent(t *testing.T) {
 			}
 
 			// Decrypt
-			decryptResult, err := pve.Decrypt(ctx, &cbmpc.DecryptParams{
+			decryptResult, err := pveInstance.Decrypt(ctx, &pve.DecryptParams{
 				DK:         dkHandle,
 				EK:         ek,
 				Ciphertext: encryptResult.Ciphertext,

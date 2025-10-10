@@ -1,4 +1,4 @@
-package cbmpc_test
+package ecdsa2p_test
 
 import (
 	"context"
@@ -15,6 +15,7 @@ import (
 	btcecdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/ecdsa2p"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/mocknet"
 )
 
@@ -127,7 +128,7 @@ func TestECDSA2PDKG(t *testing.T) {
 	for _, curve := range curves {
 		t.Run(curve.String(), func(t *testing.T) {
 			var wg sync.WaitGroup
-			results := make([]*cbmpc.DKGResult, 2)
+			results := make([]*ecdsa2p.DKGResult, 2)
 			errors := make([]error, 2)
 
 			for i := 0; i < 2; i++ {
@@ -151,7 +152,7 @@ func TestECDSA2PDKG(t *testing.T) {
 						_ = job.Close()
 					}()
 
-					result, err := cbmpc.DKG(ctx, job, &cbmpc.DKGParams{Curve: curve})
+					result, err := ecdsa2p.DKG(ctx, job, &ecdsa2p.DKGParams{Curve: curve})
 					results[partyID] = result
 					errors[partyID] = err
 				}(i)
@@ -228,7 +229,7 @@ func TestECDSA2PRefresh(t *testing.T) {
 
 	// First, perform DKG to get initial keys
 	var wg sync.WaitGroup
-	keys := make([]*cbmpc.ECDSA2PKey, 2)
+	keys := make([]*ecdsa2p.Key, 2)
 	errors := make([]error, 2)
 
 	for i := 0; i < 2; i++ {
@@ -252,7 +253,7 @@ func TestECDSA2PRefresh(t *testing.T) {
 				_ = job.Close()
 			}()
 
-			result, err := cbmpc.DKG(ctx, job, &cbmpc.DKGParams{Curve: curve})
+			result, err := ecdsa2p.DKG(ctx, job, &ecdsa2p.DKGParams{Curve: curve})
 			if err != nil {
 				errors[partyID] = err
 				return
@@ -275,7 +276,7 @@ func TestECDSA2PRefresh(t *testing.T) {
 	}
 
 	// Now perform refresh
-	newKeys := make([]*cbmpc.ECDSA2PKey, 2)
+	newKeys := make([]*ecdsa2p.Key, 2)
 	errors = make([]error, 2)
 
 	for i := 0; i < 2; i++ {
@@ -299,7 +300,7 @@ func TestECDSA2PRefresh(t *testing.T) {
 				_ = job.Close()
 			}()
 
-			result, err := cbmpc.Refresh(ctx, job, &cbmpc.RefreshParams{Key: keys[partyID]})
+			result, err := ecdsa2p.Refresh(ctx, job, &ecdsa2p.RefreshParams{Key: keys[partyID]})
 			if err != nil {
 				errors[partyID] = err
 				return
@@ -359,7 +360,7 @@ func TestECDSA2PSign(t *testing.T) {
 
 	// First, perform DKG to get keys
 	var wg sync.WaitGroup
-	keys := make([]*cbmpc.ECDSA2PKey, 2)
+	keys := make([]*ecdsa2p.Key, 2)
 	errors := make([]error, 2)
 
 	for i := 0; i < 2; i++ {
@@ -383,7 +384,7 @@ func TestECDSA2PSign(t *testing.T) {
 				_ = job.Close()
 			}()
 
-			result, err := cbmpc.DKG(ctx, job, &cbmpc.DKGParams{Curve: curve})
+			result, err := ecdsa2p.DKG(ctx, job, &ecdsa2p.DKGParams{Curve: curve})
 			if err != nil {
 				errors[partyID] = err
 				return
@@ -429,7 +430,7 @@ func TestECDSA2PSign(t *testing.T) {
 				_ = job.Close()
 			}()
 
-			result, err := cbmpc.Sign(ctx, job, &cbmpc.SignParams{
+			result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
 				SessionID: nil, // Can be nil for first signature
 				Key:       keys[partyID],
 				Message:   messageHash[:],
@@ -500,7 +501,7 @@ func TestECDSA2PSignRefreshSign(t *testing.T) {
 
 	// First, perform DKG to get keys
 	var wg sync.WaitGroup
-	keys := make([]*cbmpc.ECDSA2PKey, 2)
+	keys := make([]*ecdsa2p.Key, 2)
 	errors := make([]error, 2)
 
 	for i := 0; i < 2; i++ {
@@ -522,7 +523,7 @@ func TestECDSA2PSignRefreshSign(t *testing.T) {
 			}
 			defer func() { _ = job.Close() }()
 
-			result, err := cbmpc.DKG(ctx, job, &cbmpc.DKGParams{Curve: curve})
+			result, err := ecdsa2p.DKG(ctx, job, &ecdsa2p.DKGParams{Curve: curve})
 			if err != nil {
 				errors[partyID] = err
 				return
@@ -572,7 +573,7 @@ func TestECDSA2PSignRefreshSign(t *testing.T) {
 			}
 			defer func() { _ = job.Close() }()
 
-			result, err := cbmpc.Sign(ctx, job, &cbmpc.SignParams{
+			result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
 				SessionID: nil,
 				Key:       keys[partyID],
 				Message:   messageHash1[:],
@@ -619,7 +620,7 @@ func TestECDSA2PSignRefreshSign(t *testing.T) {
 	}
 
 	// Refresh keys
-	newKeys := make([]*cbmpc.ECDSA2PKey, 2)
+	newKeys := make([]*ecdsa2p.Key, 2)
 	errors = make([]error, 2)
 
 	for i := 0; i < 2; i++ {
@@ -641,7 +642,7 @@ func TestECDSA2PSignRefreshSign(t *testing.T) {
 			}
 			defer func() { _ = job.Close() }()
 
-			result, err := cbmpc.Refresh(ctx, job, &cbmpc.RefreshParams{Key: keys[partyID]})
+			result, err := ecdsa2p.Refresh(ctx, job, &ecdsa2p.RefreshParams{Key: keys[partyID]})
 			if err != nil {
 				errors[partyID] = err
 				return
@@ -695,7 +696,7 @@ func TestECDSA2PSignRefreshSign(t *testing.T) {
 			}
 			defer func() { _ = job.Close() }()
 
-			result, err := cbmpc.Sign(ctx, job, &cbmpc.SignParams{
+			result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
 				SessionID: nil,
 				Key:       newKeys[partyID],
 				Message:   messageHash2[:],
@@ -763,7 +764,7 @@ func TestECDSA2PMultipleSignatures(t *testing.T) {
 
 	// First, perform DKG to get keys
 	var wg sync.WaitGroup
-	keys := make([]*cbmpc.ECDSA2PKey, 2)
+	keys := make([]*ecdsa2p.Key, 2)
 	errors := make([]error, 2)
 
 	for i := 0; i < 2; i++ {
@@ -787,7 +788,7 @@ func TestECDSA2PMultipleSignatures(t *testing.T) {
 				_ = job.Close()
 			}()
 
-			result, err := cbmpc.DKG(ctx, job, &cbmpc.DKGParams{Curve: curve})
+			result, err := ecdsa2p.DKG(ctx, job, &ecdsa2p.DKGParams{Curve: curve})
 			if err != nil {
 				errors[partyID] = err
 				return
@@ -837,7 +838,7 @@ func TestECDSA2PMultipleSignatures(t *testing.T) {
 						_ = job.Close()
 					}()
 
-					result, err := cbmpc.Sign(ctx, job, &cbmpc.SignParams{
+					result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
 						SessionID: sessionID,
 						Key:       keys[partyID],
 						Message:   messageHash[:],
@@ -906,7 +907,7 @@ func TestECDSA2PSignBatch(t *testing.T) {
 
 	// First, perform DKG to get keys
 	var wg sync.WaitGroup
-	keys := make([]*cbmpc.ECDSA2PKey, 2)
+	keys := make([]*ecdsa2p.Key, 2)
 	errors := make([]error, 2)
 
 	for i := 0; i < 2; i++ {
@@ -928,7 +929,7 @@ func TestECDSA2PSignBatch(t *testing.T) {
 			}
 			defer func() { _ = job.Close() }()
 
-			result, err := cbmpc.DKG(ctx, job, &cbmpc.DKGParams{Curve: curve})
+			result, err := ecdsa2p.DKG(ctx, job, &ecdsa2p.DKGParams{Curve: curve})
 			if err != nil {
 				errors[partyID] = err
 				return
@@ -976,7 +977,7 @@ func TestECDSA2PSignBatch(t *testing.T) {
 			}
 			defer func() { _ = job.Close() }()
 
-			result, err := cbmpc.SignBatch(ctx, job, &cbmpc.SignBatchParams{
+			result, err := ecdsa2p.SignBatch(ctx, job, &ecdsa2p.SignBatchParams{
 				SessionID: nil,
 				Key:       keys[partyID],
 				Messages:  messageHashes,
@@ -1043,7 +1044,7 @@ func TestECDSA2PSignWithGlobalAbort(t *testing.T) {
 
 	// First, perform DKG to get keys
 	var wg sync.WaitGroup
-	keys := make([]*cbmpc.ECDSA2PKey, 2)
+	keys := make([]*ecdsa2p.Key, 2)
 	errors := make([]error, 2)
 
 	for i := 0; i < 2; i++ {
@@ -1065,7 +1066,7 @@ func TestECDSA2PSignWithGlobalAbort(t *testing.T) {
 			}
 			defer func() { _ = job.Close() }()
 
-			result, err := cbmpc.DKG(ctx, job, &cbmpc.DKGParams{Curve: curve})
+			result, err := ecdsa2p.DKG(ctx, job, &ecdsa2p.DKGParams{Curve: curve})
 			if err != nil {
 				errors[partyID] = err
 				return
@@ -1109,7 +1110,7 @@ func TestECDSA2PSignWithGlobalAbort(t *testing.T) {
 			}
 			defer func() { _ = job.Close() }()
 
-			result, err := cbmpc.SignWithGlobalAbort(ctx, job, &cbmpc.SignParams{
+			result, err := ecdsa2p.SignWithGlobalAbort(ctx, job, &ecdsa2p.SignParams{
 				SessionID: nil,
 				Key:       keys[partyID],
 				Message:   messageHash[:],
@@ -1173,7 +1174,7 @@ func TestECDSA2PSignWithGlobalAbortBatch(t *testing.T) {
 
 	// First, perform DKG to get keys
 	var wg sync.WaitGroup
-	keys := make([]*cbmpc.ECDSA2PKey, 2)
+	keys := make([]*ecdsa2p.Key, 2)
 	errors := make([]error, 2)
 
 	for i := 0; i < 2; i++ {
@@ -1195,7 +1196,7 @@ func TestECDSA2PSignWithGlobalAbortBatch(t *testing.T) {
 			}
 			defer func() { _ = job.Close() }()
 
-			result, err := cbmpc.DKG(ctx, job, &cbmpc.DKGParams{Curve: curve})
+			result, err := ecdsa2p.DKG(ctx, job, &ecdsa2p.DKGParams{Curve: curve})
 			if err != nil {
 				errors[partyID] = err
 				return
@@ -1243,7 +1244,7 @@ func TestECDSA2PSignWithGlobalAbortBatch(t *testing.T) {
 			}
 			defer func() { _ = job.Close() }()
 
-			result, err := cbmpc.SignWithGlobalAbortBatch(ctx, job, &cbmpc.SignBatchParams{
+			result, err := ecdsa2p.SignWithGlobalAbortBatch(ctx, job, &ecdsa2p.SignBatchParams{
 				SessionID: nil,
 				Key:       keys[partyID],
 				Messages:  messageHashes,

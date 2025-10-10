@@ -1,4 +1,4 @@
-package cbmpc_test
+package pve_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/testkem"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/pve"
 )
 
 // TestPVEWithCurvePoint demonstrates using CurvePoint for more efficient operations.
@@ -19,7 +20,7 @@ func TestPVEWithCurvePoint(t *testing.T) {
 	kem := testkem.NewToyRSAKEM(2048)
 
 	// Create PVE instance
-	pve, err := cbmpc.NewPVE(kem)
+	pveInstance, err := pve.New(kem)
 	if err != nil {
 		t.Fatalf("Failed to create PVE instance: %v", err)
 	}
@@ -46,7 +47,7 @@ func TestPVEWithCurvePoint(t *testing.T) {
 	defer x.Free()
 
 	// Encrypt
-	encryptResult, err := pve.Encrypt(ctx, &cbmpc.EncryptParams{
+	encryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: label,
 		Curve: curve,
@@ -71,7 +72,7 @@ func TestPVEWithCurvePoint(t *testing.T) {
 	}
 
 	// Verify using CurvePoint (efficient - no deserialization)
-	err = pve.Verify(ctx, &cbmpc.VerifyParams{
+	err = pveInstance.Verify(ctx, &pve.VerifyParams{
 		EK:         ek,
 		Ciphertext: ciphertext,
 		Q:          Q,
@@ -102,7 +103,7 @@ func TestCurvePointRoundTrip(t *testing.T) {
 
 	// Set up ToyRSAKEM
 	kem := testkem.NewToyRSAKEM(2048)
-	pve, _ := cbmpc.NewPVE(kem)
+	pveInstance, _ := pve.New(kem)
 
 	// Generate key pair
 	_, ek, _ := kem.Generate()
@@ -111,7 +112,7 @@ func TestCurvePointRoundTrip(t *testing.T) {
 	x, _ := cbmpc.NewScalarFromString("12345")
 	defer x.Free()
 
-	encryptResult, _ := pve.Encrypt(ctx, &cbmpc.EncryptParams{
+	encryptResult, _ := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: []byte("test"),
 		Curve: cbmpc.CurveSecp256k1,

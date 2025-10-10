@@ -1,4 +1,4 @@
-package cbmpc_test
+package pve_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/testkem"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/pve"
 )
 
 // TestPVEEncryptDecrypt tests basic PVE encryption and decryption.
@@ -18,7 +19,7 @@ func TestPVEEncryptDecrypt(t *testing.T) {
 	kem := testkem.NewToyRSAKEM(2048)
 
 	// Create PVE instance with this KEM
-	pve, err := cbmpc.NewPVE(kem)
+	pveInstance, err := pve.New(kem)
 	if err != nil {
 		t.Fatalf("Failed to create PVE instance: %v", err)
 	}
@@ -46,7 +47,7 @@ func TestPVEEncryptDecrypt(t *testing.T) {
 	defer x.Free()
 
 	// Encrypt
-	encryptResult, err := pve.Encrypt(ctx, &cbmpc.EncryptParams{
+	encryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: label,
 		Curve: curve,
@@ -57,7 +58,7 @@ func TestPVEEncryptDecrypt(t *testing.T) {
 	}
 
 	ct := encryptResult.Ciphertext
-	if len(ct.Bytes()) == 0 {
+	if len(ct) == 0 {
 		t.Fatal("Ciphertext is empty")
 	}
 
@@ -81,7 +82,7 @@ func TestPVEEncryptDecrypt(t *testing.T) {
 	}
 
 	// Verify
-	err = pve.Verify(ctx, &cbmpc.VerifyParams{
+	err = pveInstance.Verify(ctx, &pve.VerifyParams{
 		EK:         ek,
 		Ciphertext: ct,
 		Q:          Q,
@@ -92,7 +93,7 @@ func TestPVEEncryptDecrypt(t *testing.T) {
 	}
 
 	// Decrypt
-	decryptResult, err := pve.Decrypt(ctx, &cbmpc.DecryptParams{
+	decryptResult, err := pveInstance.Decrypt(ctx, &pve.DecryptParams{
 		DK:         dkHandle,
 		EK:         ek,
 		Ciphertext: ct,
@@ -119,7 +120,7 @@ func TestPVEVerifyFail(t *testing.T) {
 	kem := testkem.NewToyRSAKEM(2048)
 
 	// Create PVE instance
-	pve, err := cbmpc.NewPVE(kem)
+	pveInstance, err := pve.New(kem)
 	if err != nil {
 		t.Fatalf("Failed to create PVE instance: %v", err)
 	}
@@ -140,7 +141,7 @@ func TestPVEVerifyFail(t *testing.T) {
 	defer x.Free()
 
 	// Encrypt
-	encryptResult, err := pve.Encrypt(ctx, &cbmpc.EncryptParams{
+	encryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: label,
 		Curve: curve,
@@ -160,7 +161,7 @@ func TestPVEVerifyFail(t *testing.T) {
 
 	// Test 1: Verify with wrong label (should fail)
 	wrongLabel := []byte("wrong-label")
-	err = pve.Verify(ctx, &cbmpc.VerifyParams{
+	err = pveInstance.Verify(ctx, &pve.VerifyParams{
 		EK:         ek,
 		Ciphertext: ct,
 		Q:          Q,
@@ -177,7 +178,7 @@ func TestPVEVerifyFail(t *testing.T) {
 	}
 	defer wrongX.Free()
 
-	wrongEncryptResult, err := pve.Encrypt(ctx, &cbmpc.EncryptParams{
+	wrongEncryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: label,
 		Curve: curve,
@@ -193,7 +194,7 @@ func TestPVEVerifyFail(t *testing.T) {
 	}
 	defer wrongQ.Free()
 
-	err = pve.Verify(ctx, &cbmpc.VerifyParams{
+	err = pveInstance.Verify(ctx, &pve.VerifyParams{
 		EK:         ek,
 		Ciphertext: ct,
 		Q:          wrongQ, // Using Q from different encryption
@@ -213,7 +214,7 @@ func TestPVEMultipleCurves(t *testing.T) {
 	kem := testkem.NewToyRSAKEM(2048)
 
 	// Create PVE instance
-	pve, err := cbmpc.NewPVE(kem)
+	pveInstance, err := pve.New(kem)
 	if err != nil {
 		t.Fatalf("Failed to create PVE instance: %v", err)
 	}
@@ -245,7 +246,7 @@ func TestPVEMultipleCurves(t *testing.T) {
 	for _, curve := range curves {
 		t.Run(curve.String(), func(t *testing.T) {
 			// Encrypt
-			encryptResult, err := pve.Encrypt(ctx, &cbmpc.EncryptParams{
+			encryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 				EK:    ek,
 				Label: label,
 				Curve: curve,
@@ -256,7 +257,7 @@ func TestPVEMultipleCurves(t *testing.T) {
 			}
 
 			// Decrypt
-			decryptResult, err := pve.Decrypt(ctx, &cbmpc.DecryptParams{
+			decryptResult, err := pveInstance.Decrypt(ctx, &pve.DecryptParams{
 				DK:         dkHandle,
 				EK:         ek,
 				Ciphertext: encryptResult.Ciphertext,
@@ -285,7 +286,7 @@ func TestPVELargeScalar(t *testing.T) {
 	kem := testkem.NewToyRSAKEM(2048)
 
 	// Create PVE instance
-	pve, err := cbmpc.NewPVE(kem)
+	pveInstance, err := pve.New(kem)
 	if err != nil {
 		t.Fatalf("Failed to create PVE instance: %v", err)
 	}
@@ -313,7 +314,7 @@ func TestPVELargeScalar(t *testing.T) {
 	label := []byte("large-scalar-test")
 
 	// Encrypt
-	encryptResult, err := pve.Encrypt(ctx, &cbmpc.EncryptParams{
+	encryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: label,
 		Curve: curve,
@@ -324,7 +325,7 @@ func TestPVELargeScalar(t *testing.T) {
 	}
 
 	// Decrypt
-	decryptResult, err := pve.Decrypt(ctx, &cbmpc.DecryptParams{
+	decryptResult, err := pveInstance.Decrypt(ctx, &pve.DecryptParams{
 		DK:         dkHandle,
 		EK:         ek,
 		Ciphertext: encryptResult.Ciphertext,
@@ -357,7 +358,7 @@ func TestPVEDifferentLabels(t *testing.T) {
 	kem := testkem.NewToyRSAKEM(2048)
 
 	// Create PVE instance
-	pve, err := cbmpc.NewPVE(kem)
+	pveInstance, err := pve.New(kem)
 	if err != nil {
 		t.Fatalf("Failed to create PVE instance: %v", err)
 	}
@@ -376,7 +377,7 @@ func TestPVEDifferentLabels(t *testing.T) {
 	defer x.Free()
 
 	// Encrypt with label1
-	encryptResult1, err := pve.Encrypt(ctx, &cbmpc.EncryptParams{
+	encryptResult1, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: []byte("label1"),
 		Curve: curve,
@@ -387,7 +388,7 @@ func TestPVEDifferentLabels(t *testing.T) {
 	}
 
 	// Encrypt with label2
-	encryptResult2, err := pve.Encrypt(ctx, &cbmpc.EncryptParams{
+	encryptResult2, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: []byte("label2"),
 		Curve: curve,
@@ -398,7 +399,7 @@ func TestPVEDifferentLabels(t *testing.T) {
 	}
 
 	// Ciphertexts should be different
-	if string(encryptResult1.Ciphertext.Bytes()) == string(encryptResult2.Ciphertext.Bytes()) {
+	if string(encryptResult1.Ciphertext) == string(encryptResult2.Ciphertext) {
 		t.Fatal("Ciphertexts with different labels should be different")
 	}
 
@@ -415,7 +416,7 @@ func TestPVECiphertextMethods(t *testing.T) {
 	kem := testkem.NewToyRSAKEM(2048)
 
 	// Create PVE instance
-	pve, err := cbmpc.NewPVE(kem)
+	pveInstance, err := pve.New(kem)
 	if err != nil {
 		t.Fatalf("Failed to create PVE instance: %v", err)
 	}
@@ -435,7 +436,7 @@ func TestPVECiphertextMethods(t *testing.T) {
 	defer x.Free()
 
 	// Encrypt
-	encryptResult, err := pve.Encrypt(ctx, &cbmpc.EncryptParams{
+	encryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: label,
 		Curve: curve,
@@ -448,7 +449,7 @@ func TestPVECiphertextMethods(t *testing.T) {
 	ct := encryptResult.Ciphertext
 
 	// Test Bytes()
-	bytes := ct.Bytes()
+	bytes := ct
 	if len(bytes) == 0 {
 		t.Fatal("Bytes() returned empty slice")
 	}

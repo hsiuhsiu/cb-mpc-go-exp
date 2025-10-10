@@ -11,6 +11,7 @@ import (
 	"github.com/coinbase/cb-mpc-go/examples/common"
 	"github.com/coinbase/cb-mpc-go/examples/tlsnet"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/agreerandom"
 )
 
 func main() {
@@ -83,7 +84,7 @@ func main() {
 		}
 		defer job.Close()
 
-		out, err := cbmpc.AgreeRandom(ctx, job, *bitlen)
+		out, err := agreerandom.AgreeRandom(ctx, job, *bitlen)
 		if err != nil {
 			log.Fatalf("AgreeRandom: %v", err)
 		}
@@ -100,7 +101,7 @@ func main() {
 	}
 	defer job.Close()
 
-	out, err := cbmpc.MultiAgreeRandom(ctx, job, *bitlen)
+	out, err := agreerandom.MultiAgreeRandom(ctx, job, *bitlen)
 	if err != nil {
 		log.Fatalf("MultiAgreeRandom: %v", err)
 	}
