@@ -13,24 +13,32 @@ import (
 // This provides constant-time operations unlike big.Int which is not safe for cryptography.
 // The scalar is stored as bytes (big-endian), similar to how C++ bn_t stores values.
 //
-// The Bytes field is publicly accessible. You can:
-//   - Create directly: &Scalar{Bytes: myBytes} if you know the bytes are valid
+// The Bytes field is publicly accessible for read-only access.
+// IMPORTANT: Do not mutate the Bytes field directly as this may lead to undefined behavior.
+// To create a Scalar:
 //   - Use NewScalarFromBytes() for validation and normalization
 //   - Use NewScalarFromString() to parse from decimal strings
+//
+// If you need to modify bytes, create a new Scalar with the modified bytes.
 type Scalar struct {
 	Bytes []byte
 }
 
 // NewScalarFromBytes creates a Scalar from bytes (big-endian).
 // The bytes are validated by converting to/from C++ bn_t to ensure correctness.
+// The input bytes are copied to prevent external mutation of the Scalar's internal state.
 func NewScalarFromBytes(bytes []byte) (*Scalar, error) {
 	if len(bytes) == 0 {
 		return nil, errors.New("empty bytes")
 	}
 
+	// Make a defensive copy of input bytes before processing
+	bytesCopy := make([]byte, len(bytes))
+	copy(bytesCopy, bytes)
+
 	// Validate by converting to C++ bn_t and back
 	// This ensures the bytes represent a valid scalar
-	ptr, err := backend.ScalarFromBytes(bytes)
+	ptr, err := backend.ScalarFromBytes(bytesCopy)
 	if err != nil {
 		return nil, RemapError(err)
 	}

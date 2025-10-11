@@ -37,6 +37,7 @@ func NewPointFromBytes(curve Curve, bytes []byte) (*Point, error) {
 }
 
 // Bytes serializes the Point to compressed bytes.
+// Returns a defensive copy to prevent external modification of internal data.
 func (p *Point) Bytes() ([]byte, error) {
 	if p == nil || p.cpoint == nil {
 		return nil, nil
@@ -47,7 +48,10 @@ func (p *Point) Bytes() ([]byte, error) {
 		return nil, err
 	}
 
-	return bytes, nil
+	// Return a defensive copy to prevent mutation of internal state
+	result := make([]byte, len(bytes))
+	copy(result, bytes)
+	return result, nil
 }
 
 // Curve returns the curve for this point.
