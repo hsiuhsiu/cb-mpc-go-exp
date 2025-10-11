@@ -68,8 +68,8 @@ func TestPVEWithCurvePoint(t *testing.T) {
 	defer Q.Free()
 
 	// Verify Q point is on the correct curve
-	if Q.Curve().NID() != crv.NID() {
-		t.Fatalf("Q point curve mismatch: got %d, want %d", Q.Curve().NID(), crv.NID())
+	if Q.Curve() != crv {
+		t.Fatalf("Q point curve mismatch: got %s, want %s", Q.Curve(), crv)
 	}
 
 	// Verify using CurvePoint (efficient - no deserialization)
@@ -128,8 +128,8 @@ func TestCurvePointRoundTrip(t *testing.T) {
 	defer Q.Free()
 
 	// Verify curve matches
-	if Q.Curve().NID() != cbmpc.CurveSecp256k1.NID() {
-		t.Fatalf("Curve mismatch: got %d, want %d", Q.Curve().NID(), cbmpc.CurveSecp256k1.NID())
+	if Q.Curve() != cbmpc.CurveSecp256k1 {
+		t.Fatalf("Curve mismatch: got %s, want %s", Q.Curve(), cbmpc.CurveSecp256k1)
 	}
 
 	// Serialize to bytes
@@ -146,8 +146,8 @@ func TestCurvePointRoundTrip(t *testing.T) {
 	defer Q2.Free()
 
 	// Verify curve matches
-	if Q2.Curve().NID() != cbmpc.CurveSecp256k1.NID() {
-		t.Fatalf("Q2 curve mismatch: got %d, want %d", Q2.Curve().NID(), cbmpc.CurveSecp256k1.NID())
+	if Q2.Curve() != cbmpc.CurveSecp256k1 {
+		t.Fatalf("Q2 curve mismatch: got %s, want %s", Q2.Curve(), cbmpc.CurveSecp256k1)
 	}
 
 	// Serialize back to bytes

@@ -23,8 +23,8 @@ void cbmpc_ecdsa2p_key_free(cbmpc_ecdsa2p_key *key);
 // The returned cmem_t is allocated and must be freed by the caller.
 int cbmpc_ecdsa2p_key_get_public_key(const cbmpc_ecdsa2p_key *key, cmem_t *out);
 
-// Get the curve NID from an ECDSA 2P key.
-int cbmpc_ecdsa2p_key_get_curve_nid(const cbmpc_ecdsa2p_key *key, int *nid);
+// Get the curve from an ECDSA 2P key (returns curve enum value, not NID).
+int cbmpc_ecdsa2p_key_get_curve(const cbmpc_ecdsa2p_key *key, int *curve);
 
 // Serialize an ECDSA 2P key to bytes for persistent storage or network transmission.
 // The returned cmem_t is allocated and must be freed by the caller.

@@ -19,18 +19,13 @@ type KEM = kem.KEM
 
 // Standard curve constants re-exported for backward compatibility.
 var (
+	Unknown        = curve.Unknown
 	CurveP256      = curve.P256
 	CurveP384      = curve.P384
 	CurveP521      = curve.P521
 	CurveSecp256k1 = curve.Secp256k1
 	CurveEd25519   = curve.Ed25519
 )
-
-// NewCurveFromNID creates a Curve from an OpenSSL NID.
-// This is exported for use by protocol subpackages.
-func NewCurveFromNID(nid int) Curve {
-	return curve.NewFromNID(nid)
-}
 
 // NewCurvePointFromBytes creates a CurvePoint from compressed bytes.
 func NewCurvePointFromBytes(c Curve, bytes []byte) (*CurvePoint, error) {

@@ -38,18 +38,19 @@ func ECDSA2PKeyGetPublicKey(key ECDSA2PKey) ([]byte, error) {
 	return cmemToGoBytes(out), nil
 }
 
-// ECDSA2PKeyGetCurveNID gets the curve NID from an ECDSA 2P key.
-func ECDSA2PKeyGetCurveNID(key ECDSA2PKey) (int, error) {
+// ECDSA2PKeyGetCurve gets the curve from an ECDSA 2P key.
+// Returns backend.Curve enum directly, not NID.
+func ECDSA2PKeyGetCurve(key ECDSA2PKey) (Curve, error) {
 	if key == nil {
-		return 0, errors.New("nil key")
+		return Unknown, errors.New("nil key")
 	}
 
-	var nid C.int
-	rc := C.cbmpc_ecdsa2p_key_get_curve_nid(key, &nid)
+	var curveInt C.int
+	rc := C.cbmpc_ecdsa2p_key_get_curve(key, &curveInt)
 	if rc != 0 {
-		return 0, errors.New("failed to get curve NID")
+		return Unknown, errors.New("failed to get curve")
 	}
-	return int(nid), nil
+	return Curve(curveInt), nil
 }
 
 // ECDSA2PKeySerialize serializes an ECDSA 2P key to bytes.

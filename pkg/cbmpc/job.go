@@ -170,34 +170,7 @@ func (j *JobMP) Ptr() (unsafe.Pointer, error) {
 	return j.cptr, nil
 }
 
-// SessionID represents a session identifier for MPC signing operations.
-//
-// Session IDs are used to maintain state across multiple signing operations with the same key.
-// They help prevent replay attacks and ensure protocol security.
-//
-// Usage:
-//   - Empty SessionID (nil or zero-length): The library generates a fresh session ID
-//   - Non-empty SessionID: Resumes signing with the provided session ID from a previous operation
-//
-// The SessionID is returned by signing operations and should be passed to subsequent
-// signing operations to maintain session continuity.
-//
-// Example - Fresh session:
-//
-//	result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
-//	    SessionID: nil,  // Empty = fresh session
-//	    Key:       key,
-//	    Message:   messageHash,
-//	})
-//	// Use result.SessionID for next signature
-//
-// Example - Resume session:
-//
-//	result2, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
-//	    SessionID: result.SessionID,  // Resume with previous session ID
-//	    Key:       key,
-//	    Message:   messageHash2,
-//	})
+// SessionID represents a session identifier for MPC protocols.
 type SessionID []byte
 
 // Clone creates a defensive copy of the SessionID.

@@ -30,14 +30,14 @@ func abbrevHex(data []byte) string {
 
 // Helper to get elliptic.Curve from cbmpc.Curve
 func getEllipticCurve(curve cbmpc.Curve) elliptic.Curve {
-	switch curve.NID() {
-	case 415: // P-256
+	switch curve {
+	case cbmpc.CurveP256:
 		return elliptic.P256()
-	case 715: // P-384
+	case cbmpc.CurveP384:
 		return elliptic.P384()
-	case 716: // P-521
+	case cbmpc.CurveP521:
 		return elliptic.P521()
-	case 714: // secp256k1
+	case cbmpc.CurveSecp256k1:
 		return nil // secp256k1 not in standard library
 	default:
 		return nil
@@ -79,7 +79,7 @@ func parseDERSignature(derSig []byte) (r, s *big.Int, err error) {
 
 // Helper to verify signature for any curve (including secp256k1)
 func verifySignature(curve cbmpc.Curve, pubKeyBytes, messageHash, derSig []byte) (bool, error) {
-	if curve.NID() == 714 { // secp256k1
+	if curve == cbmpc.CurveSecp256k1 {
 		// Use btcd library for secp256k1
 		pubKey, err := btcec.ParsePubKey(pubKeyBytes)
 		if err != nil {
@@ -203,8 +203,8 @@ func TestECDSA2PDKG(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to get curve from party 0: %v", err)
 			}
-			if curve0.NID() != curve.NID() {
-				t.Fatalf("Curve mismatch: expected %d, got %d", curve.NID(), curve0.NID())
+			if curve0 != curve {
+				t.Fatalf("Curve mismatch: expected %s, got %s", curve, curve0)
 			}
 
 			t.Logf("DKG successful for curve %s, public key: %s", curve.String(), abbrevHex(pubKey0))

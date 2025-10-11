@@ -20,7 +20,7 @@ func (p *Point) Bytes() ([]byte, error) {
 }
 
 func (p *Point) Curve() Curve {
-	return Curve{}
+	return Unknown
 }
 
 func (p *Point) Free() {}

@@ -441,12 +441,13 @@ func ECCPointFree(point ECCPoint) {
 	}
 }
 
-// ECCPointGetCurveNID returns the curve NID for an ECC point.
-func ECCPointGetCurveNID(point ECCPoint) int {
+// ECCPointGetCurve returns the curve for an ECC point.
+// Returns backend.Curve enum directly, not NID.
+func ECCPointGetCurve(point ECCPoint) Curve {
 	if point == nil {
-		return 0
+		return Unknown
 	}
-	return int(C.cbmpc_ecc_point_get_curve_nid(point))
+	return Curve(C.cbmpc_ecc_point_get_curve(point))
 }
 
 // PVEGetQPoint extracts the public key Q from a PVE ciphertext as an ecc_point_t.

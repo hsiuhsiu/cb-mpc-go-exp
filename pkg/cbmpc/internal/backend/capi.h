@@ -87,8 +87,8 @@ int cbmpc_ecc_point_to_bytes(cbmpc_ecc_point point, cmem_t *bytes_out);
 // Free an ECC point.
 void cbmpc_ecc_point_free(cbmpc_ecc_point point);
 
-// Get the curve NID for an ECC point.
-int cbmpc_ecc_point_get_curve_nid(cbmpc_ecc_point point);
+// Get the curve for an ECC point (returns curve enum value, not NID).
+int cbmpc_ecc_point_get_curve(cbmpc_ecc_point point);
 
 // PVE operations using ecc_point_t directly (more efficient)
 // Extract public key Q from a PVE ciphertext as an ecc_point_t.

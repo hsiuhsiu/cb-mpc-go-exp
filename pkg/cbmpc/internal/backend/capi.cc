@@ -177,6 +177,34 @@ static inline coinbase::crypto::ecurve_t find_curve_by_nid(int nid) {
   return coinbase::crypto::ecurve_t::find(nid);
 }
 
+// Curve enum values matching backend.Curve in Go
+enum {
+  CURVE_UNKNOWN = 0,
+  CURVE_P256 = 1,
+  CURVE_P384 = 2,
+  CURVE_P521 = 3,
+  CURVE_SECP256K1 = 4,
+  CURVE_ED25519 = 5
+};
+
+// Helper function to convert NID to Curve enum
+static inline int nid_to_curve_enum(int nid) {
+  switch (nid) {
+    case 415:  // NID_X9_62_prime256v1
+      return CURVE_P256;
+    case 715:  // NID_secp384r1
+      return CURVE_P384;
+    case 716:  // NID_secp521r1
+      return CURVE_P521;
+    case 714:  // NID_secp256k1
+      return CURVE_SECP256K1;
+    case 1087: // NID_ED25519
+      return CURVE_ED25519;
+    default:
+      return CURVE_UNKNOWN;
+  }
+}
+
 // ECDSA 2P DKG
 int cbmpc_ecdsa2p_dkg(cbmpc_job2p *j, int curve_nid, cbmpc_ecdsa2p_key **key_out) {
   auto wrapper = reinterpret_cast<go_job2p *>(j);
@@ -590,12 +618,13 @@ void cbmpc_ecc_point_free(cbmpc_ecc_point point) {
   }
 }
 
-int cbmpc_ecc_point_get_curve_nid(cbmpc_ecc_point point) {
-  if (!point) return 0;
+int cbmpc_ecc_point_get_curve(cbmpc_ecc_point point) {
+  if (!point) return CURVE_UNKNOWN;
   const auto* ecc_point = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(point);
   auto curve = ecc_point->get_curve();
-  if (!curve) return 0;
-  return curve.get_openssl_code();
+  if (!curve) return CURVE_UNKNOWN;
+  int nid = curve.get_openssl_code();
+  return nid_to_curve_enum(nid);
 }
 
 // PVE operations using ecc_point_t directly
