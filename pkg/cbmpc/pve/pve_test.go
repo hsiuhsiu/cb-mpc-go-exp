@@ -69,8 +69,8 @@ func TestPVEEncryptDecrypt(t *testing.T) {
 		t.Fatalf("Failed to extract Q: %v", err)
 	}
 	defer Q.Free()
-	if Q.Curve().NID() != crv.NID() {
-		t.Fatalf("Q curve mismatch: got %d, want %d", Q.Curve().NID(), crv.NID())
+	if Q.Curve() != crv {
+		t.Fatalf("Q curve mismatch: got %s, want %s", Q.Curve(), crv)
 	}
 
 	// Extract and verify label
@@ -461,8 +461,8 @@ func TestPVECiphertextMethods(t *testing.T) {
 		t.Fatalf("Q() failed: %v", err)
 	}
 	defer Q.Free()
-	if Q.Curve().NID() != crv.NID() {
-		t.Fatalf("Q() curve mismatch: got %d, want %d", Q.Curve().NID(), crv.NID())
+	if Q.Curve() != crv {
+		t.Fatalf("Q() curve mismatch: got %s, want %s", Q.Curve(), crv)
 	}
 
 	// Test Label()

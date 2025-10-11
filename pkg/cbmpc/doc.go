@@ -30,14 +30,16 @@
 //	p2 := net.Ep2P(cbmpc.RoleID(cbmpc.RoleP2), cbmpc.RoleID(cbmpc.RoleP1))
 //	names := [2]string{"party1", "party2"}
 //
-//	job1, _ := cbmpc.NewJob2P(p1, cbmpc.RoleP1, names)
+//	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+//	defer cancel()
+//
+//	job1, _ := cbmpc.NewJob2PWithContext(ctx, p1, cbmpc.RoleP1, names)
 //	defer job1.Close()
 //
-//	job2, _ := cbmpc.NewJob2P(p2, cbmpc.RoleP2, names)
+//	job2, _ := cbmpc.NewJob2PWithContext(ctx, p2, cbmpc.RoleP2, names)
 //	defer job2.Close()
 //
 //	// Run protocol
-//	ctx := context.Background()
 //	result1, _ := agreerandom.AgreeRandom(ctx, job1, 256)
 //	result2, _ := agreerandom.AgreeRandom(ctx, job2, 256)
 //

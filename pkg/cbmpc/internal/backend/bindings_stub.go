@@ -59,8 +59,8 @@ func ECDSA2PKeyGetPublicKey(ECDSA2PKey) ([]byte, error) {
 	return nil, ErrNotBuilt
 }
 
-func ECDSA2PKeyGetCurveNID(ECDSA2PKey) (int, error) {
-	return 0, ErrNotBuilt
+func ECDSA2PKeyGetCurve(ECDSA2PKey) (Curve, error) {
+	return Unknown, ErrNotBuilt
 }
 
 func ECDSA2PKeySerialize(ECDSA2PKey) ([]byte, error) {
@@ -134,8 +134,8 @@ func ECCPointToBytes(ECCPoint) ([]byte, error) {
 
 func ECCPointFree(ECCPoint) {}
 
-func ECCPointGetCurveNID(ECCPoint) int {
-	return 0
+func ECCPointGetCurve(ECCPoint) Curve {
+	return Unknown
 }
 
 func PVEGetQPoint([]byte) (ECCPoint, error) {

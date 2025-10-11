@@ -18,13 +18,15 @@ var (
 )
 
 type Job2P struct {
-	cptr unsafe.Pointer
-	hptr uintptr
+	cptr   unsafe.Pointer
+	hptr   uintptr
+	cancel context.CancelFunc
 }
 
 type JobMP struct {
-	cptr unsafe.Pointer
-	hptr uintptr
+	cptr   unsafe.Pointer
+	hptr   uintptr
+	cancel context.CancelFunc
 }
 
 // transportAdapter bridges the public RoleID-based Transport interface with
@@ -33,22 +35,23 @@ type JobMP struct {
 // internal/bindings.
 type transportAdapter struct {
 	inner Transport
+	ctx   context.Context
 }
 
-func (a transportAdapter) Send(ctx context.Context, to uint32, msg []byte) error {
-	return a.inner.Send(ctx, RoleID(to), msg)
+func (a transportAdapter) Send(_ context.Context, to uint32, msg []byte) error {
+	return a.inner.Send(a.ctx, RoleID(to), msg)
 }
 
-func (a transportAdapter) Receive(ctx context.Context, from uint32) ([]byte, error) {
-	return a.inner.Receive(ctx, RoleID(from))
+func (a transportAdapter) Receive(_ context.Context, from uint32) ([]byte, error) {
+	return a.inner.Receive(a.ctx, RoleID(from))
 }
 
-func (a transportAdapter) ReceiveAll(ctx context.Context, from []uint32) (map[uint32][]byte, error) {
+func (a transportAdapter) ReceiveAll(_ context.Context, from []uint32) (map[uint32][]byte, error) {
 	roles := make([]RoleID, len(from))
 	for i, r := range from {
 		roles[i] = RoleID(r)
 	}
-	batch, err := a.inner.ReceiveAll(ctx, roles)
+	batch, err := a.inner.ReceiveAll(a.ctx, roles)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +64,16 @@ func (a transportAdapter) ReceiveAll(ctx context.Context, from []uint32) (map[ui
 
 // NewJob2P constructs a 2-party job using the provided transport, role, and
 // party names. Names must be stable, unique identifiers for each participant.
+// This variant uses a background context; see NewJob2PWithContext to provide
+// a cancellable context for transport operations.
 func NewJob2P(t Transport, self Role, names [2]string) (*Job2P, error) {
+	return NewJob2PWithContext(context.Background(), t, self, names)
+}
+
+// NewJob2PWithContext constructs a 2-party job with a parent context. A child
+// context derived from ctx is used for all transport operations and will be
+// canceled during Close() to promptly unblock pending receives.
+func NewJob2PWithContext(ctx context.Context, t Transport, self Role, names [2]string) (*Job2P, error) {
 	if t == nil {
 		return nil, ErrNilTransport
 	}
@@ -75,13 +87,15 @@ func NewJob2P(t Transport, self Role, names [2]string) (*Job2P, error) {
 		return nil, fmt.Errorf("%w: party names must be unique (got %q)", ErrBadPeers, names[0])
 	}
 
-	adapter := transportAdapter{inner: t}
+	jobCtx, cancel := context.WithCancel(ctx)
+	adapter := transportAdapter{inner: t, ctx: jobCtx}
 	cjob, h, err := backend.NewJob2P(adapter, uint32(self.roleID()), []string{names[0], names[1]})
 	if err != nil {
+		cancel()
 		return nil, RemapError(err)
 	}
 
-	j := &Job2P{cptr: cjob, hptr: h}
+	j := &Job2P{cptr: cjob, hptr: h, cancel: cancel}
 	runtime.SetFinalizer(j, func(j *Job2P) { _ = j.Close() })
 	return j, nil
 }
@@ -95,15 +109,28 @@ func (j *Job2P) Close() error {
 	}
 
 	runtime.SetFinalizer(j, nil)
+	if j.cancel != nil {
+		j.cancel()
+	}
 	backend.FreeJob2P(j.cptr, j.hptr)
 	j.cptr = nil
 	j.hptr = 0
+	j.cancel = nil
 	return nil
 }
 
 // NewJobMP constructs an n-party job. Each entry in names identifies a party in
 // the session; self is the caller's index within that slice.
+// This variant uses a background context; see NewJobMPWithContext to provide
+// a cancellable context for transport operations.
 func NewJobMP(t Transport, self RoleID, names []string) (*JobMP, error) {
+	return NewJobMPWithContext(context.Background(), t, self, names)
+}
+
+// NewJobMPWithContext constructs an n-party job with a parent context. A child
+// context derived from ctx is used for all transport operations and will be
+// canceled during Close() to promptly unblock pending receives.
+func NewJobMPWithContext(ctx context.Context, t Transport, self RoleID, names []string) (*JobMP, error) {
 	if t == nil {
 		return nil, ErrNilTransport
 	}
@@ -126,13 +153,15 @@ func NewJobMP(t Transport, self RoleID, names []string) (*JobMP, error) {
 		seen[name] = struct{}{}
 	}
 
-	adapter := transportAdapter{inner: t}
+	jobCtx, cancel := context.WithCancel(ctx)
+	adapter := transportAdapter{inner: t, ctx: jobCtx}
 	cjob, h, err := backend.NewJobMP(adapter, uint32(self), names)
 	if err != nil {
+		cancel()
 		return nil, RemapError(err)
 	}
 
-	j := &JobMP{cptr: cjob, hptr: h}
+	j := &JobMP{cptr: cjob, hptr: h, cancel: cancel}
 	runtime.SetFinalizer(j, func(j *JobMP) { _ = j.Close() })
 	return j, nil
 }
@@ -146,9 +175,13 @@ func (j *JobMP) Close() error {
 	}
 
 	runtime.SetFinalizer(j, nil)
+	if j.cancel != nil {
+		j.cancel()
+	}
 	backend.FreeJobMP(j.cptr, j.hptr)
 	j.cptr = nil
 	j.hptr = 0
+	j.cancel = nil
 	return nil
 }
 
@@ -170,34 +203,7 @@ func (j *JobMP) Ptr() (unsafe.Pointer, error) {
 	return j.cptr, nil
 }
 
-// SessionID represents a session identifier for MPC signing operations.
-//
-// Session IDs are used to maintain state across multiple signing operations with the same key.
-// They help prevent replay attacks and ensure protocol security.
-//
-// Usage:
-//   - Empty SessionID (nil or zero-length): The library generates a fresh session ID
-//   - Non-empty SessionID: Resumes signing with the provided session ID from a previous operation
-//
-// The SessionID is returned by signing operations and should be passed to subsequent
-// signing operations to maintain session continuity.
-//
-// Example - Fresh session:
-//
-//	result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
-//	    SessionID: nil,  // Empty = fresh session
-//	    Key:       key,
-//	    Message:   messageHash,
-//	})
-//	// Use result.SessionID for next signature
-//
-// Example - Resume session:
-//
-//	result2, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
-//	    SessionID: result.SessionID,  // Resume with previous session ID
-//	    Key:       key,
-//	    Message:   messageHash2,
-//	})
+// SessionID represents a session identifier for MPC protocols.
 type SessionID []byte
 
 // Clone creates a defensive copy of the SessionID.

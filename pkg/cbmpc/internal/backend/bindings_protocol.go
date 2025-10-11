@@ -12,7 +12,13 @@ import "C"
 import (
 	"errors"
 	"fmt"
+	"runtime"
+	"strconv"
+	"strings"
+	"sync"
 	"unsafe"
+
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/kem"
 )
 
 // AgreeRandom2P is a C binding wrapper for the two-party agree random protocol.
@@ -204,4 +210,292 @@ func ECDSA2PSignWithGlobalAbortBatch(cj unsafe.Pointer, key ECDSA2PKey, sidIn []
 	}
 
 	return cmemToGoBytes(sidOut), cmemsToGoByteSlices(sigsOut), nil
+}
+
+// =====================
+// PVE (Publicly Verifiable Encryption) wrappers
+// =====================
+
+// PVEEncrypt is a C binding wrapper for PVE encrypt.
+func PVEEncrypt(ekBytes, label []byte, curveNID int, xBytes []byte) ([]byte, error) {
+	if len(ekBytes) == 0 {
+		return nil, errors.New("empty ek bytes")
+	}
+	if len(label) == 0 {
+		return nil, errors.New("empty label")
+	}
+	if len(xBytes) == 0 {
+		return nil, errors.New("empty x bytes")
+	}
+
+	ekMem := goBytesToCmem(ekBytes)
+	labelMem := goBytesToCmem(label)
+	xMem := goBytesToCmem(xBytes)
+
+	var out C.cmem_t
+	rc := C.cbmpc_pve_encrypt(ekMem, labelMem, C.int(curveNID), xMem, &out)
+	if rc != 0 {
+		return nil, errors.New("pve_encrypt failed")
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// PVEDecrypt is a C binding wrapper for PVE decrypt.
+func PVEDecrypt(dkHandle unsafe.Pointer, ekBytes, pveCT, label []byte, curveNID int) ([]byte, error) {
+	if dkHandle == nil {
+		return nil, errors.New("nil dk handle")
+	}
+	if len(ekBytes) == 0 {
+		return nil, errors.New("empty ek bytes")
+	}
+	if len(pveCT) == 0 {
+		return nil, errors.New("empty pve ciphertext")
+	}
+	if len(label) == 0 {
+		return nil, errors.New("empty label")
+	}
+
+	ekMem := goBytesToCmem(ekBytes)
+	pveCTMem := goBytesToCmem(pveCT)
+	labelMem := goBytesToCmem(label)
+
+	var out C.cmem_t
+	// The dkHandle is an opaque identifier (not a Go pointer) that will be passed through
+	// C++ back to Go callbacks. C++ only stores and passes it, never dereferences it.
+	// The actual handle lookup happens in the Go KEM implementation.
+	rc := C.cbmpc_pve_decrypt(dkHandle, ekMem, pveCTMem, labelMem, C.int(curveNID), &out)
+	if rc != 0 {
+		return nil, errors.New("pve_decrypt failed")
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// PVEGetLabel is a C binding wrapper to extract label from PVE ciphertext.
+func PVEGetLabel(pveCT []byte) ([]byte, error) {
+	if len(pveCT) == 0 {
+		return nil, errors.New("empty pve ciphertext")
+	}
+
+	pveCTMem := goBytesToCmem(pveCT)
+
+	var out C.cmem_t
+	rc := C.cbmpc_pve_get_label(pveCTMem, &out)
+	if rc != 0 {
+		return nil, errors.New("pve_get_label failed")
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// PVEGetQPoint extracts the public key Q from a PVE ciphertext as an ecc_point_t.
+// Returns an ECCPoint that must be freed with ECCPointFree.
+func PVEGetQPoint(pveCT []byte) (ECCPoint, error) {
+	if len(pveCT) == 0 {
+		return nil, errors.New("empty pve ciphertext")
+	}
+
+	pveCTMem := goBytesToCmem(pveCT)
+
+	var point ECCPoint
+	rc := C.cbmpc_pve_get_Q_point(pveCTMem, &point)
+	if rc != 0 {
+		return nil, errors.New("pve_get_Q_point failed")
+	}
+
+	return point, nil
+}
+
+// PVEVerifyWithPoint verifies a PVE ciphertext using an ecc_point_t directly.
+// This is more efficient than PVEVerify as it avoids serialization/deserialization.
+//
+//nolint:gocritic // QPoint follows Go convention for acronym capitalization
+func PVEVerifyWithPoint(ekBytes, pveCT []byte, QPoint ECCPoint, label []byte) error {
+	if len(ekBytes) == 0 {
+		return errors.New("empty ek bytes")
+	}
+	if len(pveCT) == 0 {
+		return errors.New("empty pve ciphertext")
+	}
+	if QPoint == nil {
+		return errors.New("nil Q point")
+	}
+	if len(label) == 0 {
+		return errors.New("empty label")
+	}
+
+	ekMem := goBytesToCmem(ekBytes)
+	pveCTMem := goBytesToCmem(pveCT)
+	labelMem := goBytesToCmem(label)
+
+	rc := C.cbmpc_pve_verify_with_point(ekMem, pveCTMem, QPoint, labelMem)
+	if rc != 0 {
+		return errors.New("pve_verify failed")
+	}
+
+	return nil
+}
+
+// =====================
+// KEM callbacks and registry for FFI policy
+// =====================
+
+// KEM is a type alias for kem.KEM.
+// This allows the backend to use the public KEM interface without importing it everywhere.
+type KEM = kem.KEM
+
+// kemRegistry maps goroutine IDs to KEM implementations.
+// This allows concurrent PVE operations with different KEMs.
+var (
+	kemRegistry   = make(map[int64]KEM)
+	kemRegistryMu sync.RWMutex
+)
+
+// getGoroutineID returns the current goroutine ID.
+// This is used to associate KEMs with specific goroutines.
+func getGoroutineID() int64 {
+	var buf [64]byte
+	n := runtime.Stack(buf[:], false)
+	idField := strings.Fields(strings.TrimPrefix(string(buf[:n]), "goroutine "))[0]
+	id, _ := strconv.ParseInt(idField, 10, 64)
+	return id
+}
+
+// setKEMForGoroutine registers a KEM for the current goroutine.
+func setKEMForGoroutine(kem KEM) int64 {
+	gid := getGoroutineID()
+	kemRegistryMu.Lock()
+	kemRegistry[gid] = kem
+	kemRegistryMu.Unlock()
+	return gid
+}
+
+// clearKEMForGoroutine removes the KEM registration for a goroutine.
+func clearKEMForGoroutine(gid int64) {
+	kemRegistryMu.Lock()
+	delete(kemRegistry, gid)
+	kemRegistryMu.Unlock()
+}
+
+// getKEMForGoroutine retrieves the KEM for the current goroutine.
+func getKEMForGoroutine() KEM {
+	gid := getGoroutineID()
+	kemRegistryMu.RLock()
+	kem := kemRegistry[gid]
+	kemRegistryMu.RUnlock()
+	return kem
+}
+
+// SetKEM registers a KEM implementation for the current goroutine.
+// Returns a cleanup function that must be called when the operation completes.
+// This allows concurrent PVE operations with different KEMs.
+//
+// Usage:
+//
+//	cleanup := bindings.SetKEM(kem)
+//	defer cleanup()
+//	// ... perform PVE operations ...
+func SetKEM(kem KEM) func() {
+	gid := setKEMForGoroutine(kem)
+	return func() {
+		clearKEMForGoroutine(gid)
+	}
+}
+
+// GetKEM returns the KEM implementation for the current goroutine.
+func GetKEM() KEM {
+	return getKEMForGoroutine()
+}
+
+//export go_ffi_kem_encap
+func go_ffi_kem_encap(ek_bytes C.cmem_t, rho C.cmem_t, kem_ct_out *C.cmem_t, kem_ss_out *C.cmem_t) C.int {
+	if kem_ct_out == nil || kem_ss_out == nil {
+		return C.int(1)
+	}
+
+	kem := GetKEM()
+	if kem == nil {
+		return C.int(1)
+	}
+
+	// Convert inputs to Go
+	ek := C.GoBytes(unsafe.Pointer(ek_bytes.data), ek_bytes.size)
+	rhoBytes := C.GoBytes(unsafe.Pointer(rho.data), rho.size)
+	if len(rhoBytes) != 32 {
+		return C.int(1)
+	}
+
+	var rho32 [32]byte
+	copy(rho32[:], rhoBytes)
+
+	// Call Go KEM
+	ct, ss, err := kem.Encapsulate(ek, rho32)
+	if err != nil {
+		return C.int(1)
+	}
+
+	// Allocate and copy outputs
+	ct_cmem := allocCmem(ct)
+	ss_cmem := allocCmem(ss)
+
+	*kem_ct_out = ct_cmem
+	*kem_ss_out = ss_cmem
+
+	return C.int(0)
+}
+
+//export go_ffi_kem_decap
+func go_ffi_kem_decap(dk_handle unsafe.Pointer, kem_ct C.cmem_t, kem_ss_out *C.cmem_t) C.int {
+	if dk_handle == nil || kem_ss_out == nil {
+		return C.int(1)
+	}
+
+	kem := GetKEM()
+	if kem == nil {
+		return C.int(1)
+	}
+
+	// Look up the actual Go object from the handle registry
+	skHandle, exists := lookupHandle(dk_handle)
+	if !exists {
+		return C.int(1)
+	}
+
+	// Convert ciphertext to Go
+	ct := C.GoBytes(unsafe.Pointer(kem_ct.data), kem_ct.size)
+
+	// Call Go KEM with the actual Go object
+	ss, err := kem.Decapsulate(skHandle, ct)
+	if err != nil {
+		return C.int(1)
+	}
+
+	// Allocate and copy output
+	ss_cmem := allocCmem(ss)
+	*kem_ss_out = ss_cmem
+
+	return C.int(0)
+}
+
+//export go_ffi_kem_dk_to_ek
+func go_ffi_kem_dk_to_ek(dk_handle unsafe.Pointer, ek_bytes_out *C.cmem_t) C.int {
+	if dk_handle == nil || ek_bytes_out == nil {
+		return C.int(1)
+	}
+
+	kem := GetKEM()
+	if kem == nil {
+		return C.int(1)
+	}
+
+	// The dk_handle is an opaque pointer managed by the KEM implementation.
+	// We need to get the KEM to extract the public key from this handle.
+	// Unfortunately, the KEM interface doesn't have a method to do this directly.
+	// The DerivePub method expects skRef (serialized), not the handle.
+	//
+	// For now, we'll return an error since this callback shouldn't be needed
+	// for decryption - it's only needed if the C++ code needs to derive ek from dk.
+	// In our PVE usage, we always pass both ek and dk explicitly.
+	return C.int(1) // Not implemented
 }

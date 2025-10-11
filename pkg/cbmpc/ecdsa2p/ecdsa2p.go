@@ -98,13 +98,13 @@ func (k *Key) PublicKey() ([]byte, error) {
 // Curve returns the elliptic curve used by this key.
 func (k *Key) Curve() (cbmpc.Curve, error) {
 	if k == nil || k.ckey == nil {
-		return cbmpc.Curve{}, errors.New("nil or closed key")
+		return cbmpc.Unknown, errors.New("nil or closed key")
 	}
-	nid, err := backend.ECDSA2PKeyGetCurveNID(k.ckey)
+	curve, err := backend.ECDSA2PKeyGetCurve(k.ckey)
 	if err != nil {
-		return cbmpc.Curve{}, cbmpc.RemapError(err)
+		return cbmpc.Unknown, cbmpc.RemapError(err)
 	}
-	return cbmpc.NewCurveFromNID(nid), nil
+	return cbmpc.Curve(curve), nil
 }
 
 // DKGParams contains parameters for 2-party ECDSA distributed key generation.
@@ -133,7 +133,12 @@ func DKG(_ context.Context, j *cbmpc.Job2P, params *DKGParams) (*DKGResult, erro
 		return nil, err
 	}
 
-	keyPtr, err := backend.ECDSA2PDKG(ptr, params.Curve.NID())
+	nid, err := backend.CurveToNID(backend.Curve(params.Curve))
+	if err != nil {
+		return nil, err
+	}
+
+	keyPtr, err := backend.ECDSA2PDKG(ptr, nid)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}

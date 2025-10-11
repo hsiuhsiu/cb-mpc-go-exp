@@ -23,7 +23,12 @@ type Point struct {
 // NewPointFromBytes creates a Point from compressed bytes.
 // The bytes should be in compressed format (33 bytes for 256-bit curves).
 func NewPointFromBytes(curve Curve, bytes []byte) (*Point, error) {
-	cpoint, err := backend.ECCPointFromBytes(curve.NID(), bytes)
+	nid, err := backend.CurveToNID(backend.Curve(curve))
+	if err != nil {
+		return nil, err
+	}
+
+	cpoint, err := backend.ECCPointFromBytes(nid, bytes)
 	if err != nil {
 		return nil, err
 	}
@@ -57,11 +62,11 @@ func (p *Point) Bytes() ([]byte, error) {
 // Curve returns the curve for this point.
 func (p *Point) Curve() Curve {
 	if p == nil || p.cpoint == nil {
-		return Curve{}
+		return Unknown
 	}
 
-	nid := backend.ECCPointGetCurveNID(p.cpoint)
-	return Curve{nid: nid}
+	curve := backend.ECCPointGetCurve(p.cpoint)
+	return Curve(curve)
 }
 
 // Free releases the resources associated with this Point.

@@ -6,11 +6,14 @@ package backend
 #include <stdlib.h>
 #include <string.h>
 #include "cbmpc/core/cmem.h"
+#include "ctypes.h"
+#include "capi.h"
 */
 import "C"
 
 import (
 	"errors"
+	"sync"
 	"unsafe"
 )
 
@@ -18,9 +21,6 @@ import (
 const (
 	E_ECDSA_2P_BIT_LEAK = 0xff040002 // Bit leak detected in signature verification
 )
-
-// ErrBitLeak is returned when E_ECDSA_2P_BIT_LEAK is detected
-var ErrBitLeak = errors.New("bit leak detected in signature verification")
 
 // cmemToGoBytes converts a C.cmem_t to a Go []byte slice and takes ownership of the C memory.
 // Securely zeros and frees the C memory. Caller must not access the C memory after calling.
@@ -142,4 +142,286 @@ func freeCmems(cmems C.cmems_t) {
 	if cmems.sizes != nil {
 		C.free(unsafe.Pointer(cmems.sizes))
 	}
+}
+
+// allocCmem allocates C memory and copies Go bytes into it.
+// The caller is responsible for freeing this memory on the C side.
+func allocCmem(data []byte) C.cmem_t {
+	var cmem C.cmem_t
+	if len(data) == 0 {
+		cmem.data = nil
+		cmem.size = 0
+		return cmem
+	}
+
+	cmem.size = C.int(len(data))
+	cmem.data = (*C.uint8_t)(C.malloc(C.size_t(len(data))))
+	if cmem.data != nil {
+		C.memcpy(unsafe.Pointer(cmem.data), unsafe.Pointer(&data[0]), C.size_t(len(data)))
+	}
+	return cmem
+}
+
+// =====================
+// ECDSA 2P Key bridging
+// =====================
+
+// ECDSA2PKey is a type alias for *C.cbmpc_ecdsa2p_key
+type ECDSA2PKey = *C.cbmpc_ecdsa2p_key
+
+// ECDSA2PKeyFree frees an ECDSA 2P key.
+func ECDSA2PKeyFree(key ECDSA2PKey) {
+	if key == nil {
+		return
+	}
+	C.cbmpc_ecdsa2p_key_free(key)
+}
+
+// ECDSA2PKeyGetPublicKey extracts the public key from an ECDSA 2P key.
+func ECDSA2PKeyGetPublicKey(key ECDSA2PKey) ([]byte, error) {
+	if key == nil {
+		return nil, errors.New("nil key")
+	}
+
+	var out C.cmem_t
+	rc := C.cbmpc_ecdsa2p_key_get_public_key(key, &out)
+	if rc != 0 {
+		return nil, errors.New("failed to get public key")
+	}
+	return cmemToGoBytes(out), nil
+}
+
+// ECDSA2PKeyGetCurve gets the curve from an ECDSA 2P key.
+// Returns backend.Curve enum directly, not NID.
+func ECDSA2PKeyGetCurve(key ECDSA2PKey) (Curve, error) {
+	if key == nil {
+		return Unknown, errors.New("nil key")
+	}
+
+	var curveInt C.int
+	rc := C.cbmpc_ecdsa2p_key_get_curve(key, &curveInt)
+	if rc != 0 {
+		return Unknown, errors.New("failed to get curve")
+	}
+	return Curve(curveInt), nil
+}
+
+// ECDSA2PKeySerialize serializes an ECDSA 2P key to bytes.
+func ECDSA2PKeySerialize(key ECDSA2PKey) ([]byte, error) {
+	if key == nil {
+		return nil, errors.New("nil key")
+	}
+
+	var out C.cmem_t
+	rc := C.cbmpc_ecdsa2p_key_serialize(key, &out)
+	if rc != 0 {
+		return nil, errors.New("failed to serialize key")
+	}
+	return cmemToGoBytes(out), nil
+}
+
+// ECDSA2PKeyDeserialize deserializes an ECDSA 2P key from bytes.
+func ECDSA2PKeyDeserialize(data []byte) (ECDSA2PKey, error) {
+	if len(data) == 0 {
+		return nil, errors.New("empty data")
+	}
+
+	dataMem := goBytesToCmem(data)
+	var key ECDSA2PKey
+	rc := C.cbmpc_ecdsa2p_key_deserialize(dataMem, &key)
+	if rc != 0 {
+		return nil, errors.New("failed to deserialize key")
+	}
+	return key, nil
+}
+
+// =====================
+// Scalar bridging (bn_t)
+// =====================
+
+// ScalarFromBytes creates a Scalar from bytes (big-endian).
+func ScalarFromBytes(bytes []byte) (unsafe.Pointer, error) {
+	if len(bytes) == 0 {
+		return nil, errors.New("empty bytes")
+	}
+
+	bytesMem := goBytesToCmem(bytes)
+
+	var out C.cmem_t
+	rc := C.cbmpc_scalar_from_bytes(bytesMem, &out)
+	if rc != 0 {
+		return nil, errors.New("scalar_from_bytes failed")
+	}
+
+	return unsafe.Pointer(out.data), nil
+}
+
+// ScalarFromString creates a Scalar from a decimal string.
+func ScalarFromString(str string) (unsafe.Pointer, error) {
+	if len(str) == 0 {
+		return nil, errors.New("empty string")
+	}
+
+	cstr := C.CString(str)
+	defer C.free(unsafe.Pointer(cstr))
+
+	var out C.cmem_t
+	rc := C.cbmpc_scalar_from_string(cstr, &out)
+	if rc != 0 {
+		return nil, errors.New("scalar_from_string failed")
+	}
+
+	return unsafe.Pointer(out.data), nil
+}
+
+// ScalarToBytes serializes a Scalar to bytes (big-endian).
+func ScalarToBytes(scalar unsafe.Pointer) ([]byte, error) {
+	if scalar == nil {
+		return nil, errors.New("nil scalar")
+	}
+
+	scalarMem := C.cmem_t{
+		data: (*C.uint8_t)(scalar),
+		size: 0, // Size 0 indicates opaque pointer
+	}
+
+	var out C.cmem_t
+	rc := C.cbmpc_scalar_to_bytes(scalarMem, &out)
+	if rc != 0 {
+		return nil, errors.New("scalar_to_bytes failed")
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// ScalarFree frees a Scalar.
+func ScalarFree(scalar unsafe.Pointer) {
+	if scalar != nil {
+		scalarMem := C.cmem_t{
+			data: (*C.uint8_t)(scalar),
+			size: 0, // Size 0 indicates opaque pointer
+		}
+		C.cbmpc_scalar_free(scalarMem)
+	}
+}
+
+// =====================
+// ECC Point bridging
+// =====================
+
+// ECCPoint is a type alias for C.cbmpc_ecc_point
+type ECCPoint = C.cbmpc_ecc_point
+
+// ECCPointFromBytes creates an ECC point from compressed bytes.
+// Returns an ECCPoint that must be freed with ECCPointFree.
+func ECCPointFromBytes(curveNID int, bytes []byte) (ECCPoint, error) {
+	if len(bytes) == 0 {
+		return nil, errors.New("empty bytes")
+	}
+
+	bytesMem := goBytesToCmem(bytes)
+
+	var point ECCPoint
+	rc := C.cbmpc_ecc_point_from_bytes(C.int(curveNID), bytesMem, &point)
+	if rc != 0 {
+		return nil, errors.New("ecc_point_from_bytes failed")
+	}
+
+	return point, nil
+}
+
+// ECCPointToBytes serializes an ECC point to compressed bytes.
+func ECCPointToBytes(point ECCPoint) ([]byte, error) {
+	if point == nil {
+		return nil, errors.New("nil point")
+	}
+
+	var out C.cmem_t
+	rc := C.cbmpc_ecc_point_to_bytes(point, &out)
+	if rc != 0 {
+		return nil, errors.New("ecc_point_to_bytes failed")
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// ECCPointFree frees an ECC point.
+func ECCPointFree(point ECCPoint) {
+	if point != nil {
+		C.cbmpc_ecc_point_free(point)
+	}
+}
+
+// ECCPointGetCurve returns the curve for an ECC point.
+// Returns backend.Curve enum directly, not NID.
+func ECCPointGetCurve(point ECCPoint) Curve {
+	if point == nil {
+		return Unknown
+	}
+	return Curve(C.cbmpc_ecc_point_get_curve(point))
+}
+
+// =====================
+// Generic handle registry for opaque Go objects
+// =====================
+
+// handleRegistry stores Go objects that need to be passed through C as opaque handles.
+// This allows us to pass handles through C++ without violating CGO pointer rules.
+var (
+	handleRegistryMu sync.RWMutex
+	handleRegistry   = make(map[uint64]any)
+	nextHandleID     = uint64(0xDEADBEEF0000) // Start high to avoid looking like valid pointers
+)
+
+// registerHandle stores a Go object and returns a CGO-safe handle ID.
+func registerHandle(obj any) unsafe.Pointer {
+	handleRegistryMu.Lock()
+	defer handleRegistryMu.Unlock()
+
+	id := nextHandleID
+	nextHandleID++
+	handleRegistry[id] = obj
+
+	//nolint:govet // Converting uintptr to unsafe.Pointer is intentional for CGO handle passing
+	return unsafe.Pointer(uintptr(id))
+}
+
+// lookupHandle retrieves a Go object from a handle ID.
+func lookupHandle(handle unsafe.Pointer) (any, bool) {
+	if handle == nil {
+		return nil, false
+	}
+
+	id := uint64(uintptr(handle))
+
+	handleRegistryMu.RLock()
+	defer handleRegistryMu.RUnlock()
+
+	obj, exists := handleRegistry[id]
+	return obj, exists
+}
+
+// freeHandle removes a Go object from the registry.
+func freeHandle(handle unsafe.Pointer) {
+	if handle == nil {
+		return
+	}
+
+	id := uint64(uintptr(handle))
+
+	handleRegistryMu.Lock()
+	defer handleRegistryMu.Unlock()
+
+	delete(handleRegistry, id)
+}
+
+// RegisterHandle stores a Go object and returns a CGO-safe handle.
+// This is used for passing Go objects through C code without violating CGO pointer rules.
+func RegisterHandle(obj any) unsafe.Pointer {
+	return registerHandle(obj)
+}
+
+// FreeHandle removes a Go object from the handle registry.
+func FreeHandle(handle unsafe.Pointer) {
+	freeHandle(handle)
 }
