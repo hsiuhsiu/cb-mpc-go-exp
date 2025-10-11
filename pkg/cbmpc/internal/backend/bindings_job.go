@@ -24,7 +24,14 @@ var (
 )
 
 // transport defines the interface for sending and receiving messages between parties.
-// Implementations must handle the underlying network communication.
+// Implementations must handle the underlying network communication and MUST be
+// safe for concurrent use by multiple goroutines. Calls may originate from
+// different OS threads via CGO callbacks.
+//
+// Context semantics: callbacks currently pass context.Background() because C++
+// code drives the protocol and invokes these functions without a Go context.
+// If your transport supports cancellation, consider providing a per-job
+// cancellation mechanism and wiring it into this context in a future change.
 type transport interface {
 	Send(context.Context, uint32, []byte) error
 	Receive(context.Context, uint32) ([]byte, error)
@@ -145,8 +152,20 @@ func cbmpc_go_receive_all(ctx unsafe.Pointer, from *C.uint32_t, n C.size_t, outs
 		return 1
 	}
 	dst := unsafe.Slice(outs, count)
-	for i, role := range roles {
-		data := batch[role]
+    for i, role := range roles {
+        data, ok := batch[role]
+        if !ok {
+            // Cleanup already allocated memory on failure
+            for j := 0; j < i; j++ {
+                if dst[j].data != nil {
+                    C.memset(unsafe.Pointer(dst[j].data), 0, C.size_t(dst[j].size))
+                    C.free(unsafe.Pointer(dst[j].data))
+                }
+                dst[j].data = nil
+                dst[j].size = 0
+            }
+            return 1
+        }
 		var p *C.uint8_t
 		if len(data) > 0 {
 			p = (*C.uint8_t)(C.malloc(C.size_t(len(data))))
