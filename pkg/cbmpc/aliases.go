@@ -19,6 +19,7 @@ type KEM = kem.KEM
 
 // Standard curve constants re-exported for backward compatibility.
 var (
+	Unknown        = curve.Unknown
 	CurveP256      = curve.P256
 	CurveP384      = curve.P384
 	CurveP521      = curve.P521

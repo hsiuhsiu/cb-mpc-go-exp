@@ -65,11 +65,7 @@ func (p *Point) Curve() Curve {
 		return Unknown
 	}
 
-	nid := backend.ECCPointGetCurveNID(p.cpoint)
-	curve, err := backend.NIDToCurve(nid)
-	if err != nil {
-		return Unknown
-	}
+	curve := backend.ECCPointGetCurve(p.cpoint)
 	return Curve(curve)
 }
 
