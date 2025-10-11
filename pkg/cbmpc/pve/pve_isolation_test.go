@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/curve"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/testkem"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/pve"
 )
@@ -36,10 +37,10 @@ func TestPVEKEMIsolation(t *testing.T) {
 	dk2, _ := kem2.NewPrivateKeyHandle(skRef2)
 	defer kem2.FreePrivateKeyHandle(dk2)
 
-	x1, _ := cbmpc.NewScalarFromString("111")
+	x1, _ := curve.NewScalarFromString("111")
 	defer x1.Free()
 
-	x2, _ := cbmpc.NewScalarFromString("222")
+	x2, _ := curve.NewScalarFromString("222")
 	defer x2.Free()
 
 	var wg sync.WaitGroup

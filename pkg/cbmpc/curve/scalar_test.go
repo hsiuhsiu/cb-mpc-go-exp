@@ -1,16 +1,16 @@
-package cbmpc_test
+package curve_test
 
 import (
 	"fmt"
 	"testing"
 
-	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/curve"
 )
 
 // TestScalarStringAndBigInt demonstrates the new String() and BigInt() methods.
 func TestScalarStringAndBigInt(t *testing.T) {
 	// Create a scalar from a decimal string
-	x, err := cbmpc.NewScalarFromString("12345678901234567890")
+	x, err := curve.NewScalarFromString("12345678901234567890")
 	if err != nil {
 		t.Fatalf("Failed to create scalar: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestScalarStringAndBigInt(t *testing.T) {
 	fmt.Printf("Scalar as bytes (hex): %x\n", bytes)
 
 	// Create another scalar from bytes
-	y, err := cbmpc.NewScalarFromBytes(bytes)
+	y, err := curve.NewScalarFromBytes(bytes)
 	if err != nil {
 		t.Fatalf("Failed to create scalar from bytes: %v", err)
 	}

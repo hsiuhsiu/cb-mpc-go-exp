@@ -5,8 +5,9 @@ import (
 	"errors"
 	"runtime"
 
-	"github.com/coinbase/cb-mpc-go/internal/bindings"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/curve"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/backend"
 )
 
 // PVE represents a Publicly Verifiable Encryption instance with a specific KEM.
@@ -34,12 +35,12 @@ func (ct Ciphertext) Q() (*cbmpc.CurvePoint, error) {
 		return nil, errors.New("empty ciphertext")
 	}
 
-	cpoint, err := bindings.PVEGetQPoint(ct)
+	cpoint, err := backend.PVEGetQPoint(ct)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
 
-	return cbmpc.NewCurvePointFromBindings(cpoint), nil
+	return curve.NewPointFromBackend(cpoint), nil
 }
 
 // Label extracts the label from the ciphertext.
@@ -48,7 +49,7 @@ func (ct Ciphertext) Label() ([]byte, error) {
 	if len(ct) == 0 {
 		return nil, errors.New("empty ciphertext")
 	}
-	return bindings.PVEGetLabel(ct)
+	return backend.PVEGetLabel(ct)
 }
 
 // EncryptParams contains parameters for PVE encryption.
@@ -65,7 +66,7 @@ type EncryptParams struct {
 	// X is the scalar value to encrypt.
 	// NOTE: X.Bytes contains sensitive data. Consider zeroizing it after encryption
 	// by calling cbmpc.ZeroizeBytes(X.Bytes) to clear it from memory.
-	X *cbmpc.Scalar
+	X *curve.Scalar
 }
 
 // EncryptResult contains the result of PVE encryption.
@@ -94,11 +95,11 @@ func (pve *PVE) Encrypt(_ context.Context, params *EncryptParams) (*EncryptResul
 	}
 
 	// Set the KEM for this operation (goroutine-local)
-	cleanup := bindings.SetKEM(pve.kem)
+	cleanup := backend.SetKEM(pve.kem)
 	defer cleanup()
 
 	// Use X.Bytes directly
-	ctBytes, err := bindings.PVEEncrypt(params.EK, params.Label, params.Curve.NID(), params.X.Bytes)
+	ctBytes, err := backend.PVEEncrypt(params.EK, params.Label, params.Curve.NID(), params.X.Bytes)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -146,10 +147,10 @@ func (pve *PVE) Verify(_ context.Context, params *VerifyParams) error {
 	}
 
 	// Set the KEM for this operation (goroutine-local)
-	cleanup := bindings.SetKEM(pve.kem)
+	cleanup := backend.SetKEM(pve.kem)
 	defer cleanup()
 
-	err := bindings.PVEVerifyWithPoint(params.EK, params.Ciphertext, params.Q.CPtr(), params.Label)
+	err := backend.PVEVerifyWithPoint(params.EK, params.Ciphertext, params.Q.CPtr(), params.Label)
 	if err != nil {
 		return cbmpc.RemapError(err)
 	}
@@ -180,7 +181,7 @@ type DecryptParams struct {
 // DecryptResult contains the result of PVE decryption.
 type DecryptResult struct {
 	// X is the decrypted scalar value.
-	X *cbmpc.Scalar
+	X *curve.Scalar
 }
 
 // Decrypt decrypts a PVE ciphertext to recover the scalar x.
@@ -206,20 +207,20 @@ func (pve *PVE) Decrypt(_ context.Context, params *DecryptParams) (*DecryptResul
 	}
 
 	// Set the KEM for this operation (goroutine-local)
-	cleanup := bindings.SetKEM(pve.kem)
+	cleanup := backend.SetKEM(pve.kem)
 	defer cleanup()
 
 	// Register the DK handle so it can be safely passed through C
-	dkHandle := bindings.RegisterHandle(params.DK)
-	defer bindings.FreeHandle(dkHandle)
+	dkHandle := backend.RegisterHandle(params.DK)
+	defer backend.FreeHandle(dkHandle)
 
-	xBytes, err := bindings.PVEDecrypt(dkHandle, params.EK, params.Ciphertext, params.Label, params.Curve.NID())
+	xBytes, err := backend.PVEDecrypt(dkHandle, params.EK, params.Ciphertext, params.Label, params.Curve.NID())
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
 
 	// Create Scalar from bytes
-	x, err := cbmpc.NewScalarFromBytes(xBytes)
+	x, err := curve.NewScalarFromBytes(xBytes)
 	if err != nil {
 		cbmpc.ZeroizeBytes(xBytes)
 		return nil, err

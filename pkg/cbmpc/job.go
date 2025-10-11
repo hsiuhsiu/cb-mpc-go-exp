@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"unsafe"
 
-	"github.com/coinbase/cb-mpc-go/internal/bindings"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/backend"
 )
 
 var (
@@ -76,7 +76,7 @@ func NewJob2P(t Transport, self Role, names [2]string) (*Job2P, error) {
 	}
 
 	adapter := transportAdapter{inner: t}
-	cjob, h, err := bindings.NewJob2P(adapter, uint32(self.roleID()), []string{names[0], names[1]})
+	cjob, h, err := backend.NewJob2P(adapter, uint32(self.roleID()), []string{names[0], names[1]})
 	if err != nil {
 		return nil, RemapError(err)
 	}
@@ -95,7 +95,7 @@ func (j *Job2P) Close() error {
 	}
 
 	runtime.SetFinalizer(j, nil)
-	bindings.FreeJob2P(j.cptr, j.hptr)
+	backend.FreeJob2P(j.cptr, j.hptr)
 	j.cptr = nil
 	j.hptr = 0
 	return nil
@@ -127,7 +127,7 @@ func NewJobMP(t Transport, self RoleID, names []string) (*JobMP, error) {
 	}
 
 	adapter := transportAdapter{inner: t}
-	cjob, h, err := bindings.NewJobMP(adapter, uint32(self), names)
+	cjob, h, err := backend.NewJobMP(adapter, uint32(self), names)
 	if err != nil {
 		return nil, RemapError(err)
 	}
@@ -146,7 +146,7 @@ func (j *JobMP) Close() error {
 	}
 
 	runtime.SetFinalizer(j, nil)
-	bindings.FreeJobMP(j.cptr, j.hptr)
+	backend.FreeJobMP(j.cptr, j.hptr)
 	j.cptr = nil
 	j.hptr = 0
 	return nil
@@ -168,4 +168,54 @@ func (j *JobMP) Ptr() (unsafe.Pointer, error) {
 		return nil, ErrJobClosed
 	}
 	return j.cptr, nil
+}
+
+// SessionID represents a session identifier for MPC signing operations.
+//
+// Session IDs are used to maintain state across multiple signing operations with the same key.
+// They help prevent replay attacks and ensure protocol security.
+//
+// Usage:
+//   - Empty SessionID (nil or zero-length): The library generates a fresh session ID
+//   - Non-empty SessionID: Resumes signing with the provided session ID from a previous operation
+//
+// The SessionID is returned by signing operations and should be passed to subsequent
+// signing operations to maintain session continuity.
+//
+// Example - Fresh session:
+//
+//	result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
+//	    SessionID: nil,  // Empty = fresh session
+//	    Key:       key,
+//	    Message:   messageHash,
+//	})
+//	// Use result.SessionID for next signature
+//
+// Example - Resume session:
+//
+//	result2, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
+//	    SessionID: result.SessionID,  // Resume with previous session ID
+//	    Key:       key,
+//	    Message:   messageHash2,
+//	})
+type SessionID []byte
+
+// Clone creates a defensive copy of the SessionID.
+// This prevents external mutation of the session ID data.
+//
+// Returns a new SessionID with copied data. If the SessionID is nil or empty,
+// returns nil to preserve the "fresh session" semantics.
+func (s SessionID) Clone() SessionID {
+	if len(s) == 0 {
+		return nil
+	}
+	clone := make(SessionID, len(s))
+	copy(clone, s)
+	return clone
+}
+
+// IsEmpty returns true if the SessionID is empty (nil or zero-length).
+// An empty SessionID indicates a fresh session should be created.
+func (s SessionID) IsEmpty() bool {
+	return len(s) == 0
 }

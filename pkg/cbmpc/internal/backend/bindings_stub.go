@@ -1,10 +1,12 @@
 //go:build !cgo || windows
 
-package bindings
+package backend
 
 import (
 	"context"
 	"unsafe"
+
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/kem"
 )
 
 // Stub implementations for non-CGO builds or Windows.
@@ -16,12 +18,9 @@ type transport interface {
 	ReceiveAll(context.Context, []uint32) (map[uint32][]byte, error)
 }
 
-// KEM is the KEM interface stub for non-CGO builds
-type KEM interface {
-	Encapsulate(ek []byte, rho [32]byte) (ct, ss []byte, err error)
-	Decapsulate(skHandle any, ct []byte) (ss []byte, err error)
-	DerivePub(skRef []byte) ([]byte, error)
-}
+// KEM is a type alias for kem.KEM.
+// This allows the backend to use the public KEM interface without importing it everywhere.
+type KEM = kem.KEM
 
 func NewJob2P(transport, uint32, []string) (unsafe.Pointer, uintptr, error) {
 	return nil, 0, ErrNotBuilt

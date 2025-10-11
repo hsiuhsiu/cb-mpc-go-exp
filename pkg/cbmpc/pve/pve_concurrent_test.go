@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/curve"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/testkem"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/pve"
 )
@@ -52,7 +53,7 @@ func TestPVEConcurrentOperations(t *testing.T) {
 
 			// Each goroutine encrypts a unique value
 			uniqueValue := fmt.Sprintf("%d", id*1000+42)
-			x, err := cbmpc.NewScalarFromString(uniqueValue)
+			x, err := curve.NewScalarFromString(uniqueValue)
 			if err != nil {
 				errors <- fmt.Errorf("goroutine %d: failed to create scalar: %v", id, err)
 				return

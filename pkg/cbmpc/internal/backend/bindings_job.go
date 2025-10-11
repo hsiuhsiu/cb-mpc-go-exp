@@ -1,6 +1,6 @@
 //go:build cgo && !windows
 
-package bindings
+package backend
 
 /*
 #include <stdlib.h>
@@ -37,7 +37,7 @@ type handle uintptr
 var (
 	mu   sync.Mutex
 	next handle = 1
-	reg  = map[handle]any{}
+	reg         = map[handle]any{}
 )
 
 // put registers a Go value and returns a handle that can be passed to C code.
@@ -77,7 +77,7 @@ func del(h handle) {
 
 // CGO export callbacks for the C library to call back into Go.
 // These functions implement the transport layer that the C++ MPC library uses
-// to send and receive messages between parties. They handle marshalling between
+// to send and receive messages between parties. They handle marshaling between
 // Go and C types.
 
 //export cbmpc_go_send
@@ -170,7 +170,6 @@ func cbmpc_go_receive_all(ctx unsafe.Pointer, from *C.uint32_t, n C.size_t, outs
 	return 0
 }
 
-
 // NewJob2P creates a new two-party MPC job.
 //
 // Parameters:
@@ -205,6 +204,7 @@ func NewJob2P(t transport, self uint32, names []string) (unsafe.Pointer, uintptr
 	h, ctx := put(t)
 	// Convert uintptr to unsafe.Pointer inline when passing to C.
 	// This is explicitly allowed by CGO rules when done in the call expression.
+	//nolint:govet // Intentional uintptr to unsafe.Pointer conversion for CGO
 	goTransport := C.cbmpc_make_go_transport(unsafe.Pointer(ctx))
 
 	cNames := make([]*C.char, len(names))
@@ -283,6 +283,7 @@ func NewJobMP(t transport, self uint32, names []string) (unsafe.Pointer, uintptr
 	h, ctx := put(t)
 	// Convert uintptr to unsafe.Pointer inline when passing to C.
 	// This is explicitly allowed by CGO rules when done in the call expression.
+	//nolint:govet // Intentional uintptr to unsafe.Pointer conversion for CGO
 	goTransport := C.cbmpc_make_go_transport(unsafe.Pointer(ctx))
 
 	cNames := make([]*C.char, len(names))
