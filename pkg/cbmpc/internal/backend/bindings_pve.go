@@ -17,30 +17,16 @@ import (
 	"strings"
 	"sync"
 	"unsafe"
+
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/kem"
 )
 
 // ECCPoint is a type alias for C.cbmpc_ecc_point
 type ECCPoint = C.cbmpc_ecc_point
 
-// KEM is the interface for Key Encapsulation Mechanisms used by PVE.
-// Implementations provide encryption key generation, encapsulation, and decapsulation.
-type KEM interface {
-	// Encapsulate generates a ciphertext and shared secret for the given public key.
-	// rho is a 32-byte random seed for deterministic encapsulation.
-	// Returns (ciphertext, shared_secret, error).
-	Encapsulate(ek []byte, rho [32]byte) (ct, ss []byte, err error)
-
-	// Decapsulate recovers the shared secret from a ciphertext using the private key.
-	// skHandle is any Go value representing the private key (can contain Go pointers).
-	// The bindings layer handles converting this to a CGO-safe handle automatically.
-	// Returns (shared_secret, error).
-	Decapsulate(skHandle any, ct []byte) (ss []byte, err error)
-
-	// DerivePub derives the public key from a private key reference.
-	// skRef is a serialized reference to the private key.
-	// Returns (public_key, error).
-	DerivePub(skRef []byte) ([]byte, error)
-}
+// KEM is a type alias for kem.KEM.
+// This allows the backend to use the public KEM interface without importing it everywhere.
+type KEM = kem.KEM
 
 // kemRegistry maps goroutine IDs to KEM implementations.
 // This allows concurrent PVE operations with different KEMs.
