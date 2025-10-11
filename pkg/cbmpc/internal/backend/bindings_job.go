@@ -152,20 +152,20 @@ func cbmpc_go_receive_all(ctx unsafe.Pointer, from *C.uint32_t, n C.size_t, outs
 		return 1
 	}
 	dst := unsafe.Slice(outs, count)
-    for i, role := range roles {
-        data, ok := batch[role]
-        if !ok {
-            // Cleanup already allocated memory on failure
-            for j := 0; j < i; j++ {
-                if dst[j].data != nil {
-                    C.memset(unsafe.Pointer(dst[j].data), 0, C.size_t(dst[j].size))
-                    C.free(unsafe.Pointer(dst[j].data))
-                }
-                dst[j].data = nil
-                dst[j].size = 0
-            }
-            return 1
-        }
+	for i, role := range roles {
+		data, ok := batch[role]
+		if !ok {
+			// Cleanup already allocated memory on failure
+			for j := 0; j < i; j++ {
+				if dst[j].data != nil {
+					C.memset(unsafe.Pointer(dst[j].data), 0, C.size_t(dst[j].size))
+					C.free(unsafe.Pointer(dst[j].data))
+				}
+				dst[j].data = nil
+				dst[j].size = 0
+			}
+			return 1
+		}
 		var p *C.uint8_t
 		if len(data) > 0 {
 			p = (*C.uint8_t)(C.malloc(C.size_t(len(data))))

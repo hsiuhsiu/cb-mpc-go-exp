@@ -10,7 +10,6 @@ package backend
 import "C"
 
 import (
-	"errors"
 	"unsafe"
 )
 
@@ -18,9 +17,6 @@ import (
 const (
 	E_ECDSA_2P_BIT_LEAK = 0xff040002 // Bit leak detected in signature verification
 )
-
-// ErrBitLeak is returned when E_ECDSA_2P_BIT_LEAK is detected
-var ErrBitLeak = errors.New("bit leak detected in signature verification")
 
 // cmemToGoBytes converts a C.cmem_t to a Go []byte slice and takes ownership of the C memory.
 // Securely zeros and frees the C memory. Caller must not access the C memory after calling.

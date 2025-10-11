@@ -79,7 +79,7 @@ func main() {
 	if selfIndex > math.MaxUint8 {
 		log.Fatalf("self index %d exceeds role capacity", selfIndex)
 	}
-	job, err := cbmpc.NewJob2P(transport, cbmpc.Role(selfIndex), [2]string{names[0], names[1]})
+	job, err := cbmpc.NewJob2PWithContext(ctx, transport, cbmpc.Role(selfIndex), [2]string{names[0], names[1]})
 	if err != nil {
 		log.Fatalf("NewJob2P: %v", err)
 	}
