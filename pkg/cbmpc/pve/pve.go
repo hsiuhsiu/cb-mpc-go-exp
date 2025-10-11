@@ -98,8 +98,13 @@ func (pve *PVE) Encrypt(_ context.Context, params *EncryptParams) (*EncryptResul
 	cleanup := backend.SetKEM(pve.kem)
 	defer cleanup()
 
+	nid, err := backend.CurveToNID(backend.Curve(params.Curve))
+	if err != nil {
+		return nil, err
+	}
+
 	// Use X.Bytes directly
-	ctBytes, err := backend.PVEEncrypt(params.EK, params.Label, params.Curve.NID(), params.X.Bytes)
+	ctBytes, err := backend.PVEEncrypt(params.EK, params.Label, nid, params.X.Bytes)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -210,11 +215,16 @@ func (pve *PVE) Decrypt(_ context.Context, params *DecryptParams) (*DecryptResul
 	cleanup := backend.SetKEM(pve.kem)
 	defer cleanup()
 
+	nid, err := backend.CurveToNID(backend.Curve(params.Curve))
+	if err != nil {
+		return nil, err
+	}
+
 	// Register the DK handle so it can be safely passed through C
 	dkHandle := backend.RegisterHandle(params.DK)
 	defer backend.FreeHandle(dkHandle)
 
-	xBytes, err := backend.PVEDecrypt(dkHandle, params.EK, params.Ciphertext, params.Label, params.Curve.NID())
+	xBytes, err := backend.PVEDecrypt(dkHandle, params.EK, params.Ciphertext, params.Label, nid)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}

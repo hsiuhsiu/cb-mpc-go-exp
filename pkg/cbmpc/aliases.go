@@ -26,12 +26,6 @@ var (
 	CurveEd25519   = curve.Ed25519
 )
 
-// NewCurveFromNID creates a Curve from an OpenSSL NID.
-// This is exported for use by protocol subpackages.
-func NewCurveFromNID(nid int) Curve {
-	return curve.NewFromNID(nid)
-}
-
 // NewCurvePointFromBytes creates a CurvePoint from compressed bytes.
 func NewCurvePointFromBytes(c Curve, bytes []byte) (*CurvePoint, error) {
 	return curve.NewPointFromBytes(c, bytes)
