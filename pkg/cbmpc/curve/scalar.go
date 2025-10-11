@@ -1,6 +1,6 @@
 //go:build cgo && !windows
 
-package cbmpc
+package curve
 
 import (
 	"errors"
@@ -40,14 +40,14 @@ func NewScalarFromBytes(bytes []byte) (*Scalar, error) {
 	// This ensures the bytes represent a valid scalar
 	ptr, err := backend.ScalarFromBytes(bytesCopy)
 	if err != nil {
-		return nil, RemapError(err)
+		return nil, err
 	}
 	defer backend.ScalarFree(ptr)
 
 	// Convert back to bytes to get normalized form
 	normalizedBytes, err := backend.ScalarToBytes(ptr)
 	if err != nil {
-		return nil, RemapError(err)
+		return nil, err
 	}
 
 	return &Scalar{Bytes: normalizedBytes}, nil
@@ -62,14 +62,14 @@ func NewScalarFromString(str string) (*Scalar, error) {
 	// Convert string to C++ bn_t
 	ptr, err := backend.ScalarFromString(str)
 	if err != nil {
-		return nil, RemapError(err)
+		return nil, err
 	}
 	defer backend.ScalarFree(ptr)
 
 	// Convert to bytes for storage
 	bytes, err := backend.ScalarToBytes(ptr)
 	if err != nil {
-		return nil, RemapError(err)
+		return nil, err
 	}
 
 	return &Scalar{Bytes: bytes}, nil

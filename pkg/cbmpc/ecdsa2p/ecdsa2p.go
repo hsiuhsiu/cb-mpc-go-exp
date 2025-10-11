@@ -188,20 +188,32 @@ func Refresh(_ context.Context, j *cbmpc.Job2P, params *RefreshParams) (*Refresh
 
 // SignParams contains parameters for 2-party ECDSA signing.
 type SignParams struct {
-	SessionID []byte // Session ID (in/out parameter)
-	Key       *Key   // Key share to sign with
-	Message   []byte // Message hash to sign (must be pre-hashed, max size = curve order size)
+	// SessionID for the signing operation.
+	// Empty (nil) = fresh session (library generates new session ID)
+	// Non-empty = resume session with the provided session ID
+	SessionID cbmpc.SessionID
+
+	Key     *Key   // Key share to sign with
+	Message []byte // Message hash to sign (must be pre-hashed, max size = curve order size)
 }
 
 // SignResult contains the output of 2-party ECDSA signing.
 type SignResult struct {
-	SessionID []byte // Updated session ID
-	Signature []byte // ECDSA signature
+	SessionID cbmpc.SessionID // Updated session ID for use in subsequent operations
+	Signature []byte          // ECDSA signature
 }
 
 // Sign performs 2-party ECDSA signing.
+//
 // The message must be the hash of the actual message to sign.
 // The input key is not modified and remains valid.
+//
+// Session ID semantics:
+//   - Empty SessionID (nil): Library generates a fresh session ID
+//   - Non-empty SessionID: Resumes signing with the provided session ID from a previous operation
+//
+// The returned SessionID should be used for subsequent signing operations to maintain session continuity.
+//
 // See cb-mpc/src/cbmpc/protocol/ecdsa_2p.h for protocol details.
 func Sign(_ context.Context, j *cbmpc.Job2P, params *SignParams) (*SignResult, error) {
 	if j == nil {
@@ -232,7 +244,7 @@ func Sign(_ context.Context, j *cbmpc.Job2P, params *SignParams) (*SignResult, e
 		return nil, err
 	}
 
-	newSID, sig, err := backend.ECDSA2PSign(ptr, params.Key.ckey, params.SessionID, params.Message)
+	newSID, sig, err := backend.ECDSA2PSign(ptr, params.Key.ckey, []byte(params.SessionID), params.Message)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -240,25 +252,36 @@ func Sign(_ context.Context, j *cbmpc.Job2P, params *SignParams) (*SignResult, e
 	runtime.KeepAlive(params.Key)
 
 	return &SignResult{
-		SessionID: newSID,
+		SessionID: cbmpc.SessionID(newSID),
 		Signature: sig,
 	}, nil
 }
 
 // SignBatchParams contains parameters for 2-party ECDSA batch signing.
 type SignBatchParams struct {
-	SessionID []byte   // Session ID (in/out parameter)
-	Key       *Key     // Key share to sign with
-	Messages  [][]byte // Message hashes to sign (must be pre-hashed, max size = curve order size)
+	// SessionID for the signing operation.
+	// Empty (nil) = fresh session (library generates new session ID)
+	// Non-empty = resume session with the provided session ID
+	SessionID cbmpc.SessionID
+
+	Key      *Key     // Key share to sign with
+	Messages [][]byte // Message hashes to sign (must be pre-hashed, max size = curve order size)
 }
 
 // SignBatchResult contains the output of 2-party ECDSA batch signing.
 type SignBatchResult struct {
-	SessionID  []byte   // Updated session ID
-	Signatures [][]byte // ECDSA signatures (one per message)
+	SessionID  cbmpc.SessionID // Updated session ID for use in subsequent operations
+	Signatures [][]byte        // ECDSA signatures (one per message)
 }
 
 // SignBatch performs 2-party ECDSA batch signing.
+//
+// Session ID semantics:
+//   - Empty SessionID (nil): Library generates a fresh session ID
+//   - Non-empty SessionID: Resumes signing with the provided session ID from a previous operation
+//
+// The returned SessionID should be used for subsequent signing operations to maintain session continuity.
+//
 // See cb-mpc/src/cbmpc/protocol/ecdsa_2p.h for protocol details.
 func SignBatch(_ context.Context, j *cbmpc.Job2P, params *SignBatchParams) (*SignBatchResult, error) {
 	if j == nil {
@@ -296,7 +319,7 @@ func SignBatch(_ context.Context, j *cbmpc.Job2P, params *SignBatchParams) (*Sig
 		return nil, err
 	}
 
-	newSID, sigs, err := backend.ECDSA2PSignBatch(ptr, params.Key.ckey, params.SessionID, params.Messages)
+	newSID, sigs, err := backend.ECDSA2PSignBatch(ptr, params.Key.ckey, []byte(params.SessionID), params.Messages)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -304,13 +327,20 @@ func SignBatch(_ context.Context, j *cbmpc.Job2P, params *SignBatchParams) (*Sig
 	runtime.KeepAlive(params.Key)
 
 	return &SignBatchResult{
-		SessionID:  newSID,
+		SessionID:  cbmpc.SessionID(newSID),
 		Signatures: sigs,
 	}, nil
 }
 
 // SignWithGlobalAbort performs 2-party ECDSA signing with global abort mode.
 // Returns ErrBitLeak if signature verification fails (indicates potential key leak).
+//
+// Session ID semantics:
+//   - Empty SessionID (nil): Library generates a fresh session ID
+//   - Non-empty SessionID: Resumes signing with the provided session ID from a previous operation
+//
+// The returned SessionID should be used for subsequent signing operations to maintain session continuity.
+//
 // See cb-mpc/src/cbmpc/protocol/ecdsa_2p.h for protocol details.
 func SignWithGlobalAbort(_ context.Context, j *cbmpc.Job2P, params *SignParams) (*SignResult, error) {
 	if j == nil {
@@ -341,7 +371,7 @@ func SignWithGlobalAbort(_ context.Context, j *cbmpc.Job2P, params *SignParams) 
 		return nil, err
 	}
 
-	newSID, sig, err := backend.ECDSA2PSignWithGlobalAbort(ptr, params.Key.ckey, params.SessionID, params.Message)
+	newSID, sig, err := backend.ECDSA2PSignWithGlobalAbort(ptr, params.Key.ckey, []byte(params.SessionID), params.Message)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -349,13 +379,20 @@ func SignWithGlobalAbort(_ context.Context, j *cbmpc.Job2P, params *SignParams) 
 	runtime.KeepAlive(params.Key)
 
 	return &SignResult{
-		SessionID: newSID,
+		SessionID: cbmpc.SessionID(newSID),
 		Signature: sig,
 	}, nil
 }
 
 // SignWithGlobalAbortBatch performs 2-party ECDSA batch signing with global abort mode.
 // Returns ErrBitLeak if signature verification fails (indicates potential key leak).
+//
+// Session ID semantics:
+//   - Empty SessionID (nil): Library generates a fresh session ID
+//   - Non-empty SessionID: Resumes signing with the provided session ID from a previous operation
+//
+// The returned SessionID should be used for subsequent signing operations to maintain session continuity.
+//
 // See cb-mpc/src/cbmpc/protocol/ecdsa_2p.h for protocol details.
 func SignWithGlobalAbortBatch(_ context.Context, j *cbmpc.Job2P, params *SignBatchParams) (*SignBatchResult, error) {
 	if j == nil {
@@ -393,7 +430,7 @@ func SignWithGlobalAbortBatch(_ context.Context, j *cbmpc.Job2P, params *SignBat
 		return nil, err
 	}
 
-	newSID, sigs, err := backend.ECDSA2PSignWithGlobalAbortBatch(ptr, params.Key.ckey, params.SessionID, params.Messages)
+	newSID, sigs, err := backend.ECDSA2PSignWithGlobalAbortBatch(ptr, params.Key.ckey, []byte(params.SessionID), params.Messages)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -401,7 +438,7 @@ func SignWithGlobalAbortBatch(_ context.Context, j *cbmpc.Job2P, params *SignBat
 	runtime.KeepAlive(params.Key)
 
 	return &SignBatchResult{
-		SessionID:  newSID,
+		SessionID:  cbmpc.SessionID(newSID),
 		Signatures: sigs,
 	}, nil
 }

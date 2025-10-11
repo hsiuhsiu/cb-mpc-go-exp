@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/curve"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/testkem"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/pve"
 )
@@ -38,9 +39,9 @@ func TestPVEEncryptDecrypt(t *testing.T) {
 	defer kem.FreePrivateKeyHandle(dkHandle)
 
 	// Test parameters
-	curve := cbmpc.CurveP256
+	crv := cbmpc.CurveP256
 	label := []byte("test-label")
-	x, err := cbmpc.NewScalarFromString("12345678901234567890")
+	x, err := curve.NewScalarFromString("12345678901234567890")
 	if err != nil {
 		t.Fatalf("Failed to create scalar: %v", err)
 	}
@@ -50,7 +51,7 @@ func TestPVEEncryptDecrypt(t *testing.T) {
 	encryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: label,
-		Curve: curve,
+		Curve: crv,
 		X:     x,
 	})
 	if err != nil {
@@ -68,8 +69,8 @@ func TestPVEEncryptDecrypt(t *testing.T) {
 		t.Fatalf("Failed to extract Q: %v", err)
 	}
 	defer Q.Free()
-	if Q.Curve().NID() != curve.NID() {
-		t.Fatalf("Q curve mismatch: got %d, want %d", Q.Curve().NID(), curve.NID())
+	if Q.Curve().NID() != crv.NID() {
+		t.Fatalf("Q curve mismatch: got %d, want %d", Q.Curve().NID(), crv.NID())
 	}
 
 	// Extract and verify label
@@ -98,7 +99,7 @@ func TestPVEEncryptDecrypt(t *testing.T) {
 		EK:         ek,
 		Ciphertext: ct,
 		Label:      label,
-		Curve:      curve,
+		Curve:      crv,
 	})
 	if err != nil {
 		t.Fatalf("Decrypt failed: %v", err)
@@ -132,9 +133,9 @@ func TestPVEVerifyFail(t *testing.T) {
 	}
 
 	// Test parameters
-	curve := cbmpc.CurveP256
+	crv := cbmpc.CurveP256
 	label := []byte("test-label")
-	x, err := cbmpc.NewScalarFromString("12345")
+	x, err := curve.NewScalarFromString("12345")
 	if err != nil {
 		t.Fatalf("Failed to create scalar: %v", err)
 	}
@@ -144,7 +145,7 @@ func TestPVEVerifyFail(t *testing.T) {
 	encryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: label,
-		Curve: curve,
+		Curve: crv,
 		X:     x,
 	})
 	if err != nil {
@@ -172,7 +173,7 @@ func TestPVEVerifyFail(t *testing.T) {
 	}
 
 	// Test 2: Verify with wrong Q (should fail)
-	wrongX, err := cbmpc.NewScalarFromString("99999")
+	wrongX, err := curve.NewScalarFromString("99999")
 	if err != nil {
 		t.Fatalf("Failed to create wrong scalar: %v", err)
 	}
@@ -181,7 +182,7 @@ func TestPVEVerifyFail(t *testing.T) {
 	wrongEncryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: label,
-		Curve: curve,
+		Curve: crv,
 		X:     wrongX,
 	})
 	if err != nil {
@@ -237,23 +238,23 @@ func TestPVEMultipleCurves(t *testing.T) {
 	}
 
 	label := []byte("multi-curve-test")
-	x, err := cbmpc.NewScalarFromString("987654321")
+	x, err := curve.NewScalarFromString("987654321")
 	if err != nil {
 		t.Fatalf("Failed to create scalar: %v", err)
 	}
 	defer x.Free()
 
-	for _, curve := range curves {
-		t.Run(curve.String(), func(t *testing.T) {
+	for _, crv := range curves {
+		t.Run(crv.String(), func(t *testing.T) {
 			// Encrypt
 			encryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 				EK:    ek,
 				Label: label,
-				Curve: curve,
+				Curve: crv,
 				X:     x,
 			})
 			if err != nil {
-				t.Fatalf("Encrypt failed for %s: %v", curve.String(), err)
+				t.Fatalf("Encrypt failed for %s: %v", crv.String(), err)
 			}
 
 			// Decrypt
@@ -262,16 +263,16 @@ func TestPVEMultipleCurves(t *testing.T) {
 				EK:         ek,
 				Ciphertext: encryptResult.Ciphertext,
 				Label:      label,
-				Curve:      curve,
+				Curve:      crv,
 			})
 			if err != nil {
-				t.Fatalf("Decrypt failed for %s: %v", curve.String(), err)
+				t.Fatalf("Decrypt failed for %s: %v", crv.String(), err)
 			}
 			defer decryptResult.X.Free()
 
 			// Verify X matches
 			if x.String() != decryptResult.X.String() {
-				t.Fatalf("Decrypted value mismatch for %s: got %s, want %s", curve.String(), decryptResult.X.String(), x.String())
+				t.Fatalf("Decrypted value mismatch for %s: got %s, want %s", crv.String(), decryptResult.X.String(), x.String())
 			}
 		})
 	}
@@ -304,20 +305,20 @@ func TestPVELargeScalar(t *testing.T) {
 	defer kem.FreePrivateKeyHandle(dkHandle)
 
 	// Use a large scalar (256-bit value)
-	x, err := cbmpc.NewScalarFromString("115792089237316195423570985008687907853269984665640564039457584007913129639935")
+	x, err := curve.NewScalarFromString("115792089237316195423570985008687907853269984665640564039457584007913129639935")
 	if err != nil {
 		t.Fatalf("Failed to create scalar: %v", err)
 	}
 	defer x.Free()
 
-	curve := cbmpc.CurveP256
+	crv := cbmpc.CurveP256
 	label := []byte("large-scalar-test")
 
 	// Encrypt
 	encryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: label,
-		Curve: curve,
+		Curve: crv,
 		X:     x,
 	})
 	if err != nil {
@@ -330,7 +331,7 @@ func TestPVELargeScalar(t *testing.T) {
 		EK:         ek,
 		Ciphertext: encryptResult.Ciphertext,
 		Label:      label,
-		Curve:      curve,
+		Curve:      crv,
 	})
 	if err != nil {
 		t.Fatalf("Decrypt failed: %v", err)
@@ -369,8 +370,8 @@ func TestPVEDifferentLabels(t *testing.T) {
 		t.Fatalf("Failed to generate key pair: %v", err)
 	}
 
-	curve := cbmpc.CurveP256
-	x, err := cbmpc.NewScalarFromString("42")
+	crv := cbmpc.CurveP256
+	x, err := curve.NewScalarFromString("42")
 	if err != nil {
 		t.Fatalf("Failed to create scalar: %v", err)
 	}
@@ -380,7 +381,7 @@ func TestPVEDifferentLabels(t *testing.T) {
 	encryptResult1, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: []byte("label1"),
-		Curve: curve,
+		Curve: crv,
 		X:     x,
 	})
 	if err != nil {
@@ -391,7 +392,7 @@ func TestPVEDifferentLabels(t *testing.T) {
 	encryptResult2, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: []byte("label2"),
-		Curve: curve,
+		Curve: crv,
 		X:     x,
 	})
 	if err != nil {
@@ -427,9 +428,9 @@ func TestPVECiphertextMethods(t *testing.T) {
 		t.Fatalf("Failed to generate key pair: %v", err)
 	}
 
-	curve := cbmpc.CurveP256
+	crv := cbmpc.CurveP256
 	label := []byte("method-test")
-	x, err := cbmpc.NewScalarFromString("123456")
+	x, err := curve.NewScalarFromString("123456")
 	if err != nil {
 		t.Fatalf("Failed to create scalar: %v", err)
 	}
@@ -439,7 +440,7 @@ func TestPVECiphertextMethods(t *testing.T) {
 	encryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: label,
-		Curve: curve,
+		Curve: crv,
 		X:     x,
 	})
 	if err != nil {
@@ -460,8 +461,8 @@ func TestPVECiphertextMethods(t *testing.T) {
 		t.Fatalf("Q() failed: %v", err)
 	}
 	defer Q.Free()
-	if Q.Curve().NID() != curve.NID() {
-		t.Fatalf("Q() curve mismatch: got %d, want %d", Q.Curve().NID(), curve.NID())
+	if Q.Curve().NID() != crv.NID() {
+		t.Fatalf("Q() curve mismatch: got %d, want %d", Q.Curve().NID(), crv.NID())
 	}
 
 	// Test Label()

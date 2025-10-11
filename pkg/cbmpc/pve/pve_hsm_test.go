@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/curve"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/testkem"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/pve"
 )
@@ -45,7 +46,7 @@ func TestPVEWithHSMKEM(t *testing.T) {
 
 	// Test encryption/decryption
 	label := []byte("hsm-test")
-	x, err := cbmpc.NewScalarFromString("98765432109876543210")
+	x, err := curve.NewScalarFromString("98765432109876543210")
 	if err != nil {
 		t.Fatalf("Failed to create scalar: %v", err)
 	}
@@ -125,7 +126,7 @@ func TestPVEMultipleKEMsConcurrent(t *testing.T) {
 			}()
 
 			// Use unique value
-			x, err := cbmpc.NewScalarFromString(fmt.Sprintf("%d", id*10000+1111))
+			x, err := curve.NewScalarFromString(fmt.Sprintf("%d", id*10000+1111))
 			if err != nil {
 				errors <- fmt.Errorf("HSM %d: failed to create scalar: %v", id, err)
 				return
@@ -193,7 +194,7 @@ func TestPVEMultipleKEMsConcurrent(t *testing.T) {
 			defer toyKEM.FreePrivateKeyHandle(dkHandle)
 
 			// Use unique value
-			x, err := cbmpc.NewScalarFromString(fmt.Sprintf("%d", id*10000+2222))
+			x, err := curve.NewScalarFromString(fmt.Sprintf("%d", id*10000+2222))
 			if err != nil {
 				errors <- fmt.Errorf("Toy %d: failed to create scalar: %v", id, err)
 				return

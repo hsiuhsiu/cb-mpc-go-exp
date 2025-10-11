@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/curve"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/testkem"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/pve"
 )
@@ -38,9 +39,9 @@ func TestPVEWithCurvePoint(t *testing.T) {
 	defer kem.FreePrivateKeyHandle(dkHandle)
 
 	// Test parameters
-	curve := cbmpc.CurveP256
+	crv := cbmpc.CurveP256
 	label := []byte("test-curvepoint")
-	x, err := cbmpc.NewScalarFromString("98765432109876543210")
+	x, err := curve.NewScalarFromString("98765432109876543210")
 	if err != nil {
 		t.Fatalf("Failed to create scalar: %v", err)
 	}
@@ -50,7 +51,7 @@ func TestPVEWithCurvePoint(t *testing.T) {
 	encryptResult, err := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: label,
-		Curve: curve,
+		Curve: crv,
 		X:     x,
 	})
 	if err != nil {
@@ -67,8 +68,8 @@ func TestPVEWithCurvePoint(t *testing.T) {
 	defer Q.Free()
 
 	// Verify Q point is on the correct curve
-	if Q.Curve().NID() != curve.NID() {
-		t.Fatalf("Q point curve mismatch: got %d, want %d", Q.Curve().NID(), curve.NID())
+	if Q.Curve().NID() != crv.NID() {
+		t.Fatalf("Q point curve mismatch: got %d, want %d", Q.Curve().NID(), crv.NID())
 	}
 
 	// Verify using CurvePoint (efficient - no deserialization)
@@ -109,7 +110,7 @@ func TestCurvePointRoundTrip(t *testing.T) {
 	_, ek, _ := kem.Generate()
 
 	// Encrypt to get a ciphertext with Q
-	x, _ := cbmpc.NewScalarFromString("12345")
+	x, _ := curve.NewScalarFromString("12345")
 	defer x.Free()
 
 	encryptResult, _ := pveInstance.Encrypt(ctx, &pve.EncryptParams{

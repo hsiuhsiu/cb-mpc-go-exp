@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/curve"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/kem/rsa"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/pve"
 )
@@ -74,7 +75,7 @@ func main() {
 	fmt.Printf("  Label: %s\n", label)
 	fmt.Printf("  Secret value: %s\n", secretValue)
 
-	x, err := cbmpc.NewScalarFromString(secretValue)
+	x, err := curve.NewScalarFromString(secretValue)
 	if err != nil {
 		log.Fatalf("Failed to create scalar: %v", err)
 	}
@@ -142,7 +143,7 @@ func main() {
 	// Step 10: Test verification failure with tampered Q
 	fmt.Println("Step 10: Testing verification with tampered Q (should fail)...")
 	// Create a different encryption to get a different Q
-	x2, _ := cbmpc.NewScalarFromString("99999")
+	x2, _ := curve.NewScalarFromString("99999")
 	defer x2.Free()
 	encryptResult2, _ := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,

@@ -66,7 +66,7 @@ type EncryptParams struct {
 	// X is the scalar value to encrypt.
 	// NOTE: X.Bytes contains sensitive data. Consider zeroizing it after encryption
 	// by calling cbmpc.ZeroizeBytes(X.Bytes) to clear it from memory.
-	X *cbmpc.Scalar
+	X *curve.Scalar
 }
 
 // EncryptResult contains the result of PVE encryption.
@@ -181,7 +181,7 @@ type DecryptParams struct {
 // DecryptResult contains the result of PVE decryption.
 type DecryptResult struct {
 	// X is the decrypted scalar value.
-	X *cbmpc.Scalar
+	X *curve.Scalar
 }
 
 // Decrypt decrypts a PVE ciphertext to recover the scalar x.
@@ -220,7 +220,7 @@ func (pve *PVE) Decrypt(_ context.Context, params *DecryptParams) (*DecryptResul
 	}
 
 	// Create Scalar from bytes
-	x, err := cbmpc.NewScalarFromBytes(xBytes)
+	x, err := curve.NewScalarFromBytes(xBytes)
 	if err != nil {
 		cbmpc.ZeroizeBytes(xBytes)
 		return nil, err

@@ -1,16 +1,16 @@
-package cbmpc_test
+package curve_test
 
 import (
 	"fmt"
 	"testing"
 
-	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/curve"
 )
 
 // TestScalarPublicBytes demonstrates direct access to the public Bytes field.
 func TestScalarPublicBytes(t *testing.T) {
 	// Create a scalar
-	x, _ := cbmpc.NewScalarFromString("12345")
+	x, _ := curve.NewScalarFromString("12345")
 	defer x.Free()
 
 	// Direct access to bytes - no method call needed!
@@ -25,7 +25,7 @@ func TestScalarPublicBytes(t *testing.T) {
 	fmt.Printf("Copied bytes: %x\n", bytesCopy)
 
 	// Create another scalar from the bytes
-	y, _ := cbmpc.NewScalarFromBytes(x.Bytes)
+	y, _ := curve.NewScalarFromBytes(x.Bytes)
 	defer y.Free()
 
 	fmt.Printf("Created from x.Bytes: y.String() = %s\n", y.String())
