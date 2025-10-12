@@ -10,6 +10,14 @@
 extern "C" {
 #endif
 
+// Minimal error code definitions mirrored from cb-mpc C++ headers for use in C FFI.
+// Values are negative 32-bit equivalents of 0xff.. style codes to fit in C int via cgo.
+#define CBMPC_SUCCESS 0
+#define CBMPC_E_BADARG (-16711678)      // 0xff010002
+#define CBMPC_E_NOT_SUPPORTED (-16711675) // 0xff010005
+#define CBMPC_E_NOT_FOUND (-16711674)   // 0xff010006
+#define CBMPC_E_CRYPTO (-16515071)      // 0xff040001
+
 int cbmpc_agree_random_2p(cbmpc_job2p *j, int bitlen, cmem_t *out);
 int cbmpc_multi_agree_random(cbmpc_jobmp *j, int bitlen, cmem_t *out);
 int cbmpc_weak_multi_agree_random(cbmpc_jobmp *j, int bitlen, cmem_t *out);
@@ -98,6 +106,15 @@ int cbmpc_pve_get_Q_point(cmem_t pve_ct, cbmpc_ecc_point *Q_point_out);
 
 // Verify a PVE ciphertext against a public key Q (as ecc_point_t) and label.
 int cbmpc_pve_verify_with_point(cmem_t ek_bytes, cmem_t pve_ct, cbmpc_ecc_point Q_point, cmem_t label);
+
+// KEM context (thread-local) management for FFI policy
+// These APIs allow Go to set a per-thread opaque handle that the Go FFI
+// callbacks can retrieve to locate the correct KEM implementation.
+// Note: The handle must NOT be a Go pointer. Use backend.RegisterHandle to
+// obtain a CGO-safe opaque handle value.
+void cbmpc_set_kem_tls(const void *handle);
+void cbmpc_clear_kem_tls(void);
+const void *cbmpc_get_kem_tls(void);
 
 #ifdef __cplusplus
 }

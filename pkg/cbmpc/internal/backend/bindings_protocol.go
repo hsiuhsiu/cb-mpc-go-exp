@@ -21,6 +21,12 @@ import (
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/kem"
 )
 
+// formatNativeErr formats a native error code with category and code fields.
+func formatNativeErr(op string, rc C.int) error {
+	u := uint32(rc)
+	return fmt.Errorf("%s failed with code %d (0x%x, cat=0x%x, code=0x%x)", op, int(rc), u, (u>>16)&0xff, u&0xffff)
+}
+
 // AgreeRandom2P is a C binding wrapper for the two-party agree random protocol.
 func AgreeRandom2P(cj unsafe.Pointer, bitlen int) ([]byte, error) {
 	if cj == nil {
@@ -29,7 +35,7 @@ func AgreeRandom2P(cj unsafe.Pointer, bitlen int) ([]byte, error) {
 	var out C.cmem_t
 	rc := C.cbmpc_agree_random_2p((*C.cbmpc_job2p)(cj), C.int(bitlen), &out)
 	if rc != 0 {
-		return nil, errors.New("agree_random failed")
+		return nil, formatNativeErr("agree_random", rc)
 	}
 	return cmemToGoBytes(out), nil
 }
@@ -42,7 +48,7 @@ func AgreeRandomMP(cj unsafe.Pointer, bitlen int) ([]byte, error) {
 	var out C.cmem_t
 	rc := C.cbmpc_multi_agree_random((*C.cbmpc_jobmp)(cj), C.int(bitlen), &out)
 	if rc != 0 {
-		return nil, errors.New("multi_agree_random failed")
+		return nil, formatNativeErr("multi_agree_random", rc)
 	}
 	return cmemToGoBytes(out), nil
 }
@@ -55,7 +61,7 @@ func WeakMultiAgreeRandom(cj unsafe.Pointer, bitlen int) ([]byte, error) {
 	var out C.cmem_t
 	rc := C.cbmpc_weak_multi_agree_random((*C.cbmpc_jobmp)(cj), C.int(bitlen), &out)
 	if rc != 0 {
-		return nil, errors.New("weak_multi_agree_random failed")
+		return nil, formatNativeErr("weak_multi_agree_random", rc)
 	}
 	return cmemToGoBytes(out), nil
 }
@@ -68,7 +74,7 @@ func MultiPairwiseAgreeRandom(cj unsafe.Pointer, bitlen int) ([][]byte, error) {
 	var out C.cmems_t
 	rc := C.cbmpc_multi_pairwise_agree_random((*C.cbmpc_jobmp)(cj), C.int(bitlen), &out)
 	if rc != 0 {
-		return nil, errors.New("multi_pairwise_agree_random failed")
+		return nil, formatNativeErr("multi_pairwise_agree_random", rc)
 	}
 	return cmemsToGoByteSlices(out), nil
 }
@@ -82,7 +88,7 @@ func ECDSA2PDKG(cj unsafe.Pointer, curveNID int) (ECDSA2PKey, error) {
 	var key ECDSA2PKey
 	rc := C.cbmpc_ecdsa2p_dkg((*C.cbmpc_job2p)(cj), C.int(curveNID), &key)
 	if rc != 0 {
-		return nil, errors.New("ecdsa2p_dkg failed")
+		return nil, formatNativeErr("ecdsa2p_dkg", rc)
 	}
 	return key, nil
 }
@@ -99,7 +105,7 @@ func ECDSA2PRefresh(cj unsafe.Pointer, key ECDSA2PKey) (ECDSA2PKey, error) {
 	var newKey ECDSA2PKey
 	rc := C.cbmpc_ecdsa2p_refresh((*C.cbmpc_job2p)(cj), key, &newKey)
 	if rc != 0 {
-		return nil, errors.New("ecdsa2p_refresh failed")
+		return nil, formatNativeErr("ecdsa2p_refresh", rc)
 	}
 	return newKey, nil
 }
@@ -122,7 +128,7 @@ func ECDSA2PSign(cj unsafe.Pointer, key ECDSA2PKey, sidIn, msg []byte) ([]byte, 
 	var sidOut, sigOut C.cmem_t
 	rc := C.cbmpc_ecdsa2p_sign((*C.cbmpc_job2p)(cj), sidMem, key, msgMem, &sidOut, &sigOut)
 	if rc != 0 {
-		return nil, nil, errors.New("ecdsa2p_sign failed")
+		return nil, nil, formatNativeErr("ecdsa2p_sign", rc)
 	}
 
 	return cmemToGoBytes(sidOut), cmemToGoBytes(sigOut), nil
@@ -148,7 +154,7 @@ func ECDSA2PSignBatch(cj unsafe.Pointer, key ECDSA2PKey, sidIn []byte, msgs [][]
 	var sigsOut C.cmems_t
 	rc := C.cbmpc_ecdsa2p_sign_batch((*C.cbmpc_job2p)(cj), sidMem, key, msgsMem, &sidOut, &sigsOut)
 	if rc != 0 {
-		return nil, nil, fmt.Errorf("ecdsa2p_sign_batch failed with code %d (0x%x)", rc, rc)
+		return nil, nil, formatNativeErr("ecdsa2p_sign_batch", rc)
 	}
 
 	return cmemToGoBytes(sidOut), cmemsToGoByteSlices(sigsOut), nil
@@ -176,7 +182,7 @@ func ECDSA2PSignWithGlobalAbort(cj unsafe.Pointer, key ECDSA2PKey, sidIn, msg []
 		if C.uint(rc) == C.uint(E_ECDSA_2P_BIT_LEAK) {
 			return nil, nil, ErrBitLeak
 		}
-		return nil, nil, errors.New("ecdsa2p_sign_with_global_abort failed")
+		return nil, nil, formatNativeErr("ecdsa2p_sign_with_global_abort", rc)
 	}
 
 	return cmemToGoBytes(sidOut), cmemToGoBytes(sigOut), nil
@@ -206,7 +212,7 @@ func ECDSA2PSignWithGlobalAbortBatch(cj unsafe.Pointer, key ECDSA2PKey, sidIn []
 		if C.uint(rc) == C.uint(E_ECDSA_2P_BIT_LEAK) {
 			return nil, nil, ErrBitLeak
 		}
-		return nil, nil, fmt.Errorf("ecdsa2p_sign_with_global_abort_batch failed with code %d (0x%x)", rc, rc)
+		return nil, nil, formatNativeErr("ecdsa2p_sign_with_global_abort_batch", rc)
 	}
 
 	return cmemToGoBytes(sidOut), cmemsToGoByteSlices(sigsOut), nil
@@ -228,6 +234,20 @@ func PVEEncrypt(ekBytes, label []byte, curveNID int, xBytes []byte) ([]byte, err
 		return nil, errors.New("empty x bytes")
 	}
 
+	// Bind the per-call KEM via TLS on the current OS thread
+	kem := GetKEM()
+	if kem == nil {
+		return nil, errors.New("no KEM registered; call SetKEM before PVE operations")
+	}
+	h := RegisterHandle(kem)
+	runtime.LockOSThread()
+	C.cbmpc_set_kem_tls(h)
+	defer func() {
+		C.cbmpc_clear_kem_tls()
+		FreeHandle(h)
+		runtime.UnlockOSThread()
+	}()
+
 	ekMem := goBytesToCmem(ekBytes)
 	labelMem := goBytesToCmem(label)
 	xMem := goBytesToCmem(xBytes)
@@ -235,7 +255,7 @@ func PVEEncrypt(ekBytes, label []byte, curveNID int, xBytes []byte) ([]byte, err
 	var out C.cmem_t
 	rc := C.cbmpc_pve_encrypt(ekMem, labelMem, C.int(curveNID), xMem, &out)
 	if rc != 0 {
-		return nil, errors.New("pve_encrypt failed")
+		return nil, formatNativeErr("pve_encrypt", rc)
 	}
 
 	return cmemToGoBytes(out), nil
@@ -256,6 +276,20 @@ func PVEDecrypt(dkHandle unsafe.Pointer, ekBytes, pveCT, label []byte, curveNID 
 		return nil, errors.New("empty label")
 	}
 
+	// Bind the per-call KEM via TLS on the current OS thread
+	kem := GetKEM()
+	if kem == nil {
+		return nil, errors.New("no KEM registered; call SetKEM before PVE operations")
+	}
+	h := RegisterHandle(kem)
+	runtime.LockOSThread()
+	C.cbmpc_set_kem_tls(h)
+	defer func() {
+		C.cbmpc_clear_kem_tls()
+		FreeHandle(h)
+		runtime.UnlockOSThread()
+	}()
+
 	ekMem := goBytesToCmem(ekBytes)
 	pveCTMem := goBytesToCmem(pveCT)
 	labelMem := goBytesToCmem(label)
@@ -266,7 +300,7 @@ func PVEDecrypt(dkHandle unsafe.Pointer, ekBytes, pveCT, label []byte, curveNID 
 	// The actual handle lookup happens in the Go KEM implementation.
 	rc := C.cbmpc_pve_decrypt(dkHandle, ekMem, pveCTMem, labelMem, C.int(curveNID), &out)
 	if rc != 0 {
-		return nil, errors.New("pve_decrypt failed")
+		return nil, formatNativeErr("pve_decrypt", rc)
 	}
 
 	return cmemToGoBytes(out), nil
@@ -283,7 +317,7 @@ func PVEGetLabel(pveCT []byte) ([]byte, error) {
 	var out C.cmem_t
 	rc := C.cbmpc_pve_get_label(pveCTMem, &out)
 	if rc != 0 {
-		return nil, errors.New("pve_get_label failed")
+		return nil, formatNativeErr("pve_get_label", rc)
 	}
 
 	return cmemToGoBytes(out), nil
@@ -301,7 +335,7 @@ func PVEGetQPoint(pveCT []byte) (ECCPoint, error) {
 	var point ECCPoint
 	rc := C.cbmpc_pve_get_Q_point(pveCTMem, &point)
 	if rc != 0 {
-		return nil, errors.New("pve_get_Q_point failed")
+		return nil, formatNativeErr("pve_get_Q_point", rc)
 	}
 
 	return point, nil
@@ -325,13 +359,27 @@ func PVEVerifyWithPoint(ekBytes, pveCT []byte, QPoint ECCPoint, label []byte) er
 		return errors.New("empty label")
 	}
 
+	// Bind the per-call KEM via TLS on the current OS thread
+	kem := GetKEM()
+	if kem == nil {
+		return errors.New("no KEM registered; call SetKEM before PVE operations")
+	}
+	h := RegisterHandle(kem)
+	runtime.LockOSThread()
+	C.cbmpc_set_kem_tls(h)
+	defer func() {
+		C.cbmpc_clear_kem_tls()
+		FreeHandle(h)
+		runtime.UnlockOSThread()
+	}()
+
 	ekMem := goBytesToCmem(ekBytes)
 	pveCTMem := goBytesToCmem(pveCT)
 	labelMem := goBytesToCmem(label)
 
 	rc := C.cbmpc_pve_verify_with_point(ekMem, pveCTMem, QPoint, labelMem)
 	if rc != 0 {
-		return errors.New("pve_verify failed")
+		return formatNativeErr("pve_verify_with_point", rc)
 	}
 
 	return nil
@@ -411,19 +459,28 @@ func GetKEM() KEM {
 //export go_ffi_kem_encap
 func go_ffi_kem_encap(ek_bytes C.cmem_t, rho C.cmem_t, kem_ct_out *C.cmem_t, kem_ss_out *C.cmem_t) C.int {
 	if kem_ct_out == nil || kem_ss_out == nil {
-		return C.int(1)
+		return C.int(C.CBMPC_E_BADARG)
 	}
 
-	kem := GetKEM()
-	if kem == nil {
-		return C.int(1)
+	// Retrieve KEM from thread-local handle set by the caller
+	tlsHandle := C.cbmpc_get_kem_tls()
+	if tlsHandle == nil {
+		return C.int(C.CBMPC_E_NOT_FOUND)
+	}
+	v, ok := lookupHandle(tlsHandle)
+	if !ok {
+		return C.int(C.CBMPC_E_NOT_FOUND)
+	}
+	kem, ok := v.(KEM)
+	if !ok || kem == nil {
+		return C.int(C.CBMPC_E_NOT_FOUND)
 	}
 
 	// Convert inputs to Go
 	ek := C.GoBytes(unsafe.Pointer(ek_bytes.data), ek_bytes.size)
 	rhoBytes := C.GoBytes(unsafe.Pointer(rho.data), rho.size)
 	if len(rhoBytes) != 32 {
-		return C.int(1)
+		return C.int(C.CBMPC_E_BADARG)
 	}
 
 	var rho32 [32]byte
@@ -432,7 +489,7 @@ func go_ffi_kem_encap(ek_bytes C.cmem_t, rho C.cmem_t, kem_ct_out *C.cmem_t, kem
 	// Call Go KEM
 	ct, ss, err := kem.Encapsulate(ek, rho32)
 	if err != nil {
-		return C.int(1)
+		return C.int(C.CBMPC_E_CRYPTO)
 	}
 
 	// Allocate and copy outputs
@@ -442,24 +499,33 @@ func go_ffi_kem_encap(ek_bytes C.cmem_t, rho C.cmem_t, kem_ct_out *C.cmem_t, kem
 	*kem_ct_out = ct_cmem
 	*kem_ss_out = ss_cmem
 
-	return C.int(0)
+	return C.int(C.CBMPC_SUCCESS)
 }
 
 //export go_ffi_kem_decap
 func go_ffi_kem_decap(dk_handle unsafe.Pointer, kem_ct C.cmem_t, kem_ss_out *C.cmem_t) C.int {
 	if dk_handle == nil || kem_ss_out == nil {
-		return C.int(1)
+		return C.int(C.CBMPC_E_BADARG)
 	}
 
-	kem := GetKEM()
-	if kem == nil {
-		return C.int(1)
+	// Retrieve KEM from thread-local handle set by the caller
+	tlsHandle := C.cbmpc_get_kem_tls()
+	if tlsHandle == nil {
+		return C.int(C.CBMPC_E_NOT_FOUND)
+	}
+	v, ok := lookupHandle(tlsHandle)
+	if !ok {
+		return C.int(C.CBMPC_E_NOT_FOUND)
+	}
+	kem, ok := v.(KEM)
+	if !ok || kem == nil {
+		return C.int(C.CBMPC_E_NOT_FOUND)
 	}
 
 	// Look up the actual Go object from the handle registry
 	skHandle, exists := lookupHandle(dk_handle)
 	if !exists {
-		return C.int(1)
+		return C.int(C.CBMPC_E_NOT_FOUND)
 	}
 
 	// Convert ciphertext to Go
@@ -468,34 +534,36 @@ func go_ffi_kem_decap(dk_handle unsafe.Pointer, kem_ct C.cmem_t, kem_ss_out *C.c
 	// Call Go KEM with the actual Go object
 	ss, err := kem.Decapsulate(skHandle, ct)
 	if err != nil {
-		return C.int(1)
+		return C.int(C.CBMPC_E_CRYPTO)
 	}
 
 	// Allocate and copy output
 	ss_cmem := allocCmem(ss)
 	*kem_ss_out = ss_cmem
 
-	return C.int(0)
+	return C.int(C.CBMPC_SUCCESS)
 }
 
 //export go_ffi_kem_dk_to_ek
 func go_ffi_kem_dk_to_ek(dk_handle unsafe.Pointer, ek_bytes_out *C.cmem_t) C.int {
 	if dk_handle == nil || ek_bytes_out == nil {
-		return C.int(1)
+		return C.int(C.CBMPC_E_BADARG)
 	}
 
-	kem := GetKEM()
-	if kem == nil {
-		return C.int(1)
+	// Retrieve KEM from thread-local handle set by the caller
+	tlsHandle := C.cbmpc_get_kem_tls()
+	if tlsHandle == nil {
+		return C.int(C.CBMPC_E_NOT_FOUND)
+	}
+	v, ok := lookupHandle(tlsHandle)
+	if !ok {
+		return C.int(C.CBMPC_E_NOT_FOUND)
+	}
+	_, ok = v.(KEM)
+	if !ok {
+		return C.int(C.CBMPC_E_NOT_FOUND)
 	}
 
-	// The dk_handle is an opaque pointer managed by the KEM implementation.
-	// We need to get the KEM to extract the public key from this handle.
-	// Unfortunately, the KEM interface doesn't have a method to do this directly.
-	// The DerivePub method expects skRef (serialized), not the handle.
-	//
-	// For now, we'll return an error since this callback shouldn't be needed
-	// for decryption - it's only needed if the C++ code needs to derive ek from dk.
-	// In our PVE usage, we always pass both ek and dk explicitly.
-	return C.int(1) // Not implemented
+	// Not implemented by design: callers must provide EK explicitly.
+	return C.int(C.CBMPC_E_NOT_SUPPORTED)
 }
