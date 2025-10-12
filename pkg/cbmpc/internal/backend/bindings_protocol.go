@@ -13,9 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
-	"strconv"
-	"strings"
-	"sync"
 	"unsafe"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/kem"
@@ -233,7 +230,8 @@ func ECDSA2PSignWithGlobalAbortBatch(cj unsafe.Pointer, key ECDSA2PKey, sidIn []
 // =====================
 
 // PVEEncrypt is a C binding wrapper for PVE encrypt.
-func PVEEncrypt(ekBytes, label []byte, curveNID int, xBytes []byte) ([]byte, error) {
+// The provided KEM is bound to thread-local storage for the duration of the call.
+func PVEEncrypt(k KEM, ekBytes, label []byte, curveNID int, xBytes []byte) ([]byte, error) {
 	if len(ekBytes) == 0 {
 		return nil, errors.New("empty ek bytes")
 	}
@@ -245,11 +243,10 @@ func PVEEncrypt(ekBytes, label []byte, curveNID int, xBytes []byte) ([]byte, err
 	}
 
 	// Bind the per-call KEM via TLS on the current OS thread
-	kem := GetKEM()
-	if kem == nil {
-		return nil, errors.New("no KEM registered; call SetKEM before PVE operations")
+	if k == nil {
+		return nil, errors.New("no KEM provided")
 	}
-	h := RegisterHandle(kem)
+	h := RegisterHandle(k)
 	runtime.LockOSThread()
 	C.cbmpc_set_kem_tls(h)
 	defer func() {
@@ -272,7 +269,8 @@ func PVEEncrypt(ekBytes, label []byte, curveNID int, xBytes []byte) ([]byte, err
 }
 
 // PVEDecrypt is a C binding wrapper for PVE decrypt.
-func PVEDecrypt(dkHandle unsafe.Pointer, ekBytes, pveCT, label []byte, curveNID int) ([]byte, error) {
+// The provided KEM is bound to thread-local storage for the duration of the call.
+func PVEDecrypt(k KEM, dkHandle unsafe.Pointer, ekBytes, pveCT, label []byte, curveNID int) ([]byte, error) {
 	if dkHandle == nil {
 		return nil, errors.New("nil dk handle")
 	}
@@ -287,11 +285,10 @@ func PVEDecrypt(dkHandle unsafe.Pointer, ekBytes, pveCT, label []byte, curveNID 
 	}
 
 	// Bind the per-call KEM via TLS on the current OS thread
-	kem := GetKEM()
-	if kem == nil {
-		return nil, errors.New("no KEM registered; call SetKEM before PVE operations")
+	if k == nil {
+		return nil, errors.New("no KEM provided")
 	}
-	h := RegisterHandle(kem)
+	h := RegisterHandle(k)
 	runtime.LockOSThread()
 	C.cbmpc_set_kem_tls(h)
 	defer func() {
@@ -353,9 +350,10 @@ func PVEGetQPoint(pveCT []byte) (ECCPoint, error) {
 
 // PVEVerifyWithPoint verifies a PVE ciphertext using an ecc_point_t directly.
 // This is more efficient than PVEVerify as it avoids serialization/deserialization.
+// The provided KEM is bound to thread-local storage for the duration of the call.
 //
 //nolint:gocritic // QPoint follows Go convention for acronym capitalization
-func PVEVerifyWithPoint(ekBytes, pveCT []byte, QPoint ECCPoint, label []byte) error {
+func PVEVerifyWithPoint(k KEM, ekBytes, pveCT []byte, QPoint ECCPoint, label []byte) error {
 	if len(ekBytes) == 0 {
 		return errors.New("empty ek bytes")
 	}
@@ -370,11 +368,10 @@ func PVEVerifyWithPoint(ekBytes, pveCT []byte, QPoint ECCPoint, label []byte) er
 	}
 
 	// Bind the per-call KEM via TLS on the current OS thread
-	kem := GetKEM()
-	if kem == nil {
-		return errors.New("no KEM registered; call SetKEM before PVE operations")
+	if k == nil {
+		return errors.New("no KEM provided")
 	}
-	h := RegisterHandle(kem)
+	h := RegisterHandle(k)
 	runtime.LockOSThread()
 	C.cbmpc_set_kem_tls(h)
 	defer func() {
@@ -402,69 +399,6 @@ func PVEVerifyWithPoint(ekBytes, pveCT []byte, QPoint ECCPoint, label []byte) er
 // KEM is a type alias for kem.KEM.
 // This allows the backend to use the public KEM interface without importing it everywhere.
 type KEM = kem.KEM
-
-// kemRegistry maps goroutine IDs to KEM implementations.
-// This allows concurrent PVE operations with different KEMs.
-var (
-	kemRegistry   = make(map[int64]KEM)
-	kemRegistryMu sync.RWMutex
-)
-
-// getGoroutineID returns the current goroutine ID.
-// This is used to associate KEMs with specific goroutines.
-func getGoroutineID() int64 {
-	var buf [64]byte
-	n := runtime.Stack(buf[:], false)
-	idField := strings.Fields(strings.TrimPrefix(string(buf[:n]), "goroutine "))[0]
-	id, _ := strconv.ParseInt(idField, 10, 64)
-	return id
-}
-
-// setKEMForGoroutine registers a KEM for the current goroutine.
-func setKEMForGoroutine(kem KEM) int64 {
-	gid := getGoroutineID()
-	kemRegistryMu.Lock()
-	kemRegistry[gid] = kem
-	kemRegistryMu.Unlock()
-	return gid
-}
-
-// clearKEMForGoroutine removes the KEM registration for a goroutine.
-func clearKEMForGoroutine(gid int64) {
-	kemRegistryMu.Lock()
-	delete(kemRegistry, gid)
-	kemRegistryMu.Unlock()
-}
-
-// getKEMForGoroutine retrieves the KEM for the current goroutine.
-func getKEMForGoroutine() KEM {
-	gid := getGoroutineID()
-	kemRegistryMu.RLock()
-	kem := kemRegistry[gid]
-	kemRegistryMu.RUnlock()
-	return kem
-}
-
-// SetKEM registers a KEM implementation for the current goroutine.
-// Returns a cleanup function that must be called when the operation completes.
-// This allows concurrent PVE operations with different KEMs.
-//
-// Usage:
-//
-//	cleanup := bindings.SetKEM(kem)
-//	defer cleanup()
-//	// ... perform PVE operations ...
-func SetKEM(kem KEM) func() {
-	gid := setKEMForGoroutine(kem)
-	return func() {
-		clearKEMForGoroutine(gid)
-	}
-}
-
-// GetKEM returns the KEM implementation for the current goroutine.
-func GetKEM() KEM {
-	return getKEMForGoroutine()
-}
 
 //export go_ffi_kem_encap
 func go_ffi_kem_encap(ek_bytes C.cmem_t, rho C.cmem_t, kem_ct_out *C.cmem_t, kem_ss_out *C.cmem_t) C.int {

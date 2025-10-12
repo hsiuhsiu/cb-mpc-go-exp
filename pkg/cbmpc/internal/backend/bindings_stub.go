@@ -11,6 +11,8 @@ import (
 
 // Stub implementations for non-CGO builds or Windows.
 // These allow the package to compile but return ErrNotBuilt when called.
+// Note: Curve, types, and error definitions are in separate files with `!windows` build tags,
+// so they're available for non-CGO builds on Unix platforms.
 
 type transport interface {
 	Send(context.Context, uint32, []byte) error
@@ -95,11 +97,11 @@ func ECDSA2PSignWithGlobalAbortBatch(unsafe.Pointer, ECDSA2PKey, []byte, [][]byt
 	return nil, nil, ErrNotBuilt
 }
 
-func PVEEncrypt([]byte, []byte, int, []byte) ([]byte, error) {
+func PVEEncrypt(KEM, []byte, []byte, int, []byte) ([]byte, error) {
 	return nil, ErrNotBuilt
 }
 
-func PVEDecrypt(unsafe.Pointer, []byte, []byte, []byte, int) ([]byte, error) {
+func PVEDecrypt(KEM, unsafe.Pointer, []byte, []byte, []byte, int) ([]byte, error) {
 	return nil, ErrNotBuilt
 }
 
@@ -142,14 +144,11 @@ func PVEGetQPoint([]byte) (ECCPoint, error) {
 	return nil, ErrNotBuilt
 }
 
-func PVEVerifyWithPoint([]byte, []byte, ECCPoint, []byte) error {
+func PVEVerifyWithPoint(KEM, []byte, []byte, ECCPoint, []byte) error {
 	return ErrNotBuilt
 }
 
-// SetKEM is a stub for setting the KEM for the current goroutine
-func SetKEM(KEM) func() {
-	return func() {}
-}
+// Removed SetKEM in favor of passing KEM directly per call.
 
 func RegisterHandle(any) unsafe.Pointer {
 	return nil
