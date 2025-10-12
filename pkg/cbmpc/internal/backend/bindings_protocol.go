@@ -122,8 +122,11 @@ func ECDSA2PSign(cj unsafe.Pointer, key ECDSA2PKey, sidIn, msg []byte) ([]byte, 
 		return nil, nil, errors.New("empty message")
 	}
 
-	sidMem := goBytesToCmem(sidIn)
-	msgMem := goBytesToCmem(msg)
+	// Copy inputs into C-allocated memory to avoid aliasing Go memory during CGO call
+	sidMem := allocCmem(sidIn)
+	defer freeCmem(sidMem)
+	msgMem := allocCmem(msg)
+	defer freeCmem(msgMem)
 
 	var sidOut, sigOut C.cmem_t
 	rc := C.cbmpc_ecdsa2p_sign((*C.cbmpc_job2p)(cj), sidMem, key, msgMem, &sidOut, &sigOut)
@@ -146,7 +149,9 @@ func ECDSA2PSignBatch(cj unsafe.Pointer, key ECDSA2PKey, sidIn []byte, msgs [][]
 		return nil, nil, errors.New("empty messages")
 	}
 
-	sidMem := goBytesToCmem(sidIn)
+	// Copy session ID and messages into C-allocated memory to avoid aliasing Go memory during CGO call
+	sidMem := allocCmem(sidIn)
+	defer freeCmem(sidMem)
 	msgsMem := goBytesSliceToCmems(msgs)
 	defer freeCmems(msgsMem)
 
@@ -173,8 +178,11 @@ func ECDSA2PSignWithGlobalAbort(cj unsafe.Pointer, key ECDSA2PKey, sidIn, msg []
 		return nil, nil, errors.New("empty message")
 	}
 
-	sidMem := goBytesToCmem(sidIn)
-	msgMem := goBytesToCmem(msg)
+	// Copy inputs into C-allocated memory to avoid aliasing Go memory during CGO call
+	sidMem := allocCmem(sidIn)
+	defer freeCmem(sidMem)
+	msgMem := allocCmem(msg)
+	defer freeCmem(msgMem)
 
 	var sidOut, sigOut C.cmem_t
 	rc := C.cbmpc_ecdsa2p_sign_with_global_abort((*C.cbmpc_job2p)(cj), sidMem, key, msgMem, &sidOut, &sigOut)
@@ -201,7 +209,9 @@ func ECDSA2PSignWithGlobalAbortBatch(cj unsafe.Pointer, key ECDSA2PKey, sidIn []
 		return nil, nil, errors.New("empty messages")
 	}
 
-	sidMem := goBytesToCmem(sidIn)
+	// Copy session ID and messages into C-allocated memory to avoid aliasing Go memory during CGO call
+	sidMem := allocCmem(sidIn)
+	defer freeCmem(sidMem)
 	msgsMem := goBytesSliceToCmems(msgs)
 	defer freeCmems(msgsMem)
 
