@@ -3,6 +3,7 @@
 package rsa
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -21,7 +22,7 @@ import (
 //   - 3072 bits recommended for long-term security (post-2030)
 //   - 4096 bits for high-security applications
 //   - Uses RSA-OAEP with SHA-256 hash function
-//   - Private keys are stored encrypted in memory
+//   - Private keys are held in DER form in memory and zeroized on free
 //
 // This KEM is suitable for production use with PVE encryption.
 type KEM struct {
@@ -190,6 +191,11 @@ func (k *KEM) DerivePub(skRef []byte) ([]byte, error) {
 		return nil, errors.New("not an RSA private key")
 	}
 
+	// Validate key size
+	if privateKey.Size() < 256 { // 2048 bits minimum
+		return nil, fmt.Errorf("private key too small: %d bytes (minimum 256 bytes)", privateKey.Size())
+	}
+
 	// Marshal public key
 	return x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
 }
@@ -265,27 +271,74 @@ func zeroizeBytes(buf []byte) {
 	runtime.KeepAlive(buf)
 }
 
-// deterministicReader is a reader that generates deterministic "random" bytes
-// from a seed. This is used for PVE's deterministic encryption requirement.
+// deterministicReader generates deterministic bytes from a 32-byte seed using
+// HKDF-HMAC-SHA256 (Extract+Expand) with fixed context strings. It is used
+// solely to make RSA-OAEP encryption deterministic for PVE; it is not a
+// general-purpose RNG. The Read method always fills the provided buffer.
 type deterministicReader struct {
+	// seed is the 32-byte deterministic seed (rho)
 	seed []byte
-	pos  int
+	// prk is the HKDF-Extract output (initialized on first use)
+	prk []byte
+	// lastBlock stores T(i) from HKDF-Expand
+	lastBlock []byte
+	// counter is the HKDF-Expand block counter (1..255)
+	counter byte
+	// cache holds leftover bytes from the last generated block
+	cache []byte
+	// init indicates whether prk has been derived
+	init bool
 }
 
-func (r *deterministicReader) Read(p []byte) (n int, err error) {
-	// Hash the seed with position to generate bytes
-	for i := range p {
-		if r.pos%32 == 0 {
-			// Generate new block of random bytes by hashing seed || position
-			h := sha256.New()
-			h.Write(r.seed)
-			h.Write([]byte{byte(r.pos / 32)})
-			block := h.Sum(nil)
-			copy(p[i:], block)
-			r.pos += len(block)
-			return len(p), nil
-		}
-		r.pos++
+func (r *deterministicReader) Read(p []byte) (int, error) {
+	// One-time initialization: HKDF-Extract with fixed salt and seed as IKM
+	if !r.init {
+		// Fixed context-specific salt; not secret, binds generator to purpose
+		const salt = "cbmpc-pve-rsa-oaep-hkdf"
+		mac := hmac.New(sha256.New, []byte(salt))
+		mac.Write(r.seed)
+		r.prk = mac.Sum(nil) // 32 bytes for SHA-256
+		r.lastBlock = nil
+		r.counter = 0
+		r.cache = nil
+		r.init = true
 	}
-	return len(p), nil
+
+	out := 0
+
+	// First, drain any cached leftover bytes
+	if len(r.cache) > 0 {
+		c := copy(p[out:], r.cache)
+		out += c
+		r.cache = r.cache[c:]
+	}
+
+	// Generate blocks until p is fully filled
+	for out < len(p) {
+		// HKDF-Expand step: T(i) = HMAC(PRK, T(i-1) || info || i)
+		// Use fixed info to scope usage
+		const info = "cbmpc-pve-rsa-oaep"
+		h := hmac.New(sha256.New, r.prk)
+		if len(r.lastBlock) > 0 {
+			h.Write(r.lastBlock)
+		}
+		h.Write([]byte(info))
+		// Increment counter (wrap at 255 to 1; more than 255 blocks is unrealistic here)
+		if r.counter == 255 {
+			r.counter = 0
+		}
+		r.counter++
+		h.Write([]byte{r.counter})
+		block := h.Sum(nil) // 32-byte block
+		r.lastBlock = block
+
+		// Copy into output; keep leftovers in cache
+		n := copy(p[out:], block)
+		out += n
+		if n < len(block) {
+			r.cache = block[n:]
+		}
+	}
+
+	return out, nil
 }
