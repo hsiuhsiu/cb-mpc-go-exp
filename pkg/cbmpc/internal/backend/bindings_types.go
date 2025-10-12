@@ -174,6 +174,16 @@ func allocCmem(data []byte) C.cmem_t {
 	return cmem
 }
 
+// freeCmem securely zeros and frees a C-allocated cmem_t buffer.
+// Only use this on cmem values allocated by allocCmem. Do not call this
+// on cmem values that point into Go memory (e.g., produced by goBytesToCmem).
+func freeCmem(cmem C.cmem_t) {
+	if cmem.data != nil && cmem.size > 0 {
+		C.memset(unsafe.Pointer(cmem.data), 0, C.size_t(cmem.size))
+		C.free(unsafe.Pointer(cmem.data))
+	}
+}
+
 // =====================
 // ECDSA 2P Key bridging
 // =====================
