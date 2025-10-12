@@ -19,6 +19,7 @@ func main() {
 		configPath = flag.String("config", "examples/agree-random-mp/cluster.json", "path to cluster configuration")
 		selfName   = flag.String("self", "", "name of this party in the cluster configuration")
 		bitlen     = flag.Int("bitlen", 256, "bit length for agree-random")
+		timeout    = flag.Duration("timeout", 30*time.Second, "overall protocol timeout")
 	)
 	flag.Parse()
 
@@ -29,6 +30,9 @@ func main() {
 	cfg, err := common.LoadConfig(*configPath)
 	if err != nil {
 		log.Fatalf("load config: %v", err)
+	}
+	if err := common.ValidateConfig(cfg); err != nil {
+		log.Fatalf("invalid config: %v", err)
 	}
 
 	names := make([]string, len(cfg.Parties))
@@ -67,7 +71,7 @@ func main() {
 	}
 	defer transport.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
 
 	if len(names) == 2 {

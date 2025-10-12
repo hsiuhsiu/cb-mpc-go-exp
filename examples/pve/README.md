@@ -97,15 +97,15 @@ This example uses 3072-bit RSA keys for long-term security:
 
 The example demonstrates proper cleanup:
 - Private keys are zeroized after use
-- Sensitive scalar values are zeroized
-- Use `cbmpc.ZeroizeBytes()` to clear sensitive data
+- Scalars implement `Free()` which zeroizes their internal memory; prefer calling `x.Free()` instead of manually touching `x.Bytes`.
+- For raw byte slices (e.g., serialized keys), use `cbmpc.ZeroizeBytes()` to clear sensitive data
 
 ### Deterministic Encryption
 
-PVE uses deterministic encryption (same plaintext + key = same ciphertext).
-This is required for public verifiability but means:
-- Don't encrypt the same value multiple times with the same key/label
-- Use unique labels for different encryption contexts
+PVE uses deterministic encryption (same plaintext + key + label = same ciphertext).
+This is required for public verifiability but has implications:
+- **Uniqueness**: Use a unique label per context (e.g., transaction ID, session ID).
+- **Avoid repeats**: Do not encrypt the same value repeatedly with the same key/label.
 
 ## Integration with Custom KEMs
 
