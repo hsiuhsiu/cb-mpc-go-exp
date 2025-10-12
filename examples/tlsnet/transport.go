@@ -88,7 +88,7 @@ func New(cfg Config) (*Transport, error) {
 		Certificates: []tls.Certificate{cfg.Certificate},
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		ClientCAs:    cfg.RootCAs,
-		MinVersion:   tls.VersionTLS12,
+		MinVersion:   tls.VersionTLS13,
 	}
 
 	ln, err := tls.Listen("tcp", cfg.Addresses[cfg.Self], serverTLS)
@@ -146,6 +146,18 @@ func New(cfg Config) (*Transport, error) {
 				errCh <- closeWithContextErr(tlsConn, fmt.Errorf("tlsnet: unexpected peer id %d", peerID))
 				return
 			}
+			// Bind claimed peer ID to certificate identity.
+			state := tlsConn.ConnectionState()
+			if len(state.PeerCertificates) == 0 {
+				errCh <- closeWithContextErr(tlsConn, errors.New("tlsnet: missing peer certificate"))
+				return
+			}
+			leaf := state.PeerCertificates[0]
+			expectedName := cfg.Names[peerID]
+			if !certHasName(leaf, expectedName) {
+				errCh <- closeWithContextErr(tlsConn, fmt.Errorf("tlsnet: peer certificate identity mismatch: expected %q", expectedName))
+				return
+			}
 			if err := register(cbmpc.RoleID(peerID), tlsConn); err != nil {
 				errCh <- closeWithContextErr(tlsConn, err)
 				return
@@ -156,7 +168,7 @@ func New(cfg Config) (*Transport, error) {
 	clientTLSBase := &tls.Config{
 		Certificates: []tls.Certificate{cfg.Certificate},
 		RootCAs:      cfg.RootCAs,
-		MinVersion:   tls.VersionTLS12,
+		MinVersion:   tls.VersionTLS13,
 	}
 
 	for peer := range cfg.Names {
@@ -219,6 +231,20 @@ func New(cfg Config) (*Transport, error) {
 		cancel()
 		return nil, errors.New("tlsnet: timeout waiting for peer connections")
 	}
+}
+
+// certHasName returns true if the certificate identity includes the provided name
+// either as Subject CommonName or as a DNS SAN entry.
+func certHasName(cert *x509.Certificate, name string) bool {
+	if cert.Subject.CommonName == name {
+		return true
+	}
+	for _, dns := range cert.DNSNames {
+		if dns == name {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *Transport) Send(ctx context.Context, to cbmpc.RoleID, msg []byte) error {

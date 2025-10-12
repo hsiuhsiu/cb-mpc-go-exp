@@ -15,13 +15,42 @@ import (
 	"time"
 )
 
+// CertOptions controls certificate generation.
+type CertOptions struct {
+	// KeyBits is the RSA key size used for both CA and party certificates.
+	// If zero or negative, 3072 is used.
+	KeyBits int
+
+	// ValidityDays is the certificate validity period. If zero or negative,
+	// 365 days is used.
+	ValidityDays int
+
+	// IncludeLocalhost controls whether localhost SANs (localhost, 127.0.0.1)
+	// are added to party certificates. Set to true for local demos.
+	IncludeLocalhost bool
+}
+
+// defaults fills unset fields with secure defaults.
+func (o *CertOptions) defaults() {
+	if o.KeyBits <= 0 {
+		o.KeyBits = 3072
+	}
+	if o.ValidityDays <= 0 {
+		o.ValidityDays = 365
+	}
+	// Note: IncludeLocalhost defaults to false (zero value).
+	// For local demos, explicitly set it to true when calling GenerateCertificates.
+}
+
 // GenerateCertificates writes a demo CA and per-party certificates to outputDir.
-// The certificates support both server and client authentication and include
-// localhost/IP SAN entries for convenience.
-func GenerateCertificates(names []string, outputDir string) error {
+// The certificates support both server and client authentication. When
+// IncludeLocalhost is enabled, localhost/IP SAN entries are included for local runs.
+func GenerateCertificates(names []string, outputDir string, opts CertOptions) error {
 	if len(names) < 2 {
 		return fmt.Errorf("tlsnet: provide at least two party names (got %v)", names)
 	}
+
+	opts.defaults()
 
 	absDir, err := securePath(outputDir)
 	if err != nil {
@@ -32,7 +61,7 @@ func GenerateCertificates(names []string, outputDir string) error {
 	}
 	outputDir = absDir
 
-	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	caKey, err := rsa.GenerateKey(rand.Reader, opts.KeyBits)
 	if err != nil {
 		return fmt.Errorf("generate CA key: %w", err)
 	}
@@ -40,7 +69,7 @@ func GenerateCertificates(names []string, outputDir string) error {
 		SerialNumber:          big.NewInt(1),
 		Subject:               pkix.Name{CommonName: "cb-mpc-go-demo-ca"},
 		NotBefore:             time.Now().Add(-time.Hour),
-		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		NotAfter:              time.Now().Add(time.Duration(opts.ValidityDays) * 24 * time.Hour),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
 		BasicConstraintsValid: true,
 		IsCA:                  true,
@@ -63,7 +92,7 @@ func GenerateCertificates(names []string, outputDir string) error {
 	}
 
 	for i, name := range names {
-		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		key, err := rsa.GenerateKey(rand.Reader, opts.KeyBits)
 		if err != nil {
 			return fmt.Errorf("generate key for %s: %w", name, err)
 		}
@@ -71,11 +100,14 @@ func GenerateCertificates(names []string, outputDir string) error {
 			SerialNumber: big.NewInt(int64(i + 2)),
 			Subject:      pkix.Name{CommonName: name},
 			NotBefore:    time.Now().Add(-time.Hour),
-			NotAfter:     time.Now().Add(365 * 24 * time.Hour),
+			NotAfter:     time.Now().Add(time.Duration(opts.ValidityDays) * 24 * time.Hour),
 			KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 			ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
-			DNSNames:     []string{name, "localhost"},
-			IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
+			DNSNames:     []string{name},
+		}
+		if opts.IncludeLocalhost {
+			tmpl.DNSNames = append(tmpl.DNSNames, "localhost")
+			tmpl.IPAddresses = append(tmpl.IPAddresses, net.ParseIP("127.0.0.1"))
 		}
 		der, err := x509.CreateCertificate(rand.Reader, tmpl, caCert, &key.PublicKey, caKey)
 		if err != nil {
