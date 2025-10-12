@@ -13,7 +13,7 @@
 // # Build Requirements
 //
 // This package requires CGO and is not available on Windows. On non-CGO builds
-// or Windows, stub implementations return ErrNotBuilt.
+// or Windows, functions that require the native library return ErrNotBuilt.
 //
 // # Protocol Documentation
 //
@@ -45,8 +45,12 @@
 //
 // # Subpackages
 //
-// Protocol implementations are organized into subpackages:
+// Protocol implementations and support packages:
 //   - agreerandom - Agree Random protocols
 //   - ecdsa2p - 2-party ECDSA protocols
 //   - pve - Publicly Verifiable Encryption
+//   - curve - Public curve enum and utilities
+//   - kem - KEM abstraction for PVE
+//   - logging - Minimal logging facade (slog adapter)
+//   - mocknet - In-memory transport for tests and examples
 package cbmpc
