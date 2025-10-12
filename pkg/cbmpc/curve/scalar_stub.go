@@ -5,6 +5,7 @@ package curve
 import (
 	"errors"
 	"math/big"
+	"runtime"
 )
 
 // Scalar stub implementation for non-CGO builds.
@@ -32,5 +33,51 @@ func (s *Scalar) BigInt() *big.Int {
 	return big.NewInt(0)
 }
 
-// Free is a no-op for compatibility.
-func (s *Scalar) Free() {}
+// CloneBytes returns a defensive copy of the underlying bytes.
+func (s *Scalar) CloneBytes() []byte {
+	if s == nil || len(s.Bytes) == 0 {
+		return nil
+	}
+	out := make([]byte, len(s.Bytes))
+	copy(out, s.Bytes)
+	return out
+}
+
+// BytesPadded returns a left-padded big-endian fixed-size representation of the scalar
+// for the provided curve. The length is curve.MaxHashSize(). If the scalar's
+// normalized byte representation exceeds the target length, the full bytes are
+// returned without truncation.
+func (s *Scalar) BytesPadded(c Curve) []byte {
+	if s == nil {
+		return nil
+	}
+	target := c.MaxHashSize()
+	if target <= 0 {
+		return s.CloneBytes()
+	}
+	if len(s.Bytes) >= target {
+		return s.CloneBytes()
+	}
+	out := make([]byte, target)
+	copy(out[target-len(s.Bytes):], s.Bytes)
+	return out
+}
+
+// zeroizeBytes overwrites the provided slice with zeros and prevents compiler
+// dead store elimination using runtime.KeepAlive.
+func zeroizeBytes(buf []byte) {
+	for i := range buf {
+		buf[i] = 0
+	}
+	runtime.KeepAlive(buf)
+}
+
+// Free zeroizes the scalar bytes and releases references.
+func (s *Scalar) Free() {
+	if s == nil || len(s.Bytes) == 0 {
+		return
+	}
+	zeroizeBytes(s.Bytes)
+	s.Bytes = nil
+	runtime.SetFinalizer(s, nil)
+}

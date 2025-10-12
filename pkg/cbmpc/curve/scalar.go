@@ -5,6 +5,7 @@ package curve
 import (
 	"errors"
 	"math/big"
+	"runtime"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/backend"
 )
@@ -22,6 +23,16 @@ import (
 // If you need to modify bytes, create a new Scalar with the modified bytes.
 type Scalar struct {
 	Bytes []byte
+}
+
+// zeroizeBytes overwrites the provided slice with zeros and prevents compiler
+// dead store elimination using runtime.KeepAlive.
+// Local duplicate to avoid import cycles with the top-level cbmpc package.
+func zeroizeBytes(buf []byte) {
+	for i := range buf {
+		buf[i] = 0
+	}
+	runtime.KeepAlive(buf)
 }
 
 // NewScalarFromBytes creates a Scalar from bytes (big-endian).
@@ -50,7 +61,11 @@ func NewScalarFromBytes(bytes []byte) (*Scalar, error) {
 		return nil, err
 	}
 
-	return &Scalar{Bytes: normalizedBytes}, nil
+	s := &Scalar{Bytes: normalizedBytes}
+
+	// Ensure sensitive memory is cleared if the Scalar becomes unreachable
+	runtime.SetFinalizer(s, (*Scalar).Free)
+	return s, nil
 }
 
 // NewScalarFromString creates a Scalar from a decimal string.
@@ -72,7 +87,10 @@ func NewScalarFromString(str string) (*Scalar, error) {
 		return nil, err
 	}
 
-	return &Scalar{Bytes: bytes}, nil
+	s := &Scalar{Bytes: bytes}
+	// Ensure sensitive memory is cleared if the Scalar becomes unreachable
+	runtime.SetFinalizer(s, (*Scalar).Free)
+	return s, nil
 }
 
 // String returns the Scalar as a decimal string.
@@ -99,8 +117,45 @@ func (s *Scalar) BigInt() *big.Int {
 	return new(big.Int).SetBytes(s.Bytes)
 }
 
-// Free is a no-op for compatibility with the old pointer-based implementation.
-// Since Scalar now uses []byte, no manual cleanup is needed.
+// CloneBytes returns a defensive copy of the underlying bytes.
+func (s *Scalar) CloneBytes() []byte {
+	if s == nil || len(s.Bytes) == 0 {
+		return nil
+	}
+	out := make([]byte, len(s.Bytes))
+	copy(out, s.Bytes)
+	return out
+}
+
+// BytesPadded returns a left-padded big-endian fixed-size representation of the scalar
+// for the provided curve. The length is curve.MaxHashSize(). If the scalar's
+// normalized byte representation exceeds the target length, the full bytes are
+// returned without truncation.
+func (s *Scalar) BytesPadded(c Curve) []byte {
+	if s == nil {
+		return nil
+	}
+	target := c.MaxHashSize()
+	if target <= 0 {
+		// Unknown curve; return a clone of the existing bytes
+		return s.CloneBytes()
+	}
+	if len(s.Bytes) >= target {
+		return s.CloneBytes()
+	}
+	out := make([]byte, target)
+	copy(out[target-len(s.Bytes):], s.Bytes)
+	return out
+}
+
+// Free zeroizes the scalar bytes and releases references.
 func (s *Scalar) Free() {
-	// No-op: bytes are managed by Go's garbage collector
+	if s == nil || len(s.Bytes) == 0 {
+		return
+	}
+	zeroizeBytes(s.Bytes)
+	// Drop reference to allow GC to reclaim the backing array
+	s.Bytes = nil
+	// Remove finalizer since we've freed
+	runtime.SetFinalizer(s, nil)
 }

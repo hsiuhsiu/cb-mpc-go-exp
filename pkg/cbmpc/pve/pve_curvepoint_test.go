@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/curve"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/testkem"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/pve"
@@ -39,7 +38,7 @@ func TestPVEWithCurvePoint(t *testing.T) {
 	defer kem.FreePrivateKeyHandle(dkHandle)
 
 	// Test parameters
-	crv := cbmpc.CurveP256
+	crv := curve.P256
 	label := []byte("test-curvepoint")
 	x, err := curve.NewScalarFromString("98765432109876543210")
 	if err != nil {
@@ -116,7 +115,7 @@ func TestCurvePointRoundTrip(t *testing.T) {
 	encryptResult, _ := pveInstance.Encrypt(ctx, &pve.EncryptParams{
 		EK:    ek,
 		Label: []byte("test"),
-		Curve: cbmpc.CurveSecp256k1,
+		Curve: curve.Secp256k1,
 		X:     x,
 	})
 
@@ -128,8 +127,8 @@ func TestCurvePointRoundTrip(t *testing.T) {
 	defer Q.Free()
 
 	// Verify curve matches
-	if Q.Curve() != cbmpc.CurveSecp256k1 {
-		t.Fatalf("Curve mismatch: got %s, want %s", Q.Curve(), cbmpc.CurveSecp256k1)
+	if Q.Curve() != curve.Secp256k1 {
+		t.Fatalf("Curve mismatch: got %s, want %s", Q.Curve(), curve.Secp256k1)
 	}
 
 	// Serialize to bytes
@@ -139,15 +138,15 @@ func TestCurvePointRoundTrip(t *testing.T) {
 	}
 
 	// Create CurvePoint from bytes
-	Q2, err := cbmpc.NewCurvePointFromBytes(cbmpc.CurveSecp256k1, QBytes)
+	Q2, err := curve.NewPointFromBytes(curve.Secp256k1, QBytes)
 	if err != nil {
 		t.Fatalf("Failed to create CurvePoint from bytes: %v", err)
 	}
 	defer Q2.Free()
 
 	// Verify curve matches
-	if Q2.Curve() != cbmpc.CurveSecp256k1 {
-		t.Fatalf("Q2 curve mismatch: got %s, want %s", Q2.Curve(), cbmpc.CurveSecp256k1)
+	if Q2.Curve() != curve.Secp256k1 {
+		t.Fatalf("Q2 curve mismatch: got %s, want %s", Q2.Curve(), curve.Secp256k1)
 	}
 
 	// Serialize back to bytes

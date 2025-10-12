@@ -98,11 +98,11 @@ func (k *Key) PublicKey() ([]byte, error) {
 // Curve returns the elliptic curve used by this key.
 func (k *Key) Curve() (cbmpc.Curve, error) {
 	if k == nil || k.ckey == nil {
-		return cbmpc.Unknown, errors.New("nil or closed key")
+		return cbmpc.CurveUnknown, errors.New("nil or closed key")
 	}
 	curve, err := backend.ECDSA2PKeyGetCurve(k.ckey)
 	if err != nil {
-		return cbmpc.Unknown, cbmpc.RemapError(err)
+		return cbmpc.CurveUnknown, cbmpc.RemapError(err)
 	}
 	return cbmpc.Curve(curve), nil
 }
