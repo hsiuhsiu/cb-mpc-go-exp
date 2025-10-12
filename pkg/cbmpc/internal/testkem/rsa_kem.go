@@ -2,7 +2,7 @@
 package testkem
 
 import (
-	"bytes"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -169,48 +169,62 @@ func (k *ToyRSAKEM) FreePrivateKeyHandle(handle any) {
 	// This method is kept for API compatibility with existing tests
 }
 
-// deterministicReader provides a deterministic random stream from a seed.
-// It extends the seed by repeatedly hashing it.
+// deterministicReader provides a deterministic random stream from a seed using
+// HKDF-HMAC-SHA256 (Extract+Expand) with fixed context strings.
 type deterministicReader struct {
-	buffer  *bytes.Reader
-	seed    []byte
-	counter int
+	seed      []byte
+	prk       []byte
+	lastBlock []byte
+	counter   byte
+	cache     []byte
+	init      bool
 }
 
 // newDeterministicReader creates a deterministic reader from a seed.
 func newDeterministicReader(seed []byte) io.Reader {
-	// Generate initial buffer by hashing seed multiple times
-	var buf bytes.Buffer
-	for i := 0; i < 32; i++ { // Generate enough bytes for RSA-OAEP
-		h := sha256.New()
-		h.Write(seed)
-		h.Write([]byte{byte(i)})
-		buf.Write(h.Sum(nil))
-	}
-	return &deterministicReader{
-		buffer:  bytes.NewReader(buf.Bytes()),
-		seed:    seed,
-		counter: 32,
-	}
+	return &deterministicReader{seed: seed}
 }
 
-func (d *deterministicReader) Read(p []byte) (n int, err error) {
-	n, err = d.buffer.Read(p)
-	if err == io.EOF && n < len(p) {
-		// Extend buffer by hashing more
-		var buf bytes.Buffer
-		for i := 0; i < 32; i++ {
-			h := sha256.New()
-			h.Write(d.seed)
-			h.Write([]byte{byte(d.counter + i)})
-			buf.Write(h.Sum(nil))
-		}
-		d.counter += 32
-		d.buffer = bytes.NewReader(buf.Bytes())
-
-		// Read remaining bytes
-		n2, err2 := d.buffer.Read(p[n:])
-		return n + n2, err2
+func (d *deterministicReader) Read(p []byte) (int, error) {
+	if !d.init {
+		const salt = "cbmpc-pve-rsa-oaep-hkdf"
+		mac := hmac.New(sha256.New, []byte(salt))
+		mac.Write(d.seed)
+		d.prk = mac.Sum(nil)
+		d.lastBlock = nil
+		d.counter = 0
+		d.cache = nil
+		d.init = true
 	}
-	return n, err
+
+	out := 0
+	if len(d.cache) > 0 {
+		c := copy(p[out:], d.cache)
+		out += c
+		d.cache = d.cache[c:]
+	}
+
+	for out < len(p) {
+		const info = "cbmpc-pve-rsa-oaep"
+		h := hmac.New(sha256.New, d.prk)
+		if len(d.lastBlock) > 0 {
+			h.Write(d.lastBlock)
+		}
+		h.Write([]byte(info))
+		if d.counter == 255 {
+			d.counter = 0
+		}
+		d.counter++
+		h.Write([]byte{d.counter})
+		block := h.Sum(nil)
+		d.lastBlock = block
+
+		n := copy(p[out:], block)
+		out += n
+		if n < len(block) {
+			d.cache = block[n:]
+		}
+	}
+
+	return out, nil
 }

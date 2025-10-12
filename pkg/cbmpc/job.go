@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"sync"
 	"unsafe"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/backend"
@@ -18,15 +19,17 @@ var (
 )
 
 type Job2P struct {
-	cptr   unsafe.Pointer
-	hptr   uintptr
-	cancel context.CancelFunc
+	cptr      unsafe.Pointer
+	hptr      uintptr
+	cancel    context.CancelFunc
+	closeOnce sync.Once
 }
 
 type JobMP struct {
-	cptr   unsafe.Pointer
-	hptr   uintptr
-	cancel context.CancelFunc
+	cptr      unsafe.Pointer
+	hptr      uintptr
+	cancel    context.CancelFunc
+	closeOnce sync.Once
 }
 
 // transportAdapter bridges the public RoleID-based Transport interface with
@@ -104,18 +107,16 @@ func (j *Job2P) Close() error {
 	if j == nil {
 		return nil
 	}
-	if j.cptr == nil && j.hptr == 0 {
-		return nil
-	}
-
-	runtime.SetFinalizer(j, nil)
-	if j.cancel != nil {
-		j.cancel()
-	}
-	backend.FreeJob2P(j.cptr, j.hptr)
-	j.cptr = nil
-	j.hptr = 0
-	j.cancel = nil
+	j.closeOnce.Do(func() {
+		runtime.SetFinalizer(j, nil)
+		if j.cancel != nil {
+			j.cancel()
+		}
+		backend.FreeJob2P(j.cptr, j.hptr)
+		j.cptr = nil
+		j.hptr = 0
+		j.cancel = nil
+	})
 	return nil
 }
 
@@ -170,18 +171,16 @@ func (j *JobMP) Close() error {
 	if j == nil {
 		return nil
 	}
-	if j.cptr == nil && j.hptr == 0 {
-		return nil
-	}
-
-	runtime.SetFinalizer(j, nil)
-	if j.cancel != nil {
-		j.cancel()
-	}
-	backend.FreeJobMP(j.cptr, j.hptr)
-	j.cptr = nil
-	j.hptr = 0
-	j.cancel = nil
+	j.closeOnce.Do(func() {
+		runtime.SetFinalizer(j, nil)
+		if j.cancel != nil {
+			j.cancel()
+		}
+		backend.FreeJobMP(j.cptr, j.hptr)
+		j.cptr = nil
+		j.hptr = 0
+		j.cancel = nil
+	})
 	return nil
 }
 

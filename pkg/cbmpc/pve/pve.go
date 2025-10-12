@@ -1,3 +1,5 @@
+//go:build cgo && !windows
+
 package pve
 
 import (
@@ -84,19 +86,9 @@ func (pve *PVE) Encrypt(_ context.Context, params *EncryptParams) (*EncryptResul
 	if params == nil {
 		return nil, errors.New("nil params")
 	}
-	if len(params.EK) == 0 {
-		return nil, errors.New("empty encryption key")
-	}
-	if len(params.Label) == 0 {
-		return nil, errors.New("empty label")
-	}
 	if params.X == nil {
 		return nil, errors.New("nil scalar")
 	}
-
-	// Set the KEM for this operation (goroutine-local)
-	cleanup := backend.SetKEM(pve.kem)
-	defer cleanup()
 
 	nid, err := backend.CurveToNID(backend.Curve(params.Curve))
 	if err != nil {
@@ -104,7 +96,7 @@ func (pve *PVE) Encrypt(_ context.Context, params *EncryptParams) (*EncryptResul
 	}
 
 	// Use X.Bytes directly
-	ctBytes, err := backend.PVEEncrypt(params.EK, params.Label, nid, params.X.Bytes)
+	ctBytes, err := backend.PVEEncrypt(pve.kem, params.EK, params.Label, nid, params.X.Bytes)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -138,24 +130,11 @@ func (pve *PVE) Verify(_ context.Context, params *VerifyParams) error {
 	if params == nil {
 		return errors.New("nil params")
 	}
-	if len(params.EK) == 0 {
-		return errors.New("empty encryption key")
-	}
-	if len(params.Ciphertext) == 0 {
-		return errors.New("empty ciphertext")
-	}
 	if params.Q == nil {
 		return errors.New("nil Q")
 	}
-	if len(params.Label) == 0 {
-		return errors.New("empty label")
-	}
 
-	// Set the KEM for this operation (goroutine-local)
-	cleanup := backend.SetKEM(pve.kem)
-	defer cleanup()
-
-	err := backend.PVEVerifyWithPoint(params.EK, params.Ciphertext, params.Q.CPtr(), params.Label)
+	err := backend.PVEVerifyWithPoint(pve.kem, params.EK, params.Ciphertext, params.Q.CPtr(), params.Label)
 	if err != nil {
 		return cbmpc.RemapError(err)
 	}
@@ -201,19 +180,6 @@ func (pve *PVE) Decrypt(_ context.Context, params *DecryptParams) (*DecryptResul
 	if params.DK == nil {
 		return nil, errors.New("nil decryption key")
 	}
-	if len(params.EK) == 0 {
-		return nil, errors.New("empty encryption key")
-	}
-	if len(params.Ciphertext) == 0 {
-		return nil, errors.New("empty ciphertext")
-	}
-	if len(params.Label) == 0 {
-		return nil, errors.New("empty label")
-	}
-
-	// Set the KEM for this operation (goroutine-local)
-	cleanup := backend.SetKEM(pve.kem)
-	defer cleanup()
 
 	nid, err := backend.CurveToNID(backend.Curve(params.Curve))
 	if err != nil {
@@ -224,7 +190,7 @@ func (pve *PVE) Decrypt(_ context.Context, params *DecryptParams) (*DecryptResul
 	dkHandle := backend.RegisterHandle(params.DK)
 	defer backend.FreeHandle(dkHandle)
 
-	xBytes, err := backend.PVEDecrypt(dkHandle, params.EK, params.Ciphertext, params.Label, nid)
+	xBytes, err := backend.PVEDecrypt(pve.kem, dkHandle, params.EK, params.Ciphertext, params.Label, nid)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -242,3 +208,8 @@ func (pve *PVE) Decrypt(_ context.Context, params *DecryptParams) (*DecryptResul
 
 	return &DecryptResult{X: x}, nil
 }
+
+// Security note: Ciphertext slices are passed to C using pointers into Go memory for the
+// duration of the call. Callers must treat Ciphertext as immutable while an API call is in
+// progress to avoid time-of-check/time-of-use races. Do not mutate or reuse backing arrays
+// concurrently with Encrypt/Verify/Decrypt/Q/Label operations.
