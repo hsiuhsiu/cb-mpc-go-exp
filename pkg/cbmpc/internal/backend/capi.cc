@@ -667,4 +667,22 @@ int cbmpc_pve_verify_with_point(cmem_t ek_bytes, cmem_t pve_ct, cbmpc_ecc_point 
   return rv;
 }
 
+// =====================
+// Thread-local KEM handle for FFI policy context
+// =====================
+
+static thread_local const void* g_cbmpc_kem_tls = nullptr;
+
+void cbmpc_set_kem_tls(const void *handle) {
+  g_cbmpc_kem_tls = handle;
+}
+
+void cbmpc_clear_kem_tls(void) {
+  g_cbmpc_kem_tls = nullptr;
+}
+
+const void *cbmpc_get_kem_tls(void) {
+  return g_cbmpc_kem_tls;
+}
+
 }  // extern "C"

@@ -112,6 +112,18 @@ func goBytesSliceToCmems(slices [][]byte) C.cmems_t {
 	// Allocate sizes array
 	sizes := (*C.int)(C.malloc(C.size_t(len(slices)) * C.size_t(unsafe.Sizeof(C.int(0)))))
 
+	// OOM check: if allocation failed for sizes or for data (when totalSize > 0),
+	// return an empty cmems to signal error to the C side
+	if sizes == nil || (totalSize > 0 && data == nil) {
+		if data != nil {
+			C.free(unsafe.Pointer(data))
+		}
+		cmems.data = nil
+		cmems.sizes = nil
+		cmems.count = 0
+		return cmems
+	}
+
 	// Copy data and record sizes
 	offset := 0
 	for i, slice := range slices {
