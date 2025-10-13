@@ -36,7 +36,7 @@ import (
 //   - 4096 bits: High security applications
 //
 // Security guarantees:
-//   - Private keys stored in PKCS#8 DER format and zeroized on free
+//   - Private key material held in PKCS#8 DER format and zeroized on free
 //   - Deterministic seed (rho) must be fresh and unpredictable per encryption
 //   - OAEP label binds ciphertext to specific public key (prevents cross-key attacks)
 //   - Seed derivation: SHA-256(rho || SHA-256(ek)) for domain separation
@@ -63,7 +63,7 @@ func New(keySize int) (*KEM, error) {
 }
 
 // privateKeyHandle represents a handle to an RSA private key.
-// The private key is stored in DER format for security.
+// Private key material is held in DER form and zeroized on free.
 type privateKeyHandle struct {
 	mu        sync.RWMutex
 	keyDER    []byte // PKCS#8 DER encoding
@@ -247,7 +247,7 @@ func (k *KEM) DerivePub(skRef []byte) ([]byte, error) {
 }
 
 // NewPrivateKeyHandle creates a handle to a private key.
-// The private key is stored in DER format for security.
+// Private key material is held in DER form and zeroized on free.
 //
 // Parameters:
 //   - skRef: Private key reference in PKCS#8 DER format
