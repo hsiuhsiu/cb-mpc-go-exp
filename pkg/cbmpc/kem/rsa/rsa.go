@@ -14,22 +14,40 @@ import (
 	"sync"
 )
 
-// KEM is a production-grade RSA-based Key Encapsulation Mechanism.
-// It uses RSA-OAEP with SHA-256 for secure key encapsulation.
+// KEM is a DETERMINISTIC RSA-OAEP implementation for PVE (Publicly Verifiable Encryption).
 //
-// Security considerations:
-//   - Minimum recommended key size is 2048 bits
-//   - 3072 bits recommended for long-term security (post-2030)
-//   - 4096 bits for high-security applications
-//   - Uses RSA-OAEP with SHA-256 hash function
-//   - Private keys are held in DER form in memory and zeroized on free
+// SECURITY WARNING: This is NOT a general-purpose randomized KEM!
 //
-// This KEM is suitable for production use with PVE encryption.
+// This implementation provides DETERMINISTIC RSA-OAEP encryption specifically designed
+// for PVE. It uses a deterministic seed (rho) instead of random bytes, which makes it
+// UNSUITABLE for general public-key encryption but REQUIRED for PVE's verifiability.
+//
+// Key security properties:
+//   - DETERMINISTIC: Same (ek, rho) always produces the same ciphertext
+//   - DOMAIN-SEPARATED: Different keys with same rho produce different ciphertexts
+//   - KEY-BOUND: OAEP label includes SHA-256 hash of the public key
+//   - Uses RSA-OAEP with SHA-256 for both encryption and label generation
+//
+// DO NOT use this for general-purpose encryption! Only use within PVE protocol context.
+//
+// Recommended key sizes:
+//   - 2048 bits: Minimum for current use
+//   - 3072 bits: Recommended for long-term security (post-2030)
+//   - 4096 bits: High security applications
+//
+// Security guarantees:
+//   - Private keys stored in PKCS#8 DER format and zeroized on free
+//   - Deterministic seed (rho) must be fresh and unpredictable per encryption
+//   - OAEP label binds ciphertext to specific public key (prevents cross-key attacks)
+//   - Seed derivation: SHA-256(rho || SHA-256(ek)) for domain separation
 type KEM struct {
 	keySize int
 }
 
-// New creates a new production-grade RSA KEM.
+// New creates a new DETERMINISTIC RSA-OAEP KEM for PVE.
+//
+// WARNING: This creates a DETERMINISTIC KEM for PVE only!
+//
 // Recommended key sizes:
 //   - 2048: Minimum for current use
 //   - 3072: Recommended for long-term security

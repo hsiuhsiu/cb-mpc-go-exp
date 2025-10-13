@@ -1,6 +1,6 @@
 # PVE (Publicly Verifiable Encryption) Example
 
-This example demonstrates how to use Publicly Verifiable Encryption (PVE) with a production-grade RSA KEM.
+This example demonstrates how to use Publicly Verifiable Encryption (PVE) with a deterministic RSA KEM.
 
 ## What is PVE?
 
@@ -20,7 +20,7 @@ This example shows:
 3. **Verification Failure Detection** - Detecting tampered ciphertexts or wrong parameters
 4. **PVE Decryption** - Recovering the original value
 5. **Decryption Failure Detection** - Detecting wrong ciphertexts or parameters
-6. **Production-Grade Security** - Using 3072-bit RSA KEM (recommended for long-term security)
+6. **Long-Term Security** - Using 3072-bit RSA KEM (recommended for security beyond 2030)
 
 ## Running the Example
 
