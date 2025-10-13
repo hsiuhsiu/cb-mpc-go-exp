@@ -92,7 +92,7 @@ func TestSessionIDFresh(t *testing.T) {
 			defer func() { _ = job.Close() }()
 
 			result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
-				SessionID: nil, // Fresh session
+				SessionID: cbmpc.SessionID{}, // Fresh session (zero value)
 				Key:       keys[partyID],
 				Message:   messageHash[:],
 			})
@@ -113,15 +113,15 @@ func TestSessionIDFresh(t *testing.T) {
 	}
 
 	// Verify session IDs were generated
-	if len(results[0].SessionID) == 0 {
+	if results[0].SessionID.IsEmpty() {
 		t.Fatal("Party 0 should have received a generated session ID")
 	}
-	if len(results[1].SessionID) == 0 {
+	if results[1].SessionID.IsEmpty() {
 		t.Fatal("Party 1 should have received a generated session ID")
 	}
 
 	t.Logf("✓ Fresh session IDs generated: party0=%d bytes, party1=%d bytes",
-		len(results[0].SessionID), len(results[1].SessionID))
+		len(results[0].SessionID.Bytes()), len(results[1].SessionID.Bytes()))
 }
 
 // TestSessionIDResume tests that a non-empty SessionID correctly resumes a session.
@@ -203,7 +203,7 @@ func TestSessionIDResume(t *testing.T) {
 			defer func() { _ = job.Close() }()
 
 			result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
-				SessionID: nil,
+				SessionID: cbmpc.SessionID{}, // Fresh session
 				Key:       keys[partyID],
 				Message:   messageHash1[:],
 			})
@@ -227,7 +227,7 @@ func TestSessionIDResume(t *testing.T) {
 	sessionID0 := results[0].SessionID
 	sessionID1 := results[1].SessionID
 
-	if len(sessionID0) == 0 || len(sessionID1) == 0 {
+	if sessionID0.IsEmpty() || sessionID1.IsEmpty() {
 		t.Fatal("Session IDs should not be empty after first signature")
 	}
 
@@ -287,59 +287,56 @@ func TestSessionIDResume(t *testing.T) {
 	}
 
 	// Verify we got session IDs back
-	if len(results2[0].SessionID) == 0 || len(results2[1].SessionID) == 0 {
+	if results2[0].SessionID.IsEmpty() || results2[1].SessionID.IsEmpty() {
 		t.Fatal("Session IDs should not be empty after resumed signature")
 	}
 
 	t.Logf("✓ Session resumed successfully with provided session IDs")
-	t.Logf("  Party 0: first=%s, second=%s", abbrevHex(sessionID0), abbrevHex(results2[0].SessionID))
-	t.Logf("  Party 1: first=%s, second=%s", abbrevHex(sessionID1), abbrevHex(results2[1].SessionID))
+	t.Logf("  Party 0: first=%s, second=%s", abbrevHex(sessionID0.Bytes()), abbrevHex(results2[0].SessionID.Bytes()))
+	t.Logf("  Party 1: first=%s, second=%s", abbrevHex(sessionID1.Bytes()), abbrevHex(results2[1].SessionID.Bytes()))
 }
 
-// TestSessionIDClone tests that SessionID.Clone() creates an independent copy.
-func TestSessionIDClone(t *testing.T) {
-	original := cbmpc.SessionID([]byte{0x01, 0x02, 0x03, 0x04})
+// TestSessionIDBytes tests that SessionID.Bytes() returns a defensive copy.
+func TestSessionIDBytes(t *testing.T) {
+	original := cbmpc.NewSessionID([]byte{0x01, 0x02, 0x03, 0x04})
 
-	// Clone the session ID
-	cloned := original.Clone()
+	// Get bytes
+	bytes1 := original.Bytes()
+	bytes2 := original.Bytes()
 
 	// Verify contents are equal
-	if !bytes.Equal(original, cloned) {
-		t.Fatalf("Clone should have same contents: original=%x, cloned=%x", original, cloned)
+	if !bytes.Equal(bytes1, bytes2) {
+		t.Fatalf("Bytes() should return same contents: bytes1=%x, bytes2=%x", bytes1, bytes2)
 	}
 
-	// Mutate the original
-	original[0] = 0xFF
+	// Mutate bytes1
+	bytes1[0] = 0xFF
 
-	// Verify clone is unaffected
-	if cloned[0] != 0x01 {
-		t.Fatalf("Clone should be independent: expected 0x01, got 0x%02x", cloned[0])
+	// Verify bytes2 and subsequent calls are unaffected
+	bytes3 := original.Bytes()
+	if bytes3[0] != 0x01 {
+		t.Fatalf("Bytes() should return independent copies: expected 0x01, got 0x%02x", bytes3[0])
+	}
+	if bytes2[0] != 0x01 {
+		t.Fatalf("Previous Bytes() call should be independent: expected 0x01, got 0x%02x", bytes2[0])
 	}
 
-	t.Logf("✓ SessionID.Clone() creates independent copy")
+	t.Logf("✓ SessionID.Bytes() returns independent defensive copies")
 }
 
-// TestSessionIDCloneEmpty tests that cloning an empty SessionID returns nil.
-func TestSessionIDCloneEmpty(t *testing.T) {
+// TestSessionIDBytesEmpty tests that Bytes() on empty SessionID returns nil.
+func TestSessionIDBytesEmpty(t *testing.T) {
 	var empty cbmpc.SessionID
 
-	// Clone empty session ID
-	cloned := empty.Clone()
+	// Get bytes from empty session ID
+	bytes := empty.Bytes()
 
 	// Verify it's nil
-	if cloned != nil {
-		t.Fatalf("Clone of empty SessionID should be nil, got %v", cloned)
+	if bytes != nil {
+		t.Fatalf("Bytes() of empty SessionID should be nil, got %v", bytes)
 	}
 
-	// Also test with explicitly nil
-	var nilSID cbmpc.SessionID = nil
-	clonedNil := nilSID.Clone()
-
-	if clonedNil != nil {
-		t.Fatalf("Clone of nil SessionID should be nil, got %v", clonedNil)
-	}
-
-	t.Logf("✓ Clone of empty/nil SessionID returns nil")
+	t.Logf("✓ Bytes() of empty SessionID returns nil")
 }
 
 // TestSessionIDMutationSafety tests that mutating a SessionID from SignResult
@@ -422,7 +419,7 @@ func TestSessionIDMutationSafety(t *testing.T) {
 			defer func() { _ = job.Close() }()
 
 			result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
-				SessionID: nil,
+				SessionID: cbmpc.SessionID{}, // Fresh session
 				Key:       keys[partyID],
 				Message:   messageHash[:],
 			})
@@ -442,17 +439,22 @@ func TestSessionIDMutationSafety(t *testing.T) {
 		}
 	}
 
-	// Save original session ID
-	originalSID := make([]byte, len(results[0].SessionID))
-	copy(originalSID, results[0].SessionID)
+	// Save original session ID (make a copy via NewSessionID)
+	originalSID := results[0].SessionID
 
-	// Mutate the returned SessionID
-	for i := range results[0].SessionID {
-		results[0].SessionID[i] = 0xFF
+	// Get bytes from the session ID
+	sidBytes := originalSID.Bytes()
+
+	// Mutate the bytes we got from SessionID (this should NOT affect the SessionID)
+	for i := range sidBytes {
+		sidBytes[i] = 0xFF
 	}
 
-	// Try to use it again - the mutation should not affect the ability to use a clone
-	clonedSID := cbmpc.SessionID(originalSID)
+	// The original SessionID should still be valid and unchanged
+	unchangedBytes := originalSID.Bytes()
+	if unchangedBytes[0] == 0xFF {
+		t.Fatal("SessionID was affected by external mutation - immutability broken!")
+	}
 
 	// Second signature using the cloned (unmutated) session ID
 	message2 := []byte("Second message after mutation")
@@ -480,10 +482,10 @@ func TestSessionIDMutationSafety(t *testing.T) {
 			}
 			defer func() { _ = job.Close() }()
 
-			// Use the cloned SID for party 0, original for party 1
+			// Use the original SID for both parties (it should be unchanged despite external byte mutation)
 			var sid cbmpc.SessionID
 			if partyID == 0 {
-				sid = clonedSID
+				sid = originalSID
 			} else {
 				sid = results[1].SessionID
 			}
@@ -509,26 +511,33 @@ func TestSessionIDMutationSafety(t *testing.T) {
 		}
 	}
 
-	t.Logf("✓ SessionID mutation safety verified")
-	t.Logf("  Successfully signed with cloned (unmutated) session ID")
+	t.Logf("✓ SessionID immutability verified")
+	t.Logf("  External byte mutations do not affect SessionID internal state")
+	t.Logf("  Successfully used SessionID after external byte array was mutated")
 }
 
 // TestSessionIDIsEmpty tests the IsEmpty method.
 func TestSessionIDIsEmpty(t *testing.T) {
-	// Test nil SessionID
-	var nilSID cbmpc.SessionID
-	if !nilSID.IsEmpty() {
-		t.Error("Nil SessionID should be empty")
+	// Test zero-value SessionID
+	var zeroSID cbmpc.SessionID
+	if !zeroSID.IsEmpty() {
+		t.Error("Zero-value SessionID should be empty")
 	}
 
-	// Test zero-length SessionID
-	emptySID := cbmpc.SessionID([]byte{})
+	// Test SessionID created from empty bytes
+	emptySID := cbmpc.NewSessionID([]byte{})
 	if !emptySID.IsEmpty() {
-		t.Error("Zero-length SessionID should be empty")
+		t.Error("SessionID from empty bytes should be empty")
+	}
+
+	// Test SessionID created from nil
+	nilSID := cbmpc.NewSessionID(nil)
+	if !nilSID.IsEmpty() {
+		t.Error("SessionID from nil should be empty")
 	}
 
 	// Test non-empty SessionID
-	nonEmpty := cbmpc.SessionID([]byte{0x01})
+	nonEmpty := cbmpc.NewSessionID([]byte{0x01})
 	if nonEmpty.IsEmpty() {
 		t.Error("Non-empty SessionID should not be empty")
 	}

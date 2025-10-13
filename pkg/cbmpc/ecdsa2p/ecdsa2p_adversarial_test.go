@@ -232,7 +232,7 @@ func TestECDSA2PSignMaliciousP1(t *testing.T) {
 		maliciousCancel() // Cancel immediately
 
 		result, err := ecdsa2p.Sign(maliciousCtx, job, &ecdsa2p.SignParams{
-			SessionID: nil,
+			SessionID: cbmpc.SessionID{}, // Fresh session
 			Key:       keys[0],
 			Message:   messageHash[:],
 		})
@@ -256,7 +256,7 @@ func TestECDSA2PSignMaliciousP1(t *testing.T) {
 		defer func() { _ = job.Close() }()
 
 		result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
-			SessionID: nil,
+			SessionID: cbmpc.SessionID{}, // Fresh session
 			Key:       keys[1],
 			Message:   messageHash[:],
 		})
@@ -356,7 +356,7 @@ func TestECDSA2PSignMaliciousP2(t *testing.T) {
 		defer func() { _ = job.Close() }()
 
 		result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
-			SessionID: nil,
+			SessionID: cbmpc.SessionID{}, // Fresh session
 			Key:       keys[0],
 			Message:   messageHash[:],
 		})
@@ -383,7 +383,7 @@ func TestECDSA2PSignMaliciousP2(t *testing.T) {
 		maliciousCancel() // Cancel immediately
 
 		result, err := ecdsa2p.Sign(maliciousCtx, job, &ecdsa2p.SignParams{
-			SessionID: nil,
+			SessionID: cbmpc.SessionID{}, // Fresh session
 			Key:       keys[1],
 			Message:   messageHash[:],
 		})
