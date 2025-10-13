@@ -82,6 +82,10 @@ func (k *KEM) Generate() (skRef []byte, ek []byte, err error) {
 // Encapsulate generates a ciphertext and shared secret for the given public key.
 // Uses RSA-OAEP with SHA-256 for encryption.
 //
+// Security: This implementation provides domain separation by binding the deterministic
+// encryption to the public key. The OAEP label and random seed are derived from both
+// rho and the public key hash, preventing randomness reuse across different keys.
+//
 // Parameters:
 //   - ek: Public key in PKIX DER format
 //   - rho: 32-byte random seed for deterministic encapsulation
@@ -108,13 +112,27 @@ func (k *KEM) Encapsulate(ek []byte, rho [32]byte) (ct, ss []byte, err error) {
 		return nil, nil, fmt.Errorf("public key too small: %d bytes (minimum 256 bytes)", keySize)
 	}
 
+	// Compute ekHash for domain separation
+	// This ensures different keys use different randomness streams
+	ekHash := sha256.Sum256(ek)
+
+	// Create key-bound OAEP label: "cbmpc/pve/rsa-oaep:" + ekHash
+	// This prevents ciphertexts from being valid under different keys
+	label := append([]byte("cbmpc/pve/rsa-oaep:"), ekHash[:]...)
+
+	// Derive key-bound seed by combining rho and ekHash
+	// This ensures the same rho with different keys produces different randomness
+	h := sha256.New()
+	h.Write(rho[:])
+	h.Write(ekHash[:])
+	keyBoundSeed := h.Sum(nil)
+
 	// Use rho as the shared secret (for PVE determinism)
 	ss = make([]byte, 32)
 	copy(ss, rho[:])
 
-	// Encrypt shared secret with RSA-OAEP
-	// Use deterministic reader for PVE compatibility
-	ct, err = rsa.EncryptOAEP(sha256.New(), &deterministicReader{seed: rho[:]}, publicKey, ss, nil)
+	// Encrypt shared secret with RSA-OAEP using key-bound parameters
+	ct, err = rsa.EncryptOAEP(sha256.New(), &deterministicReader{seed: keyBoundSeed}, publicKey, ss, label)
 	if err != nil {
 		return nil, nil, fmt.Errorf("RSA-OAEP encapsulation failed: %w", err)
 	}
@@ -124,6 +142,9 @@ func (k *KEM) Encapsulate(ek []byte, rho [32]byte) (ct, ss []byte, err error) {
 
 // Decapsulate recovers the shared secret from a ciphertext using the private key.
 // Uses RSA-OAEP with SHA-256 for decryption.
+//
+// Security: Uses the same key-bound OAEP label as Encapsulate to ensure ciphertexts
+// can only be decrypted with the matching key. This prevents cross-key attacks.
 //
 // Parameters:
 //   - skHandle: Private key handle (must be *privateKeyHandle)
@@ -138,12 +159,15 @@ func (k *KEM) Decapsulate(skHandle any, ct []byte) (ss []byte, err error) {
 		return nil, errors.New("invalid handle type: expected *privateKeyHandle")
 	}
 
-	// Parse private key from DER
+	// Get public key for label derivation
 	handle.mu.RLock()
 	keyDER := make([]byte, len(handle.keyDER))
 	copy(keyDER, handle.keyDER)
+	publicKey := make([]byte, len(handle.publicKey))
+	copy(publicKey, handle.publicKey)
 	handle.mu.RUnlock()
 
+	// Parse private key from DER
 	keyInterface, err := x509.ParsePKCS8PrivateKey(keyDER)
 	if err != nil {
 		zeroizeBytes(keyDER)
@@ -156,8 +180,12 @@ func (k *KEM) Decapsulate(skHandle any, ct []byte) (ss []byte, err error) {
 		return nil, errors.New("not an RSA private key")
 	}
 
-	// Decrypt ciphertext with RSA-OAEP
-	ss, err = rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, ct, nil)
+	// Compute the same key-bound OAEP label used during encapsulation
+	ekHash := sha256.Sum256(publicKey)
+	label := append([]byte("cbmpc/pve/rsa-oaep:"), ekHash[:]...)
+
+	// Decrypt ciphertext with RSA-OAEP using the key-bound label
+	ss, err = rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, ct, label)
 
 	// Zeroize sensitive data
 	zeroizeBytes(keyDER)
