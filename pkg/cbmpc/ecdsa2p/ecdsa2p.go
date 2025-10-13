@@ -194,7 +194,7 @@ func Refresh(_ context.Context, j *cbmpc.Job2P, params *RefreshParams) (*Refresh
 // SignParams contains parameters for 2-party ECDSA signing.
 type SignParams struct {
 	// SessionID for the signing operation.
-	// Empty (nil) = fresh session (library generates new session ID)
+	// Empty (zero value) = fresh session (library generates new session ID)
 	// Non-empty = resume session with the provided session ID
 	SessionID cbmpc.SessionID
 
@@ -214,7 +214,7 @@ type SignResult struct {
 // The input key is not modified and remains valid.
 //
 // Session ID semantics:
-//   - Empty SessionID (nil): Library generates a fresh session ID
+//   - Empty SessionID (zero value): Library generates a fresh session ID
 //   - Non-empty SessionID: Resumes signing with the provided session ID from a previous operation
 //
 // The returned SessionID should be used for subsequent signing operations to maintain session continuity.
@@ -249,7 +249,7 @@ func Sign(_ context.Context, j *cbmpc.Job2P, params *SignParams) (*SignResult, e
 		return nil, err
 	}
 
-	newSID, sig, err := backend.ECDSA2PSign(ptr, params.Key.ckey, []byte(params.SessionID), params.Message)
+	newSID, sig, err := backend.ECDSA2PSign(ptr, params.Key.ckey, params.SessionID.Bytes(), params.Message)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -257,7 +257,7 @@ func Sign(_ context.Context, j *cbmpc.Job2P, params *SignParams) (*SignResult, e
 	runtime.KeepAlive(params.Key)
 
 	return &SignResult{
-		SessionID: cbmpc.SessionID(newSID),
+		SessionID: cbmpc.NewSessionID(newSID),
 		Signature: sig,
 	}, nil
 }
@@ -265,7 +265,7 @@ func Sign(_ context.Context, j *cbmpc.Job2P, params *SignParams) (*SignResult, e
 // SignBatchParams contains parameters for 2-party ECDSA batch signing.
 type SignBatchParams struct {
 	// SessionID for the signing operation.
-	// Empty (nil) = fresh session (library generates new session ID)
+	// Empty (zero value) = fresh session (library generates new session ID)
 	// Non-empty = resume session with the provided session ID
 	SessionID cbmpc.SessionID
 
@@ -282,7 +282,7 @@ type SignBatchResult struct {
 // SignBatch performs 2-party ECDSA batch signing.
 //
 // Session ID semantics:
-//   - Empty SessionID (nil): Library generates a fresh session ID
+//   - Empty SessionID (zero value): Library generates a fresh session ID
 //   - Non-empty SessionID: Resumes signing with the provided session ID from a previous operation
 //
 // The returned SessionID should be used for subsequent signing operations to maintain session continuity.
@@ -324,7 +324,7 @@ func SignBatch(_ context.Context, j *cbmpc.Job2P, params *SignBatchParams) (*Sig
 		return nil, err
 	}
 
-	newSID, sigs, err := backend.ECDSA2PSignBatch(ptr, params.Key.ckey, []byte(params.SessionID), params.Messages)
+	newSID, sigs, err := backend.ECDSA2PSignBatch(ptr, params.Key.ckey, params.SessionID.Bytes(), params.Messages)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -332,7 +332,7 @@ func SignBatch(_ context.Context, j *cbmpc.Job2P, params *SignBatchParams) (*Sig
 	runtime.KeepAlive(params.Key)
 
 	return &SignBatchResult{
-		SessionID:  cbmpc.SessionID(newSID),
+		SessionID:  cbmpc.NewSessionID(newSID),
 		Signatures: sigs,
 	}, nil
 }
@@ -341,7 +341,7 @@ func SignBatch(_ context.Context, j *cbmpc.Job2P, params *SignBatchParams) (*Sig
 // Returns ErrBitLeak if signature verification fails (indicates potential key leak).
 //
 // Session ID semantics:
-//   - Empty SessionID (nil): Library generates a fresh session ID
+//   - Empty SessionID (zero value): Library generates a fresh session ID
 //   - Non-empty SessionID: Resumes signing with the provided session ID from a previous operation
 //
 // The returned SessionID should be used for subsequent signing operations to maintain session continuity.
@@ -376,7 +376,7 @@ func SignWithGlobalAbort(_ context.Context, j *cbmpc.Job2P, params *SignParams) 
 		return nil, err
 	}
 
-	newSID, sig, err := backend.ECDSA2PSignWithGlobalAbort(ptr, params.Key.ckey, []byte(params.SessionID), params.Message)
+	newSID, sig, err := backend.ECDSA2PSignWithGlobalAbort(ptr, params.Key.ckey, params.SessionID.Bytes(), params.Message)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -384,7 +384,7 @@ func SignWithGlobalAbort(_ context.Context, j *cbmpc.Job2P, params *SignParams) 
 	runtime.KeepAlive(params.Key)
 
 	return &SignResult{
-		SessionID: cbmpc.SessionID(newSID),
+		SessionID: cbmpc.NewSessionID(newSID),
 		Signature: sig,
 	}, nil
 }
@@ -393,7 +393,7 @@ func SignWithGlobalAbort(_ context.Context, j *cbmpc.Job2P, params *SignParams) 
 // Returns ErrBitLeak if signature verification fails (indicates potential key leak).
 //
 // Session ID semantics:
-//   - Empty SessionID (nil): Library generates a fresh session ID
+//   - Empty SessionID (zero value): Library generates a fresh session ID
 //   - Non-empty SessionID: Resumes signing with the provided session ID from a previous operation
 //
 // The returned SessionID should be used for subsequent signing operations to maintain session continuity.
@@ -435,7 +435,7 @@ func SignWithGlobalAbortBatch(_ context.Context, j *cbmpc.Job2P, params *SignBat
 		return nil, err
 	}
 
-	newSID, sigs, err := backend.ECDSA2PSignWithGlobalAbortBatch(ptr, params.Key.ckey, []byte(params.SessionID), params.Messages)
+	newSID, sigs, err := backend.ECDSA2PSignWithGlobalAbortBatch(ptr, params.Key.ckey, params.SessionID.Bytes(), params.Messages)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -443,7 +443,7 @@ func SignWithGlobalAbortBatch(_ context.Context, j *cbmpc.Job2P, params *SignBat
 	runtime.KeepAlive(params.Key)
 
 	return &SignBatchResult{
-		SessionID:  cbmpc.SessionID(newSID),
+		SessionID:  cbmpc.NewSessionID(newSID),
 		Signatures: sigs,
 	}, nil
 }

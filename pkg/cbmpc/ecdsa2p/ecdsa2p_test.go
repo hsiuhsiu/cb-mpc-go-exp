@@ -431,7 +431,7 @@ func TestECDSA2PSign(t *testing.T) {
 			}()
 
 			result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
-				SessionID: nil, // Can be nil for first signature
+				SessionID: cbmpc.SessionID{}, // Empty SessionID for fresh session
 				Key:       keys[partyID],
 				Message:   messageHash[:],
 			})
@@ -440,7 +440,7 @@ func TestECDSA2PSign(t *testing.T) {
 				return
 			}
 			signatures[partyID] = result.Signature
-			sessionIDs[partyID] = result.SessionID
+			sessionIDs[partyID] = result.SessionID.Bytes() // Convert to bytes for local storage
 		}(i)
 	}
 
@@ -574,7 +574,7 @@ func TestECDSA2PSignRefreshSign(t *testing.T) {
 			defer func() { _ = job.Close() }()
 
 			result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
-				SessionID: nil,
+				SessionID: cbmpc.SessionID{}, // Fresh session
 				Key:       keys[partyID],
 				Message:   messageHash1[:],
 			})
@@ -583,7 +583,7 @@ func TestECDSA2PSignRefreshSign(t *testing.T) {
 				return
 			}
 			signatures[partyID] = result.Signature
-			sessionIDs[partyID] = result.SessionID
+			sessionIDs[partyID] = result.SessionID.Bytes() // Convert to bytes for local storage
 		}(i)
 	}
 
@@ -697,7 +697,7 @@ func TestECDSA2PSignRefreshSign(t *testing.T) {
 			defer func() { _ = job.Close() }()
 
 			result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
-				SessionID: nil,
+				SessionID: cbmpc.SessionID{}, // Empty SessionID for fresh session
 				Key:       newKeys[partyID],
 				Message:   messageHash2[:],
 			})
@@ -706,7 +706,7 @@ func TestECDSA2PSignRefreshSign(t *testing.T) {
 				return
 			}
 			signatures[partyID] = result.Signature
-			sessionIDs[partyID] = result.SessionID
+			sessionIDs[partyID] = result.SessionID.Bytes() // Convert to bytes for local storage
 		}(i)
 	}
 
@@ -839,7 +839,7 @@ func TestECDSA2PMultipleSignatures(t *testing.T) {
 					}()
 
 					result, err := ecdsa2p.Sign(ctx, job, &ecdsa2p.SignParams{
-						SessionID: sessionID,
+						SessionID: cbmpc.NewSessionID(sessionID),
 						Key:       keys[partyID],
 						Message:   messageHash[:],
 					})
@@ -848,7 +848,7 @@ func TestECDSA2PMultipleSignatures(t *testing.T) {
 						return
 					}
 					signatures[partyID] = result.Signature
-					newSessionIDs[partyID] = result.SessionID
+					newSessionIDs[partyID] = result.SessionID.Bytes()
 				}(i)
 			}
 
@@ -978,7 +978,7 @@ func TestECDSA2PSignBatch(t *testing.T) {
 			defer func() { _ = job.Close() }()
 
 			result, err := ecdsa2p.SignBatch(ctx, job, &ecdsa2p.SignBatchParams{
-				SessionID: nil,
+				SessionID: cbmpc.SessionID{}, // Empty SessionID for fresh session
 				Key:       keys[partyID],
 				Messages:  messageHashes,
 			})
@@ -987,7 +987,7 @@ func TestECDSA2PSignBatch(t *testing.T) {
 				return
 			}
 			signatureBatches[partyID] = result.Signatures
-			sessionIDs[partyID] = result.SessionID
+			sessionIDs[partyID] = result.SessionID.Bytes() // Convert to bytes for local storage
 		}(i)
 	}
 
@@ -1111,7 +1111,7 @@ func TestECDSA2PSignWithGlobalAbort(t *testing.T) {
 			defer func() { _ = job.Close() }()
 
 			result, err := ecdsa2p.SignWithGlobalAbort(ctx, job, &ecdsa2p.SignParams{
-				SessionID: nil,
+				SessionID: cbmpc.SessionID{}, // Empty SessionID for fresh session
 				Key:       keys[partyID],
 				Message:   messageHash[:],
 			})
@@ -1120,7 +1120,7 @@ func TestECDSA2PSignWithGlobalAbort(t *testing.T) {
 				return
 			}
 			signatures[partyID] = result.Signature
-			sessionIDs[partyID] = result.SessionID
+			sessionIDs[partyID] = result.SessionID.Bytes() // Convert to bytes for local storage
 		}(i)
 	}
 
@@ -1245,7 +1245,7 @@ func TestECDSA2PSignWithGlobalAbortBatch(t *testing.T) {
 			defer func() { _ = job.Close() }()
 
 			result, err := ecdsa2p.SignWithGlobalAbortBatch(ctx, job, &ecdsa2p.SignBatchParams{
-				SessionID: nil,
+				SessionID: cbmpc.SessionID{}, // Empty SessionID for fresh session
 				Key:       keys[partyID],
 				Messages:  messageHashes,
 			})
@@ -1254,7 +1254,7 @@ func TestECDSA2PSignWithGlobalAbortBatch(t *testing.T) {
 				return
 			}
 			signatureBatches[partyID] = result.Signatures
-			sessionIDs[partyID] = result.SessionID
+			sessionIDs[partyID] = result.SessionID.Bytes() // Convert to bytes for local storage
 		}(i)
 	}
 

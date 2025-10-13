@@ -202,25 +202,47 @@ func (j *JobMP) Ptr() (unsafe.Pointer, error) {
 	return j.cptr, nil
 }
 
-// SessionID represents a session identifier for MPC protocols.
-type SessionID []byte
-
-// Clone creates a defensive copy of the SessionID.
-// This prevents external mutation of the session ID data.
+// SessionID represents an immutable session identifier for MPC protocols.
+// Session IDs are cryptographically important protocol state and must not be
+// mutated after creation. All methods return defensive copies to ensure immutability.
 //
-// Returns a new SessionID with copied data. If the SessionID is nil or empty,
-// returns nil to preserve the "fresh session" semantics.
-func (s SessionID) Clone() SessionID {
-	if len(s) == 0 {
+// An empty (zero-value) SessionID indicates a fresh session should be created.
+type SessionID struct {
+	data []byte
+}
+
+// NewSessionID creates a SessionID from bytes, making a defensive copy.
+// If data is nil or empty, returns an empty SessionID (fresh session).
+func NewSessionID(data []byte) SessionID {
+	if len(data) == 0 {
+		return SessionID{}
+	}
+	clone := make([]byte, len(data))
+	copy(clone, data)
+	return SessionID{data: clone}
+}
+
+// Bytes returns a defensive copy of the session ID data.
+// External mutations of the returned slice do not affect the SessionID.
+// Returns nil for an empty SessionID (fresh session).
+func (s SessionID) Bytes() []byte {
+	if len(s.data) == 0 {
 		return nil
 	}
-	clone := make(SessionID, len(s))
-	copy(clone, s)
+	clone := make([]byte, len(s.data))
+	copy(clone, s.data)
 	return clone
 }
 
 // IsEmpty returns true if the SessionID is empty (nil or zero-length).
 // An empty SessionID indicates a fresh session should be created.
 func (s SessionID) IsEmpty() bool {
-	return len(s) == 0
+	return len(s.data) == 0
+}
+
+// internal returns the internal data for use within the cbmpc package.
+// This avoids unnecessary copying when passing to backend functions.
+// IMPORTANT: Callers must not mutate the returned slice.
+func (s SessionID) internal() []byte {
+	return s.data
 }
