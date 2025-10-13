@@ -511,3 +511,95 @@ func go_ffi_kem_dk_to_ek(dk_handle unsafe.Pointer, ek_bytes_out *C.cmem_t) C.int
 	// Not implemented by design: callers must provide EK explicitly.
 	return C.int(C.CBMPC_E_NOT_SUPPORTED)
 }
+
+// =====================
+// ZK Proof Operations - UC_DL
+// =====================
+
+// UCDLProof is an opaque pointer to a C++ coinbase::zk::uc_dl_t proof object.
+type UCDLProof = C.cbmpc_uc_dl_proof
+
+// UCDLProve creates a UC_DL proof for proving knowledge of w such that Q = w*G.
+func UCDLProve(qPoint ECCPoint, w, sessionID []byte, aux uint64) (UCDLProof, error) {
+	if qPoint == nil {
+		return nil, errors.New("nil Q point")
+	}
+	if len(w) == 0 {
+		return nil, errors.New("empty witness")
+	}
+	if len(sessionID) == 0 {
+		return nil, errors.New("empty session ID")
+	}
+
+	wMem := goBytesToCmem(w)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	var proof UCDLProof
+	rc := C.cbmpc_uc_dl_prove(qPoint, wMem, sessionIDMem, C.uint64_t(aux), &proof)
+	if rc != 0 {
+		return nil, formatNativeErr("uc_dl_prove", rc)
+	}
+
+	return proof, nil
+}
+
+// UCDLVerify verifies a UC_DL proof.
+func UCDLVerify(proof UCDLProof, qPoint ECCPoint, sessionID []byte, aux uint64) error {
+	if proof == nil {
+		return errors.New("nil proof")
+	}
+	if qPoint == nil {
+		return errors.New("nil Q point")
+	}
+	if len(sessionID) == 0 {
+		return errors.New("empty session ID")
+	}
+
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	rc := C.cbmpc_uc_dl_verify(proof, qPoint, sessionIDMem, C.uint64_t(aux))
+	if rc != 0 {
+		return formatNativeErr("uc_dl_verify", rc)
+	}
+
+	return nil
+}
+
+// UCDLProofToBytes serializes a UC_DL proof to bytes.
+func UCDLProofToBytes(proof UCDLProof) ([]byte, error) {
+	if proof == nil {
+		return nil, errors.New("nil proof")
+	}
+
+	var out C.cmem_t
+	rc := C.cbmpc_uc_dl_proof_to_bytes(proof, &out)
+	if rc != 0 {
+		return nil, formatNativeErr("uc_dl_proof_to_bytes", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// UCDLProofFromBytes deserializes a UC_DL proof from bytes.
+func UCDLProofFromBytes(data []byte) (UCDLProof, error) {
+	if len(data) == 0 {
+		return nil, errors.New("empty proof data")
+	}
+
+	dataMem := goBytesToCmem(data)
+
+	var proof UCDLProof
+	rc := C.cbmpc_uc_dl_proof_from_bytes(dataMem, &proof)
+	if rc != 0 {
+		return nil, formatNativeErr("uc_dl_proof_from_bytes", rc)
+	}
+
+	return proof, nil
+}
+
+// UCDLProofFree frees a UC_DL proof.
+func UCDLProofFree(proof UCDLProof) {
+	if proof != nil {
+		C.cbmpc_uc_dl_proof_free(proof)
+	}
+}

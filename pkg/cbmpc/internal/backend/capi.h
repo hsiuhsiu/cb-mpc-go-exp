@@ -116,6 +116,29 @@ void cbmpc_set_kem_tls(const void *handle);
 void cbmpc_clear_kem_tls(void);
 const void *cbmpc_get_kem_tls(void);
 
+// ZK proof operations (coinbase::zk namespace)
+// UC_DL proof - universally composable discrete log proof
+// Opaque pointer to coinbase::zk::uc_dl_t
+typedef void* cbmpc_uc_dl_proof;
+
+// Create UC_DL proof for proving knowledge of w such that Q = w*G
+// Q_point: the public key point, w: the secret scalar (witness)
+// session_id: session identifier for security, aux: auxiliary data
+int cbmpc_uc_dl_prove(cbmpc_ecc_point Q_point, cmem_t w, cmem_t session_id, uint64_t aux, cbmpc_uc_dl_proof *proof_out);
+
+// Verify a UC_DL proof
+// Q_point: the public key point to verify against
+int cbmpc_uc_dl_verify(cbmpc_uc_dl_proof proof, cbmpc_ecc_point Q_point, cmem_t session_id, uint64_t aux);
+
+// Serialize a UC_DL proof to bytes
+int cbmpc_uc_dl_proof_to_bytes(cbmpc_uc_dl_proof proof, cmem_t *bytes_out);
+
+// Deserialize a UC_DL proof from bytes
+int cbmpc_uc_dl_proof_from_bytes(cmem_t bytes, cbmpc_uc_dl_proof *proof_out);
+
+// Free a UC_DL proof
+void cbmpc_uc_dl_proof_free(cbmpc_uc_dl_proof proof);
+
 #ifdef __cplusplus
 }
 #endif

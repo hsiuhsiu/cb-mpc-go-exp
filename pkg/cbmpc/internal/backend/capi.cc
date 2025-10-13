@@ -18,6 +18,7 @@
 #include "cbmpc/protocol/mpc_job.h"
 #include "cbmpc/protocol/pve.h"
 #include "cbmpc/protocol/pve_base.h"
+#include "cbmpc/zk/zk_ec.h"
 
 namespace {
 
@@ -683,6 +684,79 @@ void cbmpc_clear_kem_tls(void) {
 
 const void *cbmpc_get_kem_tls(void) {
   return g_cbmpc_kem_tls;
+}
+
+// =====================
+// ZK Proof Operations - UC_DL
+// =====================
+
+// UC_DL Prove
+int cbmpc_uc_dl_prove(cbmpc_ecc_point Q_point, cmem_t w, cmem_t session_id, uint64_t aux, cbmpc_uc_dl_proof *proof_out) {
+  if (!Q_point || !w.data || w.size <= 0 || !session_id.data || session_id.size <= 0 || !proof_out) {
+    return E_BADARG;
+  }
+
+  const auto* Q = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(Q_point);
+
+  // Deserialize scalar w from bytes
+  coinbase::crypto::bn_t w_bn = coinbase::crypto::bn_t::from_bin(mem_t(w.data, w.size));
+
+  // Create proof
+  auto proof = std::make_unique<coinbase::zk::uc_dl_t>();
+  proof->prove(*Q, w_bn, mem_t(session_id.data, session_id.size), aux);
+
+  *proof_out = reinterpret_cast<cbmpc_uc_dl_proof>(proof.release());
+  return 0;
+}
+
+// UC_DL Verify
+int cbmpc_uc_dl_verify(cbmpc_uc_dl_proof proof, cbmpc_ecc_point Q_point, cmem_t session_id, uint64_t aux) {
+  if (!proof || !Q_point || !session_id.data || session_id.size <= 0) {
+    return E_BADARG;
+  }
+
+  const auto* proof_obj = reinterpret_cast<const coinbase::zk::uc_dl_t*>(proof);
+  const auto* Q = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(Q_point);
+
+  error_t rv = proof_obj->verify(*Q, mem_t(session_id.data, session_id.size), aux);
+  return rv;
+}
+
+// UC_DL Proof to bytes
+int cbmpc_uc_dl_proof_to_bytes(cbmpc_uc_dl_proof proof, cmem_t *bytes_out) {
+  if (!proof || !bytes_out) {
+    return E_BADARG;
+  }
+
+  const auto* proof_obj = reinterpret_cast<const coinbase::zk::uc_dl_t*>(proof);
+
+  // Serialize using converter
+  buf_t serialized = coinbase::ser(*proof_obj);
+  *bytes_out = alloc_and_copy(serialized.data(), static_cast<size_t>(serialized.size()));
+
+  return 0;
+}
+
+// UC_DL Proof from bytes
+int cbmpc_uc_dl_proof_from_bytes(cmem_t bytes, cbmpc_uc_dl_proof *proof_out) {
+  if (!bytes.data || bytes.size <= 0 || !proof_out) {
+    return E_BADARG;
+  }
+
+  auto proof = std::make_unique<coinbase::zk::uc_dl_t>();
+  error_t rv = coinbase::deser(mem_t(bytes.data, bytes.size), *proof);
+  if (rv != SUCCESS) return rv;
+
+  *proof_out = reinterpret_cast<cbmpc_uc_dl_proof>(proof.release());
+  return 0;
+}
+
+// UC_DL Proof free
+void cbmpc_uc_dl_proof_free(cbmpc_uc_dl_proof proof) {
+  if (proof) {
+    auto* proof_obj = reinterpret_cast<coinbase::zk::uc_dl_t*>(proof);
+    delete proof_obj;
+  }
 }
 
 }  // extern "C"
