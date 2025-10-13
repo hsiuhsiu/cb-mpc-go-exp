@@ -155,3 +155,24 @@ func RegisterHandle(any) unsafe.Pointer {
 }
 
 func FreeHandle(unsafe.Pointer) {}
+
+// UCDLProof is a stub type for non-CGO builds
+type UCDLProof = unsafe.Pointer
+
+func UCDLProve(ECCPoint, []byte, []byte, uint64) (UCDLProof, error) {
+	return nil, ErrNotBuilt
+}
+
+func UCDLVerify(UCDLProof, ECCPoint, []byte, uint64) error {
+	return ErrNotBuilt
+}
+
+func UCDLProofToBytes(UCDLProof) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func UCDLProofFromBytes([]byte) (UCDLProof, error) {
+	return nil, ErrNotBuilt
+}
+
+func UCDLProofFree(UCDLProof) {}
