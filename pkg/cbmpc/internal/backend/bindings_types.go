@@ -24,6 +24,9 @@ const (
 
 // cmemToGoBytes converts a C.cmem_t to a Go []byte slice and takes ownership of the C memory.
 // Securely zeros and frees the C memory. Caller must not access the C memory after calling.
+//
+// This is the primary function for converting C++ outputs to Go. Used in Patterns 1, 2, and 3.
+// See CLAUDE.md "Type Conversion Patterns" for usage guidelines.
 func cmemToGoBytes(cmem C.cmem_t) []byte {
 	if cmem.data == nil || cmem.size <= 0 {
 		return nil
@@ -41,6 +44,8 @@ func cmemToGoBytes(cmem C.cmem_t) []byte {
 
 // cmemsToGoByteSlices converts a C.cmems_t to a Go [][]byte slice and takes ownership of the C memory.
 // Securely zeros and frees the C memory. Caller must not access the C memory after calling.
+//
+// Used for converting std::vector<buf_t> outputs to Go. See Pattern 2 in CLAUDE.md.
 func cmemsToGoByteSlices(cmems C.cmems_t) [][]byte {
 	if cmems.count <= 0 {
 		return nil
@@ -75,6 +80,10 @@ func cmemsToGoByteSlices(cmems C.cmems_t) [][]byte {
 // goBytesToCmem converts a Go []byte slice to a C.cmem_t.
 // The returned cmem_t points directly to Go memory and is only valid for the duration
 // of the CGO call. The caller must not retain the cmem_t beyond the CGO call.
+//
+// IMPORTANT: Use this for FAST, SYNCHRONOUS C operations only (e.g., DKG, deserialization).
+// For long-running operations (e.g., Sign), use allocCmem + defer freeCmem instead.
+// See "Go to C Memory Conversion" in CLAUDE.md for decision criteria.
 func goBytesToCmem(data []byte) C.cmem_t {
 	var cmem C.cmem_t
 	cmem.size = C.int(len(data))
@@ -87,7 +96,10 @@ func goBytesToCmem(data []byte) C.cmem_t {
 }
 
 // goBytesSliceToCmems converts a Go [][]byte slice to a C.cmems_t.
-// The returned cmems_t points to allocated C memory that must be freed by the caller.
+// The returned cmems_t points to allocated C memory that must be freed with freeCmems.
+//
+// Used for passing multiple buffers to C (e.g., batch operations).
+// Always pair with defer freeCmems() to ensure cleanup.
 func goBytesSliceToCmems(slices [][]byte) C.cmems_t {
 	var cmems C.cmems_t
 	if len(slices) == 0 {
@@ -157,7 +169,11 @@ func freeCmems(cmems C.cmems_t) {
 }
 
 // allocCmem allocates C memory and copies Go bytes into it.
-// The caller is responsible for freeing this memory on the C side.
+// The caller is responsible for freeing this memory with freeCmem.
+//
+// IMPORTANT: Use this for LONG-RUNNING C operations (e.g., Sign, multi-round protocols)
+// where Go GC might move memory during execution. Always pair with defer freeCmem().
+// See "Go to C Memory Conversion" in CLAUDE.md for decision criteria.
 func allocCmem(data []byte) C.cmem_t {
 	var cmem C.cmem_t
 	if len(data) == 0 {
