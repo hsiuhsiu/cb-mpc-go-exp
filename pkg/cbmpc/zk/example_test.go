@@ -60,7 +60,7 @@ func runExample() error {
 
 	// Create proof that proves knowledge of exponent such that Q = exponent*G
 	// Proof is just []byte - no Close() needed, safe to copy and serialize
-	proof, err := zk.Prove(&zk.DLProveParams{
+	proof, err := zk.ProveDL(&zk.DLProveParams{
 		Point:     point,
 		Exponent:  exponent,
 		SessionID: sessionID,
@@ -76,7 +76,7 @@ func runExample() error {
 	// Can pass across goroutines, store in database, send over network, etc.
 
 	// Verify proof
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     proof,
 		Point:     point,
 		SessionID: sessionID,

@@ -1,3 +1,5 @@
+//go:build cgo && !windows
+
 package main
 
 import (
@@ -78,7 +80,7 @@ func runProver() {
 	fmt.Println("P1 generates proof with correct exponent w")
 
 	// Proof is returned as bytes - no Close() needed
-	proof1, err := zk.Prove(&zk.DLProveParams{
+	proof1, err := zk.ProveDL(&zk.DLProveParams{
 		Point:     point,
 		Exponent:  exponent,
 		SessionID: sessionID,
@@ -113,7 +115,7 @@ func runProver() {
 	}
 	defer wrongExponent.Free()
 
-	proof2, err := zk.Prove(&zk.DLProveParams{
+	proof2, err := zk.ProveDL(&zk.DLProveParams{
 		Point:     point, // Same public point Q
 		Exponent:  wrongExponent,
 		SessionID: sessionID,
@@ -187,7 +189,7 @@ func runVerifier(pointHex, sessionIDHex, validProofHex, invalidProofHex string) 
 	// Proof bytes are already in the right format - just use them directly
 	fmt.Println("--- Verifying Example 1: Valid Proof ---")
 
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     zk.DLProof(validProofBytes),
 		Point:     point,
 		SessionID: sessionID,
@@ -202,7 +204,7 @@ func runVerifier(pointHex, sessionIDHex, validProofHex, invalidProofHex string) 
 	// Verify Example 2: Invalid proof
 	fmt.Println("--- Verifying Example 2: Invalid Proof ---")
 
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     zk.DLProof(invalidProofBytes),
 		Point:     point,
 		SessionID: sessionID,
@@ -260,7 +262,7 @@ func demonstration() error {
 	fmt.Println("--- Example 1: Valid Proof ---")
 	fmt.Println("P1: Generating proof with correct exponent w")
 
-	proof1, err := zk.Prove(&zk.DLProveParams{
+	proof1, err := zk.ProveDL(&zk.DLProveParams{
 		Point:     point,
 		Exponent:  exponent,
 		SessionID: sessionID,
@@ -283,7 +285,7 @@ func demonstration() error {
 
 	// P2 verifies the proof
 	fmt.Println("P2: Verifying proof...")
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     storedProof,
 		Point:     point,
 		SessionID: sessionID,
@@ -308,7 +310,7 @@ func demonstration() error {
 	}
 	defer wrongExponent.Free()
 
-	proof2, err := zk.Prove(&zk.DLProveParams{
+	proof2, err := zk.ProveDL(&zk.DLProveParams{
 		Point:     point,
 		Exponent:  wrongExponent,
 		SessionID: sessionID,
@@ -331,7 +333,7 @@ func demonstration() error {
 
 	// P2 verifies the proof
 	fmt.Println("P2: Verifying proof...")
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     storedProof2,
 		Point:     point,
 		SessionID: sessionID,

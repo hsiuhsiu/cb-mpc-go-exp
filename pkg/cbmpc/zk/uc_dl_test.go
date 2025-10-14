@@ -52,7 +52,7 @@ func TestDLProofBasic(t *testing.T) {
 	aux := uint64(1)
 
 	// Generate proof (returns []byte, no Close needed)
-	proof, err := zk.Prove(&zk.DLProveParams{
+	proof, err := zk.ProveDL(&zk.DLProveParams{
 		Point:     point,
 		Exponent:  exponent,
 		SessionID: sessionID,
@@ -67,7 +67,7 @@ func TestDLProofBasic(t *testing.T) {
 	}
 
 	// Verify proof (pass DLProof directly, not pointer)
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     proof,
 		Point:     point,
 		SessionID: sessionID,
@@ -112,7 +112,7 @@ func TestDLProofSerialization(t *testing.T) {
 	aux := uint64(1)
 
 	// Generate proof
-	proof, err := zk.Prove(&zk.DLProveParams{
+	proof, err := zk.ProveDL(&zk.DLProveParams{
 		Point:     point,
 		Exponent:  exponent,
 		SessionID: sessionID,
@@ -131,7 +131,7 @@ func TestDLProofSerialization(t *testing.T) {
 	copy(proofCopy, proof)
 
 	// Verify original proof
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     proof,
 		Point:     point,
 		SessionID: sessionID,
@@ -142,7 +142,7 @@ func TestDLProofSerialization(t *testing.T) {
 	}
 
 	// Verify copied proof
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     proofCopy,
 		Point:     point,
 		SessionID: sessionID,
@@ -187,7 +187,7 @@ func TestDLProofWrongPoint(t *testing.T) {
 	aux := uint64(1)
 
 	// Generate proof
-	proof, err := zk.Prove(&zk.DLProveParams{
+	proof, err := zk.ProveDL(&zk.DLProveParams{
 		Point:     point,
 		Exponent:  exponent,
 		SessionID: sessionID,
@@ -213,7 +213,7 @@ func TestDLProofWrongPoint(t *testing.T) {
 	defer point2.Free()
 
 	// Verify with wrong point should fail
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     proof,
 		Point:     point2,
 		SessionID: sessionID,
@@ -258,7 +258,7 @@ func TestDLProofWrongSessionID(t *testing.T) {
 	aux := uint64(1)
 
 	// Generate proof
-	proof, err := zk.Prove(&zk.DLProveParams{
+	proof, err := zk.ProveDL(&zk.DLProveParams{
 		Point:     point,
 		Exponent:  exponent,
 		SessionID: sessionID,
@@ -276,7 +276,7 @@ func TestDLProofWrongSessionID(t *testing.T) {
 	wrongSessionID := cbmpc.NewSessionID(wrongSessionIDBytes)
 
 	// Verify with wrong session ID should fail
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     proof,
 		Point:     point,
 		SessionID: wrongSessionID,
@@ -321,7 +321,7 @@ func TestDLProofWrongAux(t *testing.T) {
 	aux := uint64(1)
 
 	// Generate proof
-	proof, err := zk.Prove(&zk.DLProveParams{
+	proof, err := zk.ProveDL(&zk.DLProveParams{
 		Point:     point,
 		Exponent:  exponent,
 		SessionID: sessionID,
@@ -332,7 +332,7 @@ func TestDLProofWrongAux(t *testing.T) {
 	}
 
 	// Verify with wrong aux should fail
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     proof,
 		Point:     point,
 		SessionID: sessionID,
@@ -384,7 +384,7 @@ func TestDLProofMultiple(t *testing.T) {
 		sessionID := cbmpc.NewSessionID(sessionIDBytes)
 		sessionIDs[i] = sessionID
 
-		proof, err := zk.Prove(&zk.DLProveParams{
+		proof, err := zk.ProveDL(&zk.DLProveParams{
 			Point:     point,
 			Exponent:  exponent,
 			SessionID: sessionID,
@@ -398,7 +398,7 @@ func TestDLProofMultiple(t *testing.T) {
 
 	// Verify all proofs
 	for i := 0; i < numProofs; i++ {
-		err := zk.Verify(&zk.DLVerifyParams{
+		err := zk.VerifyDL(&zk.DLVerifyParams{
 			Proof:     proofs[i],
 			Point:     points[i],
 			SessionID: sessionIDs[i],
@@ -411,7 +411,7 @@ func TestDLProofMultiple(t *testing.T) {
 
 	// Verify that cross-verification fails (proof i with point j where i != j)
 	if numProofs >= 2 {
-		err := zk.Verify(&zk.DLVerifyParams{
+		err := zk.VerifyDL(&zk.DLVerifyParams{
 			Proof:     proofs[0],
 			Point:     points[1],
 			SessionID: sessionIDs[0],
@@ -453,7 +453,7 @@ func TestDLProofValueSemantics(t *testing.T) {
 	}
 	sessionID := cbmpc.NewSessionID(sessionIDBytes)
 
-	proof, err := zk.Prove(&zk.DLProveParams{
+	proof, err := zk.ProveDL(&zk.DLProveParams{
 		Point:     point,
 		Exponent:  exponent,
 		SessionID: sessionID,
@@ -467,7 +467,7 @@ func TestDLProofValueSemantics(t *testing.T) {
 	proof2 := proof // Simple assignment copies the bytes
 
 	// Verify original
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     proof,
 		Point:     point,
 		SessionID: sessionID,
@@ -478,7 +478,7 @@ func TestDLProofValueSemantics(t *testing.T) {
 	}
 
 	// Verify copy
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     proof2,
 		Point:     point,
 		SessionID: sessionID,
@@ -490,7 +490,7 @@ func TestDLProofValueSemantics(t *testing.T) {
 
 	// Test empty proof returns error
 	emptyProof := zk.DLProof(nil)
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     emptyProof,
 		Point:     point,
 		SessionID: sessionID,

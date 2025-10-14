@@ -164,6 +164,22 @@ func UCDLVerify([]byte, ECCPoint, []byte, uint64) error {
 	return ErrNotBuilt
 }
 
+func UCBatchDLProve([]ECCPoint, [][]byte, []byte, uint64) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func UCBatchDLVerify([]byte, []ECCPoint, []byte, uint64) error {
+	return ErrNotBuilt
+}
+
+func DHProve(ECCPoint, ECCPoint, ECCPoint, []byte, []byte, uint64) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func DHVerify([]byte, ECCPoint, ECCPoint, ECCPoint, []byte, uint64) error {
+	return ErrNotBuilt
+}
+
 // ECDSAMPKey is a stub type for non-CGO builds
 type ECDSAMPKey = unsafe.Pointer
 

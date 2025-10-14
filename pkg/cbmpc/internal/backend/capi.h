@@ -193,6 +193,38 @@ int cbmpc_uc_dl_prove(cbmpc_ecc_point Q_point, cmem_t w, cmem_t session_id, uint
 // Q_point: the public key point to verify against
 int cbmpc_uc_dl_verify(cmem_t proof, cbmpc_ecc_point Q_point, cmem_t session_id, uint64_t aux);
 
+// UC_Batch_DL proof - batch universally composable discrete log proof
+// Proves knowledge of multiple discrete logarithms Q[i] = w[i]*G
+
+// Create UC_Batch_DL proof for proving knowledge of multiple w's such that Q[i] = w[i]*G
+// Q_points: array of ECC point handles (cbmpc_ecc_point*)
+// Q_count: number of points
+// w_scalars: array of secret scalars/witnesses (serialized as cmems_t)
+// session_id: session identifier for security, aux: auxiliary data
+// Returns serialized proof bytes.
+int cbmpc_uc_batch_dl_prove(cbmpc_ecc_point *Q_points, int Q_count, cmems_t w_scalars, cmem_t session_id, uint64_t aux, cmem_t *proof_out);
+
+// Verify a UC_Batch_DL proof
+// proof: serialized proof bytes
+// Q_points: array of ECC point handles to verify against (cbmpc_ecc_point*)
+// Q_count: number of points
+int cbmpc_uc_batch_dl_verify(cmem_t proof, cbmpc_ecc_point *Q_points, int Q_count, cmem_t session_id, uint64_t aux);
+
+// DH proof - Diffie-Hellman proof
+// Proves knowledge of w such that A = w*G and B = w*Q (same discrete log for two different bases)
+
+// Create DH proof for proving B = w*Q where A = w*G
+// Q_point: the base point, A_point: w*G, B_point: w*Q
+// w: the secret scalar (witness)
+// session_id: session identifier for security, aux: auxiliary data
+// Returns serialized proof bytes.
+int cbmpc_dh_prove(cbmpc_ecc_point Q_point, cbmpc_ecc_point A_point, cbmpc_ecc_point B_point, cmem_t w, cmem_t session_id, uint64_t aux, cmem_t *proof_out);
+
+// Verify a DH proof
+// proof: serialized proof bytes
+// Q_point, A_point, B_point: the points to verify against
+int cbmpc_dh_verify(cmem_t proof, cbmpc_ecc_point Q_point, cbmpc_ecc_point A_point, cbmpc_ecc_point B_point, cmem_t session_id, uint64_t aux);
+
 #ifdef __cplusplus
 }
 #endif

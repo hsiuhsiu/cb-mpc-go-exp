@@ -808,6 +808,136 @@ int cbmpc_uc_dl_verify(cmem_t proof_bytes, cbmpc_ecc_point Q_point, cmem_t sessi
   return rv;
 }
 
+// =====================
+// ZK Proof Operations - UC_Batch_DL
+// =====================
+
+// UC_Batch_DL Prove
+int cbmpc_uc_batch_dl_prove(cbmpc_ecc_point *Q_points, int Q_count, cmems_t w_scalars, cmem_t session_id, uint64_t aux, cmem_t *proof_out) {
+  if (!Q_points || Q_count <= 0 ||
+      !w_scalars.data || w_scalars.count <= 0 || !w_scalars.sizes ||
+      !session_id.data || session_id.size <= 0 || !proof_out) {
+    return E_BADARG;
+  }
+
+  // Check counts match
+  if (Q_count != w_scalars.count) {
+    return E_BADARG;
+  }
+
+  // Convert Q_points from cbmpc_ecc_point* to std::vector<ecc_point_t>
+  std::vector<coinbase::crypto::ecc_point_t> Q_vec;
+  Q_vec.reserve(Q_count);
+  for (int i = 0; i < Q_count; ++i) {
+    if (!Q_points[i]) return E_BADARG;
+    const auto* point = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(Q_points[i]);
+    Q_vec.push_back(*point);
+  }
+
+  // Convert w_scalars from cmems_t to std::vector<bn_t>
+  std::vector<coinbase::crypto::bn_t> w_vec;
+  w_vec.reserve(w_scalars.count);
+  size_t w_offset = 0;
+  for (int i = 0; i < w_scalars.count; ++i) {
+    int size = w_scalars.sizes[i];
+    if (size <= 0) return E_BADARG;
+
+    // Deserialize bn_t from bytes
+    coinbase::crypto::bn_t scalar = coinbase::crypto::bn_t::from_bin(mem_t(w_scalars.data + w_offset, size));
+    w_vec.push_back(std::move(scalar));
+    w_offset += size;
+  }
+
+  // Create proof
+  coinbase::zk::uc_batch_dl_t proof;
+  proof.prove(Q_vec, w_vec, mem_t(session_id.data, session_id.size), aux);
+
+  // Serialize proof to bytes and return
+  buf_t serialized = coinbase::ser(proof);
+  *proof_out = alloc_and_copy(serialized.data(), static_cast<size_t>(serialized.size()));
+
+  return 0;
+}
+
+// UC_Batch_DL Verify
+int cbmpc_uc_batch_dl_verify(cmem_t proof_bytes, cbmpc_ecc_point *Q_points, int Q_count, cmem_t session_id, uint64_t aux) {
+  if (!proof_bytes.data || proof_bytes.size <= 0 ||
+      !Q_points || Q_count <= 0 ||
+      !session_id.data || session_id.size <= 0) {
+    return E_BADARG;
+  }
+
+  // Deserialize proof from bytes
+  coinbase::zk::uc_batch_dl_t proof;
+  error_t rv = coinbase::deser(mem_t(proof_bytes.data, proof_bytes.size), proof);
+  if (rv != SUCCESS) return rv;
+
+  // Convert Q_points from cbmpc_ecc_point* to std::vector<ecc_point_t>
+  std::vector<coinbase::crypto::ecc_point_t> Q_vec;
+  Q_vec.reserve(Q_count);
+  for (int i = 0; i < Q_count; ++i) {
+    if (!Q_points[i]) return E_BADARG;
+    const auto* point = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(Q_points[i]);
+    Q_vec.push_back(*point);
+  }
+
+  // Verify
+  rv = proof.verify(Q_vec, mem_t(session_id.data, session_id.size), aux);
+  return rv;
+}
+
+// =====================
+// ZK Proof Operations - DH
+// =====================
+
+// DH Prove
+int cbmpc_dh_prove(cbmpc_ecc_point Q_point, cbmpc_ecc_point A_point, cbmpc_ecc_point B_point, cmem_t w, cmem_t session_id, uint64_t aux, cmem_t *proof_out) {
+  if (!Q_point || !A_point || !B_point ||
+      !w.data || w.size <= 0 ||
+      !session_id.data || session_id.size <= 0 || !proof_out) {
+    return E_BADARG;
+  }
+
+  const auto* Q = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(Q_point);
+  const auto* A = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(A_point);
+  const auto* B = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(B_point);
+
+  // Deserialize scalar w from bytes
+  coinbase::crypto::bn_t w_bn = coinbase::crypto::bn_t::from_bin(mem_t(w.data, w.size));
+
+  // Create proof
+  coinbase::zk::dh_t proof;
+  proof.prove(*Q, *A, *B, w_bn, mem_t(session_id.data, session_id.size), aux);
+
+  // Serialize proof to bytes and return
+  buf_t serialized = coinbase::ser(proof);
+  *proof_out = alloc_and_copy(serialized.data(), static_cast<size_t>(serialized.size()));
+
+  return 0;
+}
+
+// DH Verify
+int cbmpc_dh_verify(cmem_t proof_bytes, cbmpc_ecc_point Q_point, cbmpc_ecc_point A_point, cbmpc_ecc_point B_point, cmem_t session_id, uint64_t aux) {
+  if (!proof_bytes.data || proof_bytes.size <= 0 ||
+      !Q_point || !A_point || !B_point ||
+      !session_id.data || session_id.size <= 0) {
+    return E_BADARG;
+  }
+
+  // Deserialize proof from bytes
+  coinbase::zk::dh_t proof;
+  error_t rv = coinbase::deser(mem_t(proof_bytes.data, proof_bytes.size), proof);
+  if (rv != SUCCESS) return rv;
+
+  const auto* Q = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(Q_point);
+  const auto* A = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(A_point);
+  const auto* B = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(B_point);
+
+  // Verify
+  rv = proof.verify(*Q, *A, *B, mem_t(session_id.data, session_id.size), aux);
+  return rv;
+}
+
 // ============================================================
 // Schnorr 2P protocols
 // ============================================================
