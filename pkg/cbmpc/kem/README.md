@@ -55,6 +55,28 @@ This ensures:
 - Same `rho` cannot leak information across different keys
 - Decryption requires matching public key (via label check)
 
+### Handle Metadata and Runtime Checks
+
+To reduce misuse risk with `any` decapsulation handles, the built-in RSA private key handle stores:
+
+- Algorithm ID (e.g., `rsa-oaep-2048`)
+- Modulus size in bytes
+- Public key hash `SHA-256(ek)`
+
+At decapsulation time, the RSA KEM verifies:
+
+- Algorithm family is RSA-OAEP
+- Modulus size is one of 2048/3072/4096 bits and matches this KEM's configured size
+- Public key hash in the handle matches the actual handle public key
+- Optional: if the KEM instance is bound to a specific public key hash, it must match
+
+Typed errors are returned on mismatch (no panics):
+
+- `rsa.ErrInvalidHandleType`
+- `rsa.ErrAlgorithmMismatch`
+- `rsa.ErrUnsupportedKeySize`
+- `rsa.ErrPublicKeyHashMismatch`
+
 ## Implementation: RSA-OAEP
 
 The `rsa` package provides deterministic RSA-OAEP encryption:
