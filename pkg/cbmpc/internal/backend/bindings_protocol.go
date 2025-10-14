@@ -782,3 +782,59 @@ func Schnorr2PSignBatch(cj unsafe.Pointer, key Schnorr2PKey, msgs [][]byte, vari
 
 	return cmemsToGoByteSlices(sigsOut), nil
 }
+
+// =====================
+// Schnorr MP Protocols
+// =====================
+
+// SchnorrMPSign is a C binding wrapper for multi-party Schnorr signing.
+// Only the party with party_idx == sig_receiver will receive the final signature.
+func SchnorrMPSign(cj unsafe.Pointer, key ECDSAMPKey, msg []byte, sigReceiver int, variant SchnorrVariant) ([]byte, error) {
+	if cj == nil {
+		return nil, errors.New("nil job")
+	}
+	if key == nil {
+		return nil, errors.New("nil key")
+	}
+	if len(msg) == 0 {
+		return nil, errors.New("empty message")
+	}
+
+	// Copy message into C-allocated memory for the signing operation
+	msgMem := allocCmem(msg)
+	defer freeCmem(msgMem)
+
+	var sigOut C.cmem_t
+	rc := C.cbmpc_schnorrmp_sign((*C.cbmpc_jobmp)(cj), key, msgMem, C.int(sigReceiver), C.int(variant), &sigOut)
+	if rc != 0 {
+		return nil, formatNativeErr("schnorrmp_sign", rc)
+	}
+
+	return cmemToGoBytes(sigOut), nil
+}
+
+// SchnorrMPSignBatch signs multiple messages with a Schnorr MP key (batch mode).
+// Only the party with party_idx == sig_receiver will receive the final signatures.
+func SchnorrMPSignBatch(cj unsafe.Pointer, key ECDSAMPKey, msgs [][]byte, sigReceiver int, variant SchnorrVariant) ([][]byte, error) {
+	if cj == nil {
+		return nil, errors.New("nil job")
+	}
+	if key == nil {
+		return nil, errors.New("nil key")
+	}
+	if len(msgs) == 0 {
+		return nil, errors.New("empty messages")
+	}
+
+	// Copy messages into C-allocated memory to avoid aliasing Go memory during CGO call
+	msgsMem := goBytesSliceToCmems(msgs)
+	defer freeCmems(msgsMem)
+
+	var sigsOut C.cmems_t
+	rc := C.cbmpc_schnorrmp_sign_batch((*C.cbmpc_jobmp)(cj), key, msgsMem, C.int(sigReceiver), C.int(variant), &sigsOut)
+	if rc != 0 {
+		return nil, formatNativeErr("schnorrmp_sign_batch", rc)
+	}
+
+	return cmemsToGoByteSlices(sigsOut), nil
+}

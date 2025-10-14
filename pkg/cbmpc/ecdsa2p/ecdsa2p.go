@@ -54,6 +54,27 @@ func (k *Key) Close() error {
 
 // Bytes returns the serialized key data for persistent storage or network transmission.
 // Returns a defensive copy to prevent external modification of internal key data.
+//
+// SECURITY WARNING:
+// The returned bytes contain sensitive cryptographic key material.
+// - Call cbmpc.ZeroizeBytes on the returned slice after use to clear it from memory
+// - Always encrypt key data before storing it at rest (e.g., using AES-GCM)
+// - Never log or print key bytes
+//
+// Example:
+//
+//	keyBytes, err := key.Bytes()
+//	if err != nil {
+//	    return err
+//	}
+//	defer cbmpc.ZeroizeBytes(keyBytes) // Clear from memory when done
+//
+//	// Encrypt before storage
+//	encrypted, err := encryptKey(keyBytes)
+//	if err != nil {
+//	    return err
+//	}
+//	// Store encrypted bytes...
 func (k *Key) Bytes() ([]byte, error) {
 	if k == nil || k.ckey == nil {
 		return nil, errors.New("nil or closed key")

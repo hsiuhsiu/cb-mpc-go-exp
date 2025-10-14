@@ -20,6 +20,7 @@
 #include "cbmpc/protocol/pve.h"
 #include "cbmpc/protocol/pve_base.h"
 #include "cbmpc/protocol/schnorr_2p.h"
+#include "cbmpc/protocol/schnorr_mp.h"
 #include "cbmpc/zk/zk_ec.h"
 
 namespace {
@@ -1011,6 +1012,81 @@ int cbmpc_schnorr2p_sign_batch(cbmpc_job2p *j, const cbmpc_schnorr2p_key *key, c
   // Note: sigs_out->data can be nullptr if all signatures are empty (total_size=0)
   // This is normal for P2, so we don't check for allocation failure here
 
+  return 0;
+}
+
+// ============================================================
+// Schnorr MP protocols
+// ============================================================
+
+// Helper function to convert variant enum to C++ variant_e for Schnorr MP
+static inline coinbase::mpc::schnorrmp::variant_e int_to_schnorrmp_variant(int variant) {
+  switch (variant) {
+    case CBMPC_SCHNORR_VARIANT_EDDSA:
+      return coinbase::mpc::schnorrmp::variant_e::EdDSA;
+    case CBMPC_SCHNORR_VARIANT_BIP340:
+      return coinbase::mpc::schnorrmp::variant_e::BIP340;
+    default:
+      return coinbase::mpc::schnorrmp::variant_e::EdDSA;  // Default fallback
+  }
+}
+
+// Schnorr MP Sign
+int cbmpc_schnorrmp_sign(cbmpc_jobmp *j, const cbmpc_ecdsamp_key *key, cmem_t msg, int sig_receiver, int variant, cmem_t *sig_out) {
+  auto wrapper = reinterpret_cast<go_jobmp *>(j);
+  if (!wrapper || !wrapper->job || !key || !key->opaque ||
+      !msg.data || msg.size <= 0 || !sig_out) return E_BADARG;
+
+  // Copy the key so we can pass a mutable reference to sign
+  auto signing_key_copy = *static_cast<const coinbase::mpc::ecdsampc::key_t *>(key->opaque);
+
+  // Convert variant
+  auto cpp_variant = int_to_schnorrmp_variant(variant);
+
+  // Sign
+  buf_t signature;
+  mem_t msg_mem(msg.data, msg.size);
+  error_t rv = coinbase::mpc::schnorrmp::sign(*wrapper->job, signing_key_copy, msg_mem, sig_receiver, signature, cpp_variant);
+  if (rv != SUCCESS) return rv;
+
+  // Copy output (signature may be empty for non-receiver parties)
+  *sig_out = alloc_and_copy(signature.data(), static_cast<size_t>(signature.size()));
+  return 0;
+}
+
+// Schnorr MP Sign Batch
+int cbmpc_schnorrmp_sign_batch(cbmpc_jobmp *j, const cbmpc_ecdsamp_key *key, cmems_t msgs, int sig_receiver, int variant, cmems_t *sigs_out) {
+  auto wrapper = reinterpret_cast<go_jobmp *>(j);
+  if (!wrapper || !wrapper->job || !key || !key->opaque || !sigs_out) return E_BADARG;
+  if (msgs.count <= 0 || !msgs.data || !msgs.sizes) return E_BADARG;
+
+  // Copy the key so we can pass a mutable reference to sign_batch
+  auto signing_key_copy = *static_cast<const coinbase::mpc::ecdsampc::key_t *>(key->opaque);
+
+  // Convert variant
+  auto cpp_variant = int_to_schnorrmp_variant(variant);
+
+  // Convert cmems_t to std::vector<mem_t>
+  std::vector<mem_t> msg_vec;
+  msg_vec.reserve(msgs.count);
+  size_t offset = 0;
+  for (int i = 0; i < msgs.count; ++i) {
+    int size = msgs.sizes[i];
+    if (size > 0) {
+      msg_vec.emplace_back(msgs.data + offset, size);
+      offset += size;
+    } else {
+      msg_vec.emplace_back(nullptr, 0);
+    }
+  }
+
+  // Sign batch
+  std::vector<buf_t> signatures;
+  error_t rv = coinbase::mpc::schnorrmp::sign_batch(*wrapper->job, signing_key_copy, msg_vec, sig_receiver, signatures, cpp_variant);
+  if (rv != SUCCESS) return rv;
+
+  // Copy outputs (signatures may be empty for non-receiver parties)
+  *sigs_out = alloc_and_copy_vector(signatures);
   return 0;
 }
 

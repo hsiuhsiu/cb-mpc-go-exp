@@ -237,3 +237,11 @@ func Schnorr2PSign(unsafe.Pointer, Schnorr2PKey, []byte, SchnorrVariant) ([]byte
 func Schnorr2PSignBatch(unsafe.Pointer, Schnorr2PKey, [][]byte, SchnorrVariant) ([][]byte, error) {
 	return nil, ErrNotBuilt
 }
+
+func SchnorrMPSign(unsafe.Pointer, ECDSAMPKey, []byte, int, SchnorrVariant) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func SchnorrMPSignBatch(unsafe.Pointer, ECDSAMPKey, [][]byte, int, SchnorrVariant) ([][]byte, error) {
+	return nil, ErrNotBuilt
+}
