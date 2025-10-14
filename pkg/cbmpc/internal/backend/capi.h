@@ -131,6 +131,54 @@ void cbmpc_set_kem_tls(const void *handle);
 void cbmpc_clear_kem_tls(void);
 const void *cbmpc_get_kem_tls(void);
 
+// Schnorr 2P protocols
+// Schnorr 2P key type (wraps eckey::key_share_2p_t, same underlying type as ECDSA 2P but kept separate).
+// All functions return a key that must be freed with cbmpc_schnorr2p_key_free.
+
+// Schnorr variant enum (EdDSA or BIP340).
+#define CBMPC_SCHNORR_VARIANT_EDDSA 0
+#define CBMPC_SCHNORR_VARIANT_BIP340 1
+
+// Perform 2-party Schnorr distributed key generation.
+int cbmpc_schnorr2p_dkg(cbmpc_job2p *j, int curve_nid, cbmpc_schnorr2p_key **key_out);
+
+// Free a Schnorr 2P key.
+void cbmpc_schnorr2p_key_free(cbmpc_schnorr2p_key *key);
+
+// Serialize a Schnorr 2P key to bytes.
+int cbmpc_schnorr2p_key_serialize(const cbmpc_schnorr2p_key *key, cmem_t *out);
+
+// Deserialize bytes into a Schnorr 2P key.
+int cbmpc_schnorr2p_key_deserialize(cmem_t serialized, cbmpc_schnorr2p_key **key_out);
+
+// Get the public key from a Schnorr 2P key (compressed format).
+int cbmpc_schnorr2p_key_get_public_key(const cbmpc_schnorr2p_key *key, cmem_t *out);
+
+// Get the curve NID from a Schnorr 2P key.
+int cbmpc_schnorr2p_key_get_curve(const cbmpc_schnorr2p_key *key, int *curve_nid_out);
+
+// Sign a message with a Schnorr 2P key.
+// variant: CBMPC_SCHNORR_VARIANT_EDDSA or CBMPC_SCHNORR_VARIANT_BIP340
+int cbmpc_schnorr2p_sign(cbmpc_job2p *j, const cbmpc_schnorr2p_key *key, cmem_t msg, int variant, cmem_t *sig_out);
+
+// Sign multiple messages with a Schnorr 2P key (batch mode).
+// variant: CBMPC_SCHNORR_VARIANT_EDDSA or CBMPC_SCHNORR_VARIANT_BIP340
+int cbmpc_schnorr2p_sign_batch(cbmpc_job2p *j, const cbmpc_schnorr2p_key *key, cmems_t msgs, int variant, cmems_t *sigs_out);
+
+// Schnorr MP protocols
+// Schnorr MP uses the same key type as ECDSA MP (eckey::key_share_mp_t).
+// Use cbmpc_ecdsamp_dkg and cbmpc_ecdsamp_refresh for key management.
+
+// Sign a message with a Schnorr MP key.
+// Only the party with party_idx == sig_receiver will receive the final signature.
+// variant: CBMPC_SCHNORR_VARIANT_EDDSA or CBMPC_SCHNORR_VARIANT_BIP340
+int cbmpc_schnorrmp_sign(cbmpc_jobmp *j, const cbmpc_ecdsamp_key *key, cmem_t msg, int sig_receiver, int variant, cmem_t *sig_out);
+
+// Sign multiple messages with a Schnorr MP key (batch mode).
+// Only the party with party_idx == sig_receiver will receive the final signatures.
+// variant: CBMPC_SCHNORR_VARIANT_EDDSA or CBMPC_SCHNORR_VARIANT_BIP340
+int cbmpc_schnorrmp_sign_batch(cbmpc_jobmp *j, const cbmpc_ecdsamp_key *key, cmems_t msgs, int sig_receiver, int variant, cmems_t *sigs_out);
+
 // ZK proof operations (coinbase::zk namespace)
 // UC_DL proof - universally composable discrete log proof
 

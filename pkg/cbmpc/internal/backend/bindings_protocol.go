@@ -632,3 +632,209 @@ func ECDSAMPSign(cj unsafe.Pointer, key ECDSAMPKey, msg []byte, sigReceiver int)
 
 	return cmemToGoBytes(sigOut), nil
 }
+
+// =====================
+// Schnorr 2P Protocols
+// =====================
+
+// Schnorr2PKey is an opaque handle to a C++ schnorr2p key (eckey::key_share_2p_t).
+type Schnorr2PKey = *C.cbmpc_schnorr2p_key
+
+// Schnorr2PDKG is a C binding wrapper for 2-party Schnorr distributed key generation.
+func Schnorr2PDKG(cj unsafe.Pointer, curveNID int) (Schnorr2PKey, error) {
+	if cj == nil {
+		return nil, errors.New("nil job")
+	}
+
+	var key Schnorr2PKey
+	rc := C.cbmpc_schnorr2p_dkg((*C.cbmpc_job2p)(cj), C.int(curveNID), &key)
+	if rc != 0 {
+		return nil, formatNativeErr("schnorr2p_dkg", rc)
+	}
+	return key, nil
+}
+
+// Schnorr2PKeyFree frees a Schnorr 2P key.
+func Schnorr2PKeyFree(key Schnorr2PKey) {
+	if key != nil {
+		C.cbmpc_schnorr2p_key_free(key)
+	}
+}
+
+// Schnorr2PKeySerialize serializes a Schnorr 2P key to bytes.
+func Schnorr2PKeySerialize(key Schnorr2PKey) ([]byte, error) {
+	if key == nil {
+		return nil, errors.New("nil key")
+	}
+
+	var out C.cmem_t
+	rc := C.cbmpc_schnorr2p_key_serialize(key, &out)
+	if rc != 0 {
+		return nil, formatNativeErr("schnorr2p_key_serialize", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// Schnorr2PKeyDeserialize deserializes bytes into a Schnorr 2P key.
+func Schnorr2PKeyDeserialize(serialized []byte) (Schnorr2PKey, error) {
+	if len(serialized) == 0 {
+		return nil, errors.New("empty serialized key")
+	}
+
+	serializedMem := goBytesToCmem(serialized)
+
+	var key Schnorr2PKey
+	rc := C.cbmpc_schnorr2p_key_deserialize(serializedMem, &key)
+	if rc != 0 {
+		return nil, formatNativeErr("schnorr2p_key_deserialize", rc)
+	}
+
+	return key, nil
+}
+
+// Schnorr2PKeyGetPublicKey gets the public key from a Schnorr 2P key (compressed format).
+func Schnorr2PKeyGetPublicKey(key Schnorr2PKey) ([]byte, error) {
+	if key == nil {
+		return nil, errors.New("nil key")
+	}
+
+	var out C.cmem_t
+	rc := C.cbmpc_schnorr2p_key_get_public_key(key, &out)
+	if rc != 0 {
+		return nil, formatNativeErr("schnorr2p_key_get_public_key", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// Schnorr2PKeyGetCurve gets the curve NID from a Schnorr 2P key.
+func Schnorr2PKeyGetCurve(key Schnorr2PKey) (int, error) {
+	if key == nil {
+		return 0, errors.New("nil key")
+	}
+
+	var curveNID C.int
+	rc := C.cbmpc_schnorr2p_key_get_curve(key, &curveNID)
+	if rc != 0 {
+		return 0, formatNativeErr("schnorr2p_key_get_curve", rc)
+	}
+
+	return int(curveNID), nil
+}
+
+// SchnorrVariant represents Schnorr signature variant (EdDSA or BIP340).
+type SchnorrVariant int
+
+const (
+	// SchnorrVariantEdDSA represents EdDSA (Ed25519) variant.
+	SchnorrVariantEdDSA SchnorrVariant = C.CBMPC_SCHNORR_VARIANT_EDDSA
+	// SchnorrVariantBIP340 represents BIP340 (secp256k1) variant.
+	SchnorrVariantBIP340 SchnorrVariant = C.CBMPC_SCHNORR_VARIANT_BIP340
+)
+
+// Schnorr2PSign is a C binding wrapper for 2-party Schnorr signing.
+func Schnorr2PSign(cj unsafe.Pointer, key Schnorr2PKey, msg []byte, variant SchnorrVariant) ([]byte, error) {
+	if cj == nil {
+		return nil, errors.New("nil job")
+	}
+	if key == nil {
+		return nil, errors.New("nil key")
+	}
+	if len(msg) == 0 {
+		return nil, errors.New("empty message")
+	}
+
+	// Copy message into C-allocated memory to avoid aliasing Go memory during CGO call
+	msgMem := allocCmem(msg)
+	defer freeCmem(msgMem)
+
+	var sigOut C.cmem_t
+	rc := C.cbmpc_schnorr2p_sign((*C.cbmpc_job2p)(cj), key, msgMem, C.int(variant), &sigOut)
+	if rc != 0 {
+		return nil, formatNativeErr("schnorr2p_sign", rc)
+	}
+
+	return cmemToGoBytes(sigOut), nil
+}
+
+// Schnorr2PSignBatch signs multiple messages with a Schnorr 2P key (batch mode).
+func Schnorr2PSignBatch(cj unsafe.Pointer, key Schnorr2PKey, msgs [][]byte, variant SchnorrVariant) ([][]byte, error) {
+	if cj == nil {
+		return nil, errors.New("nil job")
+	}
+	if key == nil {
+		return nil, errors.New("nil key")
+	}
+	if len(msgs) == 0 {
+		return nil, errors.New("empty messages")
+	}
+
+	// Copy messages into C-allocated memory to avoid aliasing Go memory during CGO call
+	msgsMem := goBytesSliceToCmems(msgs)
+	defer freeCmems(msgsMem)
+
+	var sigsOut C.cmems_t
+	rc := C.cbmpc_schnorr2p_sign_batch((*C.cbmpc_job2p)(cj), key, msgsMem, C.int(variant), &sigsOut)
+	if rc != 0 {
+		return nil, formatNativeErr("schnorr2p_sign_batch", rc)
+	}
+
+	return cmemsToGoByteSlices(sigsOut), nil
+}
+
+// =====================
+// Schnorr MP Protocols
+// =====================
+
+// SchnorrMPSign is a C binding wrapper for multi-party Schnorr signing.
+// Only the party with party_idx == sig_receiver will receive the final signature.
+func SchnorrMPSign(cj unsafe.Pointer, key ECDSAMPKey, msg []byte, sigReceiver int, variant SchnorrVariant) ([]byte, error) {
+	if cj == nil {
+		return nil, errors.New("nil job")
+	}
+	if key == nil {
+		return nil, errors.New("nil key")
+	}
+	if len(msg) == 0 {
+		return nil, errors.New("empty message")
+	}
+
+	// Copy message into C-allocated memory for the signing operation
+	msgMem := allocCmem(msg)
+	defer freeCmem(msgMem)
+
+	var sigOut C.cmem_t
+	rc := C.cbmpc_schnorrmp_sign((*C.cbmpc_jobmp)(cj), key, msgMem, C.int(sigReceiver), C.int(variant), &sigOut)
+	if rc != 0 {
+		return nil, formatNativeErr("schnorrmp_sign", rc)
+	}
+
+	return cmemToGoBytes(sigOut), nil
+}
+
+// SchnorrMPSignBatch signs multiple messages with a Schnorr MP key (batch mode).
+// Only the party with party_idx == sig_receiver will receive the final signatures.
+func SchnorrMPSignBatch(cj unsafe.Pointer, key ECDSAMPKey, msgs [][]byte, sigReceiver int, variant SchnorrVariant) ([][]byte, error) {
+	if cj == nil {
+		return nil, errors.New("nil job")
+	}
+	if key == nil {
+		return nil, errors.New("nil key")
+	}
+	if len(msgs) == 0 {
+		return nil, errors.New("empty messages")
+	}
+
+	// Copy messages into C-allocated memory to avoid aliasing Go memory during CGO call
+	msgsMem := goBytesSliceToCmems(msgs)
+	defer freeCmems(msgsMem)
+
+	var sigsOut C.cmems_t
+	rc := C.cbmpc_schnorrmp_sign_batch((*C.cbmpc_jobmp)(cj), key, msgsMem, C.int(sigReceiver), C.int(variant), &sigsOut)
+	if rc != 0 {
+		return nil, formatNativeErr("schnorrmp_sign_batch", rc)
+	}
+
+	return cmemsToGoByteSlices(sigsOut), nil
+}

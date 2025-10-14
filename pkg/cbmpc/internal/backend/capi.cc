@@ -19,6 +19,8 @@
 #include "cbmpc/protocol/mpc_job.h"
 #include "cbmpc/protocol/pve.h"
 #include "cbmpc/protocol/pve_base.h"
+#include "cbmpc/protocol/schnorr_2p.h"
+#include "cbmpc/protocol/schnorr_mp.h"
 #include "cbmpc/zk/zk_ec.h"
 
 namespace {
@@ -804,6 +806,288 @@ int cbmpc_uc_dl_verify(cmem_t proof_bytes, cbmpc_ecc_point Q_point, cmem_t sessi
   // Verify
   rv = proof.verify(*Q, mem_t(session_id.data, session_id.size), aux);
   return rv;
+}
+
+// ============================================================
+// Schnorr 2P protocols
+// ============================================================
+
+// Helper function to convert variant enum to C++ variant_e
+static inline coinbase::mpc::schnorr2p::variant_e int_to_schnorr_variant(int variant) {
+  switch (variant) {
+    case CBMPC_SCHNORR_VARIANT_EDDSA:
+      return coinbase::mpc::schnorr2p::variant_e::EdDSA;
+    case CBMPC_SCHNORR_VARIANT_BIP340:
+      return coinbase::mpc::schnorr2p::variant_e::BIP340;
+    default:
+      return coinbase::mpc::schnorr2p::variant_e::EdDSA;  // Default fallback
+  }
+}
+
+// Schnorr 2P DKG
+int cbmpc_schnorr2p_dkg(cbmpc_job2p *j, int curve_nid, cbmpc_schnorr2p_key **key_out) {
+  auto wrapper = reinterpret_cast<go_job2p *>(j);
+  if (!wrapper || !wrapper->job || !key_out) return E_BADARG;
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  // Schnorr 2P uses eckey::key_share_2p_t
+  auto key = std::make_unique<coinbase::mpc::eckey::key_share_2p_t>();
+  buf_t sid;
+  error_t rv = coinbase::mpc::eckey::key_share_2p_t::dkg(*wrapper->job, curve, *key, sid);
+  if (rv != SUCCESS) return rv;
+
+  auto key_wrapper = new cbmpc_schnorr2p_key;
+  key_wrapper->opaque = key.release();
+  *key_out = key_wrapper;
+  return 0;
+}
+
+// Free a Schnorr 2P key
+void cbmpc_schnorr2p_key_free(cbmpc_schnorr2p_key *key) {
+  if (key && key->opaque) {
+    auto* cpp_key = static_cast<coinbase::mpc::eckey::key_share_2p_t*>(key->opaque);
+    delete cpp_key;
+    delete key;
+  }
+}
+
+// Serialize a Schnorr 2P key (eckey::key_share_2p_t)
+int cbmpc_schnorr2p_key_serialize(const cbmpc_schnorr2p_key *key, cmem_t *out) {
+  if (!key || !key->opaque || !out) return E_BADARG;
+
+  const auto* cpp_key = static_cast<const coinbase::mpc::eckey::key_share_2p_t*>(key->opaque);
+
+  // Manual serialization: role (uint32), curve_nid (int), Q (bytes), x_share (bytes)
+  uint32_t role_val = static_cast<uint32_t>(cpp_key->role);
+  int curve_nid = cpp_key->curve.get_openssl_code();
+  buf_t Q_bin = cpp_key->Q.to_oct();
+  buf_t x_share_bin = cpp_key->x_share.to_bin();
+
+  // Calculate size
+  coinbase::converter_t size_calc(true);
+  size_calc.convert(role_val);
+  size_calc.convert(curve_nid);
+  size_calc.convert(Q_bin);
+  size_calc.convert(x_share_bin);
+  if (size_calc.is_error()) return E_CRYPTO;
+
+  // Allocate and write
+  buf_t result(size_calc.get_size());
+  coinbase::converter_t writer(result.data());
+  writer.convert(role_val);
+  writer.convert(curve_nid);
+  writer.convert(Q_bin);
+  writer.convert(x_share_bin);
+  if (writer.is_error()) return E_CRYPTO;
+
+  *out = alloc_and_copy(result.data(), static_cast<size_t>(result.size()));
+  if (!out->data && result.size() > 0) return E_BADARG;
+
+  return 0;
+}
+
+// Deserialize a Schnorr 2P key (eckey::key_share_2p_t)
+int cbmpc_schnorr2p_key_deserialize(cmem_t serialized, cbmpc_schnorr2p_key **key_out) {
+  if (!serialized.data || serialized.size <= 0 || !key_out) return E_BADARG;
+
+  auto key = std::make_unique<coinbase::mpc::eckey::key_share_2p_t>();
+
+  // Manual deserialization
+  coinbase::converter_t reader(mem_t(serialized.data, serialized.size));
+  uint32_t role_val;
+  int curve_nid;
+  buf_t Q_bin, x_share_bin;
+
+  reader.convert(role_val);
+  reader.convert(curve_nid);
+  reader.convert(Q_bin);
+  reader.convert(x_share_bin);
+  if (reader.is_error()) return E_CRYPTO;
+
+  // Reconstruct key
+  key->role = static_cast<coinbase::mpc::party_t>(role_val);
+  key->curve = find_curve_by_nid(curve_nid);
+  if (!key->curve) return E_BADARG;
+
+  error_t rv = key->Q.from_oct(key->curve, mem_t(Q_bin.data(), Q_bin.size()));
+  if (rv != SUCCESS) return rv;
+
+  key->x_share = coinbase::crypto::bn_t::from_bin(mem_t(x_share_bin.data(), x_share_bin.size()));
+
+  auto key_wrapper = new cbmpc_schnorr2p_key;
+  key_wrapper->opaque = key.release();
+  *key_out = key_wrapper;
+  return 0;
+}
+
+// Get public key from Schnorr 2P key
+int cbmpc_schnorr2p_key_get_public_key(const cbmpc_schnorr2p_key *key, cmem_t *out) {
+  if (!key || !key->opaque || !out) return E_BADARG;
+
+  const auto* cpp_key = static_cast<const coinbase::mpc::eckey::key_share_2p_t*>(key->opaque);
+
+  // Serialize public key point Q to compressed format
+  buf_t Q_bytes = cpp_key->Q.to_oct();
+  *out = alloc_and_copy(Q_bytes.data(), static_cast<size_t>(Q_bytes.size()));
+
+  return 0;
+}
+
+// Get curve from Schnorr 2P key
+int cbmpc_schnorr2p_key_get_curve(const cbmpc_schnorr2p_key *key, int *curve_nid_out) {
+  if (!key || !key->opaque || !curve_nid_out) return E_BADARG;
+
+  const auto* cpp_key = static_cast<const coinbase::mpc::eckey::key_share_2p_t*>(key->opaque);
+
+  // Get OpenSSL NID from curve
+  *curve_nid_out = cpp_key->curve.get_openssl_code();
+
+  return 0;
+}
+
+// Schnorr 2P Sign
+int cbmpc_schnorr2p_sign(cbmpc_job2p *j, const cbmpc_schnorr2p_key *key, cmem_t msg, int variant, cmem_t *sig_out) {
+  auto wrapper = reinterpret_cast<go_job2p *>(j);
+  if (!wrapper || !wrapper->job || !key || !key->opaque ||
+      !msg.data || msg.size <= 0 || !sig_out) return E_BADARG;
+
+  // Copy the key so we can pass a mutable reference to sign
+  // (Schnorr 2P protocol may modify the key during signing)
+  auto signing_key_copy = *static_cast<const coinbase::mpc::eckey::key_share_2p_t*>(key->opaque);
+
+  // Convert variant
+  auto cpp_variant = int_to_schnorr_variant(variant);
+
+  // Sign
+  buf_t signature;
+  mem_t msg_mem(msg.data, msg.size);
+  error_t rv = coinbase::mpc::schnorr2p::sign(*wrapper->job, signing_key_copy, msg_mem, signature, cpp_variant);
+  if (rv != SUCCESS) return rv;
+
+  // Copy output
+  *sig_out = alloc_and_copy(signature.data(), static_cast<size_t>(signature.size()));
+  if (!sig_out->data && signature.size() > 0) {
+    return E_BADARG;
+  }
+
+  return 0;
+}
+
+// Schnorr 2P Sign Batch
+int cbmpc_schnorr2p_sign_batch(cbmpc_job2p *j, const cbmpc_schnorr2p_key *key, cmems_t msgs, int variant, cmems_t *sigs_out) {
+  auto wrapper = reinterpret_cast<go_job2p *>(j);
+  if (!wrapper || !wrapper->job || !key || !key->opaque || !sigs_out) return E_BADARG;
+  if (msgs.count <= 0 || !msgs.data || !msgs.sizes) return E_BADARG;
+
+  // Copy the key so we can pass a mutable reference to sign_batch
+  // (Schnorr 2P protocol may modify the key during signing)
+  auto signing_key_copy = *static_cast<const coinbase::mpc::eckey::key_share_2p_t*>(key->opaque);
+
+  // Convert variant
+  auto cpp_variant = int_to_schnorr_variant(variant);
+
+  // Convert cmems_t to std::vector<mem_t>
+  std::vector<mem_t> msg_vec;
+  msg_vec.reserve(msgs.count);
+  size_t offset = 0;
+  for (int i = 0; i < msgs.count; ++i) {
+    int size = msgs.sizes[i];
+    if (size > 0) {
+      msg_vec.emplace_back(msgs.data + offset, size);
+      offset += size;
+    } else {
+      msg_vec.emplace_back(nullptr, 0);
+    }
+  }
+
+  // Sign batch
+  std::vector<buf_t> signatures;
+  error_t rv = coinbase::mpc::schnorr2p::sign_batch(*wrapper->job, signing_key_copy, msg_vec, signatures, cpp_variant);
+  if (rv != SUCCESS) return rv;
+
+  // Copy outputs
+  *sigs_out = alloc_and_copy_vector(signatures);
+  // Note: sigs_out->data can be nullptr if all signatures are empty (total_size=0)
+  // This is normal for P2, so we don't check for allocation failure here
+
+  return 0;
+}
+
+// ============================================================
+// Schnorr MP protocols
+// ============================================================
+
+// Helper function to convert variant enum to C++ variant_e for Schnorr MP
+static inline coinbase::mpc::schnorrmp::variant_e int_to_schnorrmp_variant(int variant) {
+  switch (variant) {
+    case CBMPC_SCHNORR_VARIANT_EDDSA:
+      return coinbase::mpc::schnorrmp::variant_e::EdDSA;
+    case CBMPC_SCHNORR_VARIANT_BIP340:
+      return coinbase::mpc::schnorrmp::variant_e::BIP340;
+    default:
+      return coinbase::mpc::schnorrmp::variant_e::EdDSA;  // Default fallback
+  }
+}
+
+// Schnorr MP Sign
+int cbmpc_schnorrmp_sign(cbmpc_jobmp *j, const cbmpc_ecdsamp_key *key, cmem_t msg, int sig_receiver, int variant, cmem_t *sig_out) {
+  auto wrapper = reinterpret_cast<go_jobmp *>(j);
+  if (!wrapper || !wrapper->job || !key || !key->opaque ||
+      !msg.data || msg.size <= 0 || !sig_out) return E_BADARG;
+
+  // Copy the key so we can pass a mutable reference to sign
+  auto signing_key_copy = *static_cast<const coinbase::mpc::ecdsampc::key_t *>(key->opaque);
+
+  // Convert variant
+  auto cpp_variant = int_to_schnorrmp_variant(variant);
+
+  // Sign
+  buf_t signature;
+  mem_t msg_mem(msg.data, msg.size);
+  error_t rv = coinbase::mpc::schnorrmp::sign(*wrapper->job, signing_key_copy, msg_mem, sig_receiver, signature, cpp_variant);
+  if (rv != SUCCESS) return rv;
+
+  // Copy output (signature may be empty for non-receiver parties)
+  *sig_out = alloc_and_copy(signature.data(), static_cast<size_t>(signature.size()));
+  return 0;
+}
+
+// Schnorr MP Sign Batch
+int cbmpc_schnorrmp_sign_batch(cbmpc_jobmp *j, const cbmpc_ecdsamp_key *key, cmems_t msgs, int sig_receiver, int variant, cmems_t *sigs_out) {
+  auto wrapper = reinterpret_cast<go_jobmp *>(j);
+  if (!wrapper || !wrapper->job || !key || !key->opaque || !sigs_out) return E_BADARG;
+  if (msgs.count <= 0 || !msgs.data || !msgs.sizes) return E_BADARG;
+
+  // Copy the key so we can pass a mutable reference to sign_batch
+  auto signing_key_copy = *static_cast<const coinbase::mpc::ecdsampc::key_t *>(key->opaque);
+
+  // Convert variant
+  auto cpp_variant = int_to_schnorrmp_variant(variant);
+
+  // Convert cmems_t to std::vector<mem_t>
+  std::vector<mem_t> msg_vec;
+  msg_vec.reserve(msgs.count);
+  size_t offset = 0;
+  for (int i = 0; i < msgs.count; ++i) {
+    int size = msgs.sizes[i];
+    if (size > 0) {
+      msg_vec.emplace_back(msgs.data + offset, size);
+      offset += size;
+    } else {
+      msg_vec.emplace_back(nullptr, 0);
+    }
+  }
+
+  // Sign batch
+  std::vector<buf_t> signatures;
+  error_t rv = coinbase::mpc::schnorrmp::sign_batch(*wrapper->job, signing_key_copy, msg_vec, sig_receiver, signatures, cpp_variant);
+  if (rv != SUCCESS) return rv;
+
+  // Copy outputs (signatures may be empty for non-receiver parties)
+  *sigs_out = alloc_and_copy_vector(signatures);
+  return 0;
 }
 
 }  // extern "C"

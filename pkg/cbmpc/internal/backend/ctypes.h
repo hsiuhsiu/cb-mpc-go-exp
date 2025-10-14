@@ -58,6 +58,12 @@ int cbmpc_ecdsamp_key_serialize(const cbmpc_ecdsamp_key *key, cmem_t *out);
 // The returned key must be freed with cbmpc_ecdsamp_key_free.
 int cbmpc_ecdsamp_key_deserialize(cmem_t serialized, cbmpc_ecdsamp_key **key);
 
+// Schnorr 2P key - opaque handle to C++ key_t object (eckey::key_share_2p_t)
+// Memory management: Keys returned by cbmpc_schnorr2p_* functions must be freed with cbmpc_schnorr2p_key_free.
+typedef struct cbmpc_schnorr2p_key {
+  void *opaque;  // Opaque pointer to coinbase::mpc::eckey::key_share_2p_t
+} cbmpc_schnorr2p_key;
+
 #ifdef __cplusplus
 }
 #endif
