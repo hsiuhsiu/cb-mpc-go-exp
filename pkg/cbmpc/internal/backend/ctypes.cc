@@ -9,6 +9,7 @@
 #include "cbmpc/core/error.h"
 #include "cbmpc/crypto/base_ecc.h"
 #include "cbmpc/protocol/ecdsa_2p.h"
+#include "cbmpc/protocol/ecdsa_mp.h"
 
 namespace {
 
@@ -135,6 +136,117 @@ static error_t deserialize_ecdsa2p_key(mem_t serialized, coinbase::mpc::ecdsa2pc
   return SUCCESS;
 }
 
+// Helper to serialize ECDSA MP key manually (similar to ECDSA 2P)
+static buf_t serialize_ecdsamp_key(const coinbase::mpc::ecdsampc::key_t& key) {
+  // Calculate size
+  coinbase::converter_t size_calc(true);
+  int curve_nid = key.curve.get_openssl_code();
+  buf_t Q_bin = key.Q.to_compressed_bin();
+  buf_t x_share_bin = key.x_share.to_bin();
+
+  // Serialize Qis map (party_name -> ecc_point_t)
+  uint32_t qis_count = static_cast<uint32_t>(key.Qis.size());
+  std::vector<buf_t> qis_names;
+  std::vector<buf_t> qis_points;
+  for (const auto& [name, point] : key.Qis) {
+    qis_names.push_back(buf_t(mem_t(reinterpret_cast<const uint8_t*>(name.data()), name.size())));
+    qis_points.push_back(point.to_compressed_bin());
+  }
+
+  // Serialize party_name as a buffer
+  buf_t party_name_buf(mem_t(reinterpret_cast<const uint8_t*>(key.party_name.data()), key.party_name.size()));
+
+  size_calc.convert(curve_nid);
+  size_calc.convert(Q_bin);
+  size_calc.convert(x_share_bin);
+  size_calc.convert(party_name_buf);
+  size_calc.convert(qis_count);
+  for (size_t i = 0; i < qis_names.size(); i++) {
+    buf_t name_copy = qis_names[i];
+    size_calc.convert(name_copy);
+  }
+  for (size_t i = 0; i < qis_points.size(); i++) {
+    buf_t point_copy = qis_points[i];
+    size_calc.convert(point_copy);
+  }
+
+  if (size_calc.is_error()) return buf_t();
+
+  // Allocate and write
+  buf_t result(size_calc.get_size());
+  coinbase::converter_t writer(result.data());
+
+  // Recreate party_name_buf for writer
+  buf_t party_name_buf_writer(mem_t(reinterpret_cast<const uint8_t*>(key.party_name.data()), key.party_name.size()));
+
+  writer.convert(curve_nid);
+  writer.convert(Q_bin);
+  writer.convert(x_share_bin);
+  writer.convert(party_name_buf_writer);
+  writer.convert(qis_count);
+  for (size_t i = 0; i < qis_names.size(); i++) {
+    buf_t name_copy = qis_names[i];
+    writer.convert(name_copy);
+  }
+  for (size_t i = 0; i < qis_points.size(); i++) {
+    buf_t point_copy = qis_points[i];
+    writer.convert(point_copy);
+  }
+
+  if (writer.is_error()) return buf_t();
+  return result;
+}
+
+// Helper to deserialize ECDSA MP key manually
+static error_t deserialize_ecdsamp_key(mem_t serialized, coinbase::mpc::ecdsampc::key_t& key) {
+  coinbase::converter_t reader(serialized);
+
+  int curve_nid = 0;
+  buf_t Q_bin, x_share_bin, party_name_buf;
+  uint32_t qis_count = 0;
+
+  reader.convert(curve_nid);
+  reader.convert(Q_bin);
+  reader.convert(x_share_bin);
+  reader.convert(party_name_buf);
+  reader.convert(qis_count);
+
+  if (reader.is_error()) return E_CRYPTO;
+
+  key.curve = find_curve_by_nid(curve_nid);
+  if (!key.curve) return E_BADARG;
+
+  if (key.Q.from_bin(key.curve, mem_t(Q_bin.data(), Q_bin.size())) != SUCCESS) return E_CRYPTO;
+  key.x_share = coinbase::crypto::bn_t::from_bin(mem_t(x_share_bin.data(), x_share_bin.size()));
+
+  // Convert party_name_buf to string
+  key.party_name = coinbase::crypto::pname_t(reinterpret_cast<const char*>(party_name_buf.data()), party_name_buf.size());
+
+  // Deserialize Qis map
+  key.Qis.clear();
+  std::vector<coinbase::crypto::pname_t> names;
+  for (uint32_t i = 0; i < qis_count; i++) {
+    buf_t name_buf;
+    reader.convert(name_buf);
+    if (reader.is_error()) return E_CRYPTO;
+
+    coinbase::crypto::pname_t pname(reinterpret_cast<const char*>(name_buf.data()), name_buf.size());
+    names.push_back(pname);
+    key.Qis[pname] = coinbase::crypto::ecc_point_t();
+  }
+
+  for (size_t i = 0; i < names.size(); i++) {
+    buf_t point_buf;
+    reader.convert(point_buf);
+    if (reader.is_error()) return E_CRYPTO;
+
+    if (key.Qis[names[i]].from_bin(key.curve, mem_t(point_buf.data(), point_buf.size())) != SUCCESS) return E_CRYPTO;
+  }
+
+  if (reader.is_error()) return E_CRYPTO;
+  return SUCCESS;
+}
+
 }  // namespace
 
 extern "C" {
@@ -191,6 +303,67 @@ int cbmpc_ecdsa2p_key_deserialize(cmem_t serialized, cbmpc_ecdsa2p_key **key) {
   if (rv != SUCCESS) return rv;
 
   auto wrapper = new cbmpc_ecdsa2p_key;
+  wrapper->opaque = k.release();
+  *key = wrapper;
+  return 0;
+}
+
+// ============================================================
+// ECDSA MP key management functions
+// ============================================================
+
+// Free ECDSA MP key
+void cbmpc_ecdsamp_key_free(cbmpc_ecdsamp_key *key) {
+  if (!key) return;
+  delete static_cast<coinbase::mpc::ecdsampc::key_t *>(key->opaque);
+  delete key;
+}
+
+// Get public key from ECDSA MP key
+int cbmpc_ecdsamp_key_get_public_key(const cbmpc_ecdsamp_key *key, cmem_t *out) {
+  if (!key || !key->opaque || !out) return E_BADARG;
+
+  const auto *k = static_cast<const coinbase::mpc::ecdsampc::key_t *>(key->opaque);
+  buf_t pub_key_buf = k->Q.to_compressed_bin();
+  *out = alloc_and_copy(pub_key_buf.data(), static_cast<size_t>(pub_key_buf.size()));
+  if (!out->data && pub_key_buf.size() > 0) return E_BADARG;
+
+  return 0;
+}
+
+// Get curve enum from ECDSA MP key (converts NID to Curve enum)
+int cbmpc_ecdsamp_key_get_curve(const cbmpc_ecdsamp_key *key, int *curve) {
+  if (!key || !key->opaque || !curve) return E_BADARG;
+
+  const auto *k = static_cast<const coinbase::mpc::ecdsampc::key_t *>(key->opaque);
+  int nid = k->curve.get_openssl_code();
+  *curve = nid_to_curve_enum(nid);
+  return 0;
+}
+
+// Serialize an ECDSA MP key
+int cbmpc_ecdsamp_key_serialize(const cbmpc_ecdsamp_key *key, cmem_t *out) {
+  if (!key || !key->opaque || !out) return E_BADARG;
+
+  const auto *k = static_cast<const coinbase::mpc::ecdsampc::key_t *>(key->opaque);
+  buf_t serialized = serialize_ecdsamp_key(*k);
+  if (serialized.size() == 0) return E_CRYPTO;
+
+  *out = alloc_and_copy(serialized.data(), static_cast<size_t>(serialized.size()));
+  if (!out->data && serialized.size() > 0) return E_BADARG;
+
+  return 0;
+}
+
+// Deserialize an ECDSA MP key
+int cbmpc_ecdsamp_key_deserialize(cmem_t serialized, cbmpc_ecdsamp_key **key) {
+  if (!serialized.data || serialized.size <= 0 || !key) return E_BADARG;
+
+  auto k = std::make_unique<coinbase::mpc::ecdsampc::key_t>();
+  error_t rv = deserialize_ecdsamp_key(mem_t(serialized.data, serialized.size), *k);
+  if (rv != SUCCESS) return rv;
+
+  auto wrapper = new cbmpc_ecdsamp_key;
   wrapper->opaque = k.release();
   *key = wrapper;
   return 0;

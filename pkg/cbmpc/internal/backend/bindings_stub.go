@@ -163,3 +163,36 @@ func UCDLProve(ECCPoint, []byte, []byte, uint64) ([]byte, error) {
 func UCDLVerify([]byte, ECCPoint, []byte, uint64) error {
 	return ErrNotBuilt
 }
+
+// ECDSAMPKey is a stub type for non-CGO builds
+type ECDSAMPKey = unsafe.Pointer
+
+func ECDSAMPKeyFree(ECDSAMPKey) {}
+
+func ECDSAMPKeyGetPublicKey(ECDSAMPKey) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func ECDSAMPKeyGetCurve(ECDSAMPKey) (Curve, error) {
+	return Unknown, ErrNotBuilt
+}
+
+func ECDSAMPKeySerialize(ECDSAMPKey) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func ECDSAMPKeyDeserialize([]byte) (ECDSAMPKey, error) {
+	return nil, ErrNotBuilt
+}
+
+func ECDSAMP_DKG(unsafe.Pointer, int) (ECDSAMPKey, []byte, error) {
+	return nil, nil, ErrNotBuilt
+}
+
+func ECDSAMPRefresh(unsafe.Pointer, ECDSAMPKey, []byte) (ECDSAMPKey, []byte, error) {
+	return nil, nil, ErrNotBuilt
+}
+
+func ECDSAMPSign(unsafe.Pointer, ECDSAMPKey, []byte, int) ([]byte, error) {
+	return nil, ErrNotBuilt
+}

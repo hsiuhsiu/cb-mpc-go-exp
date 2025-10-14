@@ -46,6 +46,21 @@ int cbmpc_ecdsa2p_sign_with_global_abort(cbmpc_job2p *j, cmem_t sid_in, const cb
 // Returns E_ECDSA_2P_BIT_LEAK if signature verification fails (indicates potential key leak).
 int cbmpc_ecdsa2p_sign_with_global_abort_batch(cbmpc_job2p *j, cmem_t sid_in, const cbmpc_ecdsa2p_key *key, cmems_t msgs, cmem_t *sid_out, cmems_t *sigs_out);
 
+// ECDSA MP protocols
+// All functions return a key that must be freed with cbmpc_ecdsamp_key_free.
+
+// Perform multi-party ECDSA distributed key generation.
+int cbmpc_ecdsamp_dkg(cbmpc_jobmp *j, int curve_nid, cbmpc_ecdsamp_key **key_out, cmem_t *sid_out);
+
+// Refresh an ECDSA MP key (re-randomize shares while preserving public key).
+// sid_in: input session ID (can be empty to generate new one)
+// sid_out: output session ID (updated or newly generated)
+int cbmpc_ecdsamp_refresh(cbmpc_jobmp *j, cmem_t sid_in, const cbmpc_ecdsamp_key *key_in, cmem_t *sid_out, cbmpc_ecdsamp_key **key_out);
+
+// Sign a message with an ECDSA MP key.
+// Only the party with party_idx == sig_receiver will receive the final signature.
+int cbmpc_ecdsamp_sign(cbmpc_jobmp *j, const cbmpc_ecdsamp_key *key, cmem_t msg, int sig_receiver, cmem_t *sig_out);
+
 // PVE (Publicly Verifiable Encryption) functions
 // Encrypt a scalar x with respect to a curve, producing a PVE ciphertext.
 // ek_bytes: serialized public encryption key bytes.
