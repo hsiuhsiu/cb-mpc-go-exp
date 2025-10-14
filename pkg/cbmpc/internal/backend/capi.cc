@@ -15,6 +15,7 @@
 #include "cbmpc/crypto/base_pki.h"
 #include "cbmpc/protocol/agree_random.h"
 #include "cbmpc/protocol/ecdsa_2p.h"
+#include "cbmpc/protocol/ecdsa_mp.h"
 #include "cbmpc/protocol/mpc_job.h"
 #include "cbmpc/protocol/pve.h"
 #include "cbmpc/protocol/pve_base.h"
@@ -398,6 +399,81 @@ int cbmpc_ecdsa2p_sign_with_global_abort_batch(cbmpc_job2p *j, cmem_t sid_in, co
   // Note: sigs_out->data can be nullptr if all signatures are empty (total_size=0)
   // This is normal for P2, so we don't check for allocation failure here
 
+  return 0;
+}
+
+// ============================================================
+// ECDSA MP protocols
+// ============================================================
+
+// ECDSA MP DKG
+int cbmpc_ecdsamp_dkg(cbmpc_jobmp *j, int curve_nid, cbmpc_ecdsamp_key **key_out, cmem_t *sid_out) {
+  auto wrapper = reinterpret_cast<go_jobmp *>(j);
+  if (!wrapper || !wrapper->job || !key_out || !sid_out) return E_BADARG;
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  auto key = std::make_unique<coinbase::mpc::ecdsampc::key_t>();
+  buf_t sid;
+  error_t rv = coinbase::mpc::ecdsampc::dkg(*wrapper->job, curve, *key, sid);
+  if (rv != SUCCESS) return rv;
+
+  // Copy outputs
+  *sid_out = alloc_and_copy(sid.data(), static_cast<size_t>(sid.size()));
+  if (!sid_out->data && sid.size() > 0) return E_BADARG;
+
+  auto key_wrapper = new cbmpc_ecdsamp_key;
+  key_wrapper->opaque = key.release();
+  *key_out = key_wrapper;
+  return 0;
+}
+
+// ECDSA MP Refresh
+int cbmpc_ecdsamp_refresh(cbmpc_jobmp *j, cmem_t sid_in, const cbmpc_ecdsamp_key *key_in, cmem_t *sid_out, cbmpc_ecdsamp_key **key_out) {
+  auto wrapper = reinterpret_cast<go_jobmp *>(j);
+  if (!wrapper || !wrapper->job || !key_in || !key_in->opaque || !sid_out || !key_out) return E_BADARG;
+
+  // Copy the old key so we can pass a mutable reference to refresh
+  auto old_key_copy = *static_cast<const coinbase::mpc::ecdsampc::key_t *>(key_in->opaque);
+
+  // Create mutable sid buffer (can be empty to generate new one)
+  buf_t sid;
+  if (sid_in.data && sid_in.size > 0) {
+    sid = buf_t(sid_in.data, sid_in.size);
+  }
+
+  auto new_key = std::make_unique<coinbase::mpc::ecdsampc::key_t>();
+  error_t rv = coinbase::mpc::ecdsampc::refresh(*wrapper->job, sid, old_key_copy, *new_key);
+  if (rv != SUCCESS) return rv;
+
+  // Copy outputs
+  *sid_out = alloc_and_copy(sid.data(), static_cast<size_t>(sid.size()));
+  if (!sid_out->data && sid.size() > 0) return E_BADARG;
+
+  auto key_wrapper = new cbmpc_ecdsamp_key;
+  key_wrapper->opaque = new_key.release();
+  *key_out = key_wrapper;
+  return 0;
+}
+
+// ECDSA MP Sign
+int cbmpc_ecdsamp_sign(cbmpc_jobmp *j, const cbmpc_ecdsamp_key *key, cmem_t msg, int sig_receiver, cmem_t *sig_out) {
+  auto wrapper = reinterpret_cast<go_jobmp *>(j);
+  if (!wrapper || !wrapper->job || !key || !key->opaque ||
+      !msg.data || msg.size <= 0 || !sig_out) return E_BADARG;
+
+  // Copy the key so we can pass a mutable reference to sign
+  auto signing_key_copy = *static_cast<const coinbase::mpc::ecdsampc::key_t *>(key->opaque);
+
+  // Sign
+  buf_t signature;
+  mem_t msg_mem(msg.data, msg.size);
+  error_t rv = coinbase::mpc::ecdsampc::sign(*wrapper->job, signing_key_copy, msg_mem, sig_receiver, signature);
+  if (rv != SUCCESS) return rv;
+
+  // Copy output (signature may be empty for non-receiver parties)
+  *sig_out = alloc_and_copy(signature.data(), static_cast<size_t>(signature.size()));
   return 0;
 }
 

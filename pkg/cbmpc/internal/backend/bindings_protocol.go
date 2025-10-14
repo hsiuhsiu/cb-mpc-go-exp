@@ -564,3 +564,71 @@ func UCDLVerify(proof []byte, qPoint ECCPoint, sessionID []byte, aux uint64) err
 
 	return nil
 }
+
+// =====================
+// ECDSA MP Protocols
+// =====================
+
+// ECDSAMP DKG is a C binding wrapper for multi-party ECDSA distributed key generation.
+func ECDSAMP_DKG(cj unsafe.Pointer, curveNID int) (ECDSAMPKey, []byte, error) {
+	if cj == nil {
+		return nil, nil, errors.New("nil job")
+	}
+
+	var key ECDSAMPKey
+	var sidOut C.cmem_t
+	rc := C.cbmpc_ecdsamp_dkg((*C.cbmpc_jobmp)(cj), C.int(curveNID), &key, &sidOut)
+	if rc != 0 {
+		return nil, nil, formatNativeErr("ecdsamp_dkg", rc)
+	}
+
+	return key, cmemToGoBytes(sidOut), nil
+}
+
+// ECDSAMPRefresh is a C binding wrapper for multi-party ECDSA key refresh.
+// sidIn can be empty to generate a new session ID.
+func ECDSAMPRefresh(cj unsafe.Pointer, key ECDSAMPKey, sidIn []byte) (ECDSAMPKey, []byte, error) {
+	if cj == nil {
+		return nil, nil, errors.New("nil job")
+	}
+	if key == nil {
+		return nil, nil, errors.New("nil key")
+	}
+
+	// Copy session ID into C-allocated memory to avoid aliasing Go memory during CGO call
+	sidMem := allocCmem(sidIn)
+	defer freeCmem(sidMem)
+
+	var newKey ECDSAMPKey
+	var sidOut C.cmem_t
+	rc := C.cbmpc_ecdsamp_refresh((*C.cbmpc_jobmp)(cj), sidMem, key, &sidOut, &newKey)
+	if rc != 0 {
+		return nil, nil, formatNativeErr("ecdsamp_refresh", rc)
+	}
+	return newKey, cmemToGoBytes(sidOut), nil
+}
+
+// ECDSAMPSign is a C binding wrapper for multi-party ECDSA signing.
+func ECDSAMPSign(cj unsafe.Pointer, key ECDSAMPKey, msg []byte, sigReceiver int) ([]byte, error) {
+	if cj == nil {
+		return nil, errors.New("nil job")
+	}
+	if key == nil {
+		return nil, errors.New("nil key")
+	}
+	if len(msg) == 0 {
+		return nil, errors.New("empty message")
+	}
+
+	// Copy message into C-allocated memory for the signing operation
+	msgMem := allocCmem(msg)
+	defer freeCmem(msgMem)
+
+	var sigOut C.cmem_t
+	rc := C.cbmpc_ecdsamp_sign((*C.cbmpc_jobmp)(cj), key, msgMem, C.int(sigReceiver), &sigOut)
+	if rc != 0 {
+		return nil, formatNativeErr("ecdsamp_sign", rc)
+	}
+
+	return cmemToGoBytes(sigOut), nil
+}

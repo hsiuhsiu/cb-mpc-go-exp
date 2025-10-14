@@ -274,6 +274,79 @@ func ECDSA2PKeyDeserialize(data []byte) (ECDSA2PKey, error) {
 }
 
 // =====================
+// ECDSA MP Key bridging
+// =====================
+
+// ECDSAMPKey is a type alias for *C.cbmpc_ecdsamp_key
+type ECDSAMPKey = *C.cbmpc_ecdsamp_key
+
+// ECDSAMPKeyFree frees an ECDSA MP key.
+func ECDSAMPKeyFree(key ECDSAMPKey) {
+	if key == nil {
+		return
+	}
+	C.cbmpc_ecdsamp_key_free(key)
+}
+
+// ECDSAMPKeyGetPublicKey extracts the public key from an ECDSA MP key.
+func ECDSAMPKeyGetPublicKey(key ECDSAMPKey) ([]byte, error) {
+	if key == nil {
+		return nil, errors.New("nil key")
+	}
+
+	var out C.cmem_t
+	rc := C.cbmpc_ecdsamp_key_get_public_key(key, &out)
+	if rc != 0 {
+		return nil, errors.New("failed to get public key")
+	}
+	return cmemToGoBytes(out), nil
+}
+
+// ECDSAMPKeyGetCurve gets the curve from an ECDSA MP key.
+// Returns backend.Curve enum directly, not NID.
+func ECDSAMPKeyGetCurve(key ECDSAMPKey) (Curve, error) {
+	if key == nil {
+		return Unknown, errors.New("nil key")
+	}
+
+	var curveInt C.int
+	rc := C.cbmpc_ecdsamp_key_get_curve(key, &curveInt)
+	if rc != 0 {
+		return Unknown, errors.New("failed to get curve")
+	}
+	return Curve(curveInt), nil
+}
+
+// ECDSAMPKeySerialize serializes an ECDSA MP key to bytes.
+func ECDSAMPKeySerialize(key ECDSAMPKey) ([]byte, error) {
+	if key == nil {
+		return nil, errors.New("nil key")
+	}
+
+	var out C.cmem_t
+	rc := C.cbmpc_ecdsamp_key_serialize(key, &out)
+	if rc != 0 {
+		return nil, errors.New("failed to serialize key")
+	}
+	return cmemToGoBytes(out), nil
+}
+
+// ECDSAMPKeyDeserialize deserializes an ECDSA MP key from bytes.
+func ECDSAMPKeyDeserialize(data []byte) (ECDSAMPKey, error) {
+	if len(data) == 0 {
+		return nil, errors.New("empty data")
+	}
+
+	dataMem := goBytesToCmem(data)
+	var key ECDSAMPKey
+	rc := C.cbmpc_ecdsamp_key_deserialize(dataMem, &key)
+	if rc != 0 {
+		return nil, errors.New("failed to deserialize key")
+	}
+	return key, nil
+}
+
+// =====================
 // Scalar bridging (bn_t)
 // =====================
 
