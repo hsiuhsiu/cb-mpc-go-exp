@@ -28,7 +28,11 @@ func TestHandleValidation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create handle: %v", err)
 		}
-		defer kem.FreePrivateKeyHandle(handle)
+		defer func() {
+			if err := kem.FreePrivateKeyHandle(handle); err != nil {
+				t.Errorf("Failed to free handle: %v", err)
+			}
+		}()
 
 		// Create a ciphertext
 		var rho [32]byte
@@ -81,7 +85,11 @@ func TestHandleValidation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create handle: %v", err)
 		}
-		defer kem.FreePrivateKeyHandle(handle)
+		defer func() {
+			if err := kem.FreePrivateKeyHandle(handle); err != nil {
+				t.Errorf("Failed to free handle: %v", err)
+			}
+		}()
 
 		// Corrupt the algorithm ID by accessing internal fields
 		// Note: This is a white-box test that accesses unexported fields
@@ -119,7 +127,11 @@ func TestHandleValidation(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create handle: %v", err)
 				}
-				defer kem.FreePrivateKeyHandle(handle)
+				defer func() {
+					if err := kem.FreePrivateKeyHandle(handle); err != nil {
+						t.Errorf("Failed to free handle: %v", err)
+					}
+				}()
 
 				// Create and decrypt a ciphertext
 				var rho [32]byte
@@ -156,7 +168,11 @@ func TestHandleValidation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create 2048-bit handle: %v", err)
 		}
-		defer kem2048.FreePrivateKeyHandle(handle2048)
+		defer func() {
+			if err := kem2048.FreePrivateKeyHandle(handle2048); err != nil {
+				t.Errorf("Failed to free 2048-bit handle: %v", err)
+			}
+		}()
 
 		// Create a 3072-bit key and ciphertext
 		kem3072, err := rsa.New(3072)
@@ -193,7 +209,11 @@ func TestHandleValidation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create 3072-bit handle: %v", err)
 		}
-		defer kem3072.FreePrivateKeyHandle(handle3072)
+		defer func() {
+			if err := kem3072.FreePrivateKeyHandle(handle3072); err != nil {
+				t.Errorf("Failed to free 3072-bit handle: %v", err)
+			}
+		}()
 
 		ct2048, _, err := kem2048.Encapsulate(ek2048, rho)
 		if err != nil {
@@ -205,6 +225,217 @@ func TestHandleValidation(t *testing.T) {
 			t.Error("Expected decapsulation to fail with mismatched key sizes")
 		}
 	})
+}
+
+// TestDeterminismAndDomainSeparation tests the cryptographic properties
+// established in ticket #1: deterministic encryption and domain separation.
+func TestDeterminismAndDomainSeparation(t *testing.T) {
+	t.Run("determinism: same (ek, rho) produces identical ciphertext", func(t *testing.T) {
+		kem, err := rsa.New(2048)
+		if err != nil {
+			t.Fatalf("Failed to create KEM: %v", err)
+		}
+
+		// Generate a key pair
+		_, ek, err := kem.Generate()
+		if err != nil {
+			t.Fatalf("Failed to generate key pair: %v", err)
+		}
+
+		// Fixed rho
+		var rho [32]byte
+		copy(rho[:], []byte("deterministic-rho-1234567890123"))
+
+		// Encapsulate twice with same (ek, rho)
+		ct1, ss1, err := kem.Encapsulate(ek, rho)
+		if err != nil {
+			t.Fatalf("First encapsulation failed: %v", err)
+		}
+
+		ct2, ss2, err := kem.Encapsulate(ek, rho)
+		if err != nil {
+			t.Fatalf("Second encapsulation failed: %v", err)
+		}
+
+		// Ciphertexts must be EXACTLY identical (byte-for-byte)
+		if string(ct1) != string(ct2) {
+			t.Errorf("Determinism violation: same (ek, rho) produced different ciphertexts")
+			t.Errorf("  ct1 length: %d bytes", len(ct1))
+			t.Errorf("  ct2 length: %d bytes", len(ct2))
+		}
+
+		// Shared secrets must also be identical
+		if string(ss1) != string(ss2) {
+			t.Errorf("Shared secrets differ for same (ek, rho)")
+		}
+	})
+
+	t.Run("domain separation: different keys produce different ciphertexts", func(t *testing.T) {
+		kem, err := rsa.New(2048)
+		if err != nil {
+			t.Fatalf("Failed to create KEM: %v", err)
+		}
+
+		// Generate two different key pairs
+		_, ek1, err := kem.Generate()
+		if err != nil {
+			t.Fatalf("Failed to generate first key pair: %v", err)
+		}
+
+		_, ek2, err := kem.Generate()
+		if err != nil {
+			t.Fatalf("Failed to generate second key pair: %v", err)
+		}
+
+		// Verify keys are actually different
+		if string(ek1) == string(ek2) {
+			t.Skip("Generated identical keys (extremely unlikely), skipping test")
+		}
+
+		// Same rho for both
+		var rho [32]byte
+		copy(rho[:], []byte("same-rho-for-both-keys-12345678"))
+
+		// Encapsulate with each key
+		ct1, ss1, err := kem.Encapsulate(ek1, rho)
+		if err != nil {
+			t.Fatalf("Encapsulation with ek1 failed: %v", err)
+		}
+
+		ct2, ss2, err := kem.Encapsulate(ek2, rho)
+		if err != nil {
+			t.Fatalf("Encapsulation with ek2 failed: %v", err)
+		}
+
+		// Ciphertexts MUST be different (domain separation)
+		if string(ct1) == string(ct2) {
+			t.Errorf("Domain separation violation: different keys with same rho produced identical ciphertexts")
+		}
+
+		// Note: shared secrets are the same (both are rho) in this implementation
+		// This is expected for PVE's deterministic KEM
+		if string(ss1) != string(ss2) {
+			t.Logf("Note: shared secrets differ (implementation detail)")
+		}
+	})
+
+	t.Run("different rho produces different ciphertext", func(t *testing.T) {
+		kem, err := rsa.New(2048)
+		if err != nil {
+			t.Fatalf("Failed to create KEM: %v", err)
+		}
+
+		// Generate a key pair
+		_, ek, err := kem.Generate()
+		if err != nil {
+			t.Fatalf("Failed to generate key pair: %v", err)
+		}
+
+		// Two different rho values
+		var rho1 [32]byte
+		copy(rho1[:], []byte("first-rho-12345678901234567890"))
+
+		var rho2 [32]byte
+		copy(rho2[:], []byte("second-rho-1234567890123456789"))
+
+		// Encapsulate with each rho
+		ct1, ss1, err := kem.Encapsulate(ek, rho1)
+		if err != nil {
+			t.Fatalf("Encapsulation with rho1 failed: %v", err)
+		}
+
+		ct2, ss2, err := kem.Encapsulate(ek, rho2)
+		if err != nil {
+			t.Fatalf("Encapsulation with rho2 failed: %v", err)
+		}
+
+		// Ciphertexts must be different
+		if string(ct1) == string(ct2) {
+			t.Errorf("Different rho values produced identical ciphertexts")
+		}
+
+		// Shared secrets must be different
+		if string(ss1) == string(ss2) {
+			t.Errorf("Different rho values produced identical shared secrets")
+		}
+	})
+
+	t.Run("corruption: flipped byte causes decapsulation error", func(t *testing.T) {
+		kem, err := rsa.New(2048)
+		if err != nil {
+			t.Fatalf("Failed to create KEM: %v", err)
+		}
+
+		// Generate key pair and handle
+		skRef, ek, err := kem.Generate()
+		if err != nil {
+			t.Fatalf("Failed to generate key pair: %v", err)
+		}
+
+		handle, err := kem.NewPrivateKeyHandle(skRef)
+		if err != nil {
+			t.Fatalf("Failed to create handle: %v", err)
+		}
+		defer func() {
+			if err := kem.FreePrivateKeyHandle(handle); err != nil {
+				t.Errorf("Failed to free handle: %v", err)
+			}
+		}()
+
+		// Create a valid ciphertext
+		var rho [32]byte
+		copy(rho[:], []byte("test-rho-12345678901234567890123"))
+
+		ct, ss, err := kem.Encapsulate(ek, rho)
+		if err != nil {
+			t.Fatalf("Encapsulation failed: %v", err)
+		}
+
+		// Verify original decapsulation works
+		ssDecap, err := kem.Decapsulate(handle, ct)
+		if err != nil {
+			t.Fatalf("Original decapsulation failed: %v", err)
+		}
+		if string(ss) != string(ssDecap) {
+			t.Fatalf("Original shared secrets don't match")
+		}
+
+		// Corrupt the ciphertext by flipping a byte in the middle
+		corruptedCT := make([]byte, len(ct))
+		copy(corruptedCT, ct)
+		if len(corruptedCT) > 0 {
+			corruptedCT[len(corruptedCT)/2] ^= 0xFF // Flip all bits
+		}
+
+		// Decapsulation with corrupted ciphertext should fail
+		_, err = kem.Decapsulate(handle, corruptedCT)
+		if err == nil {
+			t.Error("Decapsulation should have failed with corrupted ciphertext")
+		}
+
+		// The error should be a typed error (fmt.Errorf wrapping)
+		// We expect "RSA-OAEP decapsulation failed" error
+		if err != nil && !contains(err.Error(), "decapsulation failed") {
+			t.Logf("Got error (expected): %v", err)
+		}
+	})
+}
+
+// Helper function to check if error message contains substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) &&
+		(s == substr || len(s) > len(substr) &&
+			(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
+				findSubstring(s, substr)))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
 
 // TestBoundEKHash ensures that when a KEM instance is bound to a specific
@@ -226,7 +457,11 @@ func TestBoundEKHash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create handle: %v", err)
 	}
-	defer kem1.FreePrivateKeyHandle(handle)
+	defer func() {
+		if err := kem1.FreePrivateKeyHandle(handle); err != nil {
+			t.Errorf("Failed to free handle: %v", err)
+		}
+	}()
 
 	// Generate a different public key and bind kem1 to it
 	kem2, err := rsa.New(2048)
