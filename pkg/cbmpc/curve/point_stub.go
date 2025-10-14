@@ -34,3 +34,8 @@ func (p *Point) CPtr() backend.ECCPoint {
 func NewPointFromBackend(backend.ECCPoint) *Point {
 	return &Point{}
 }
+
+// Mul is a stub for non-CGO builds.
+func (p *Point) Mul(*Scalar) (*Point, error) {
+	return nil, errNotBuilt
+}

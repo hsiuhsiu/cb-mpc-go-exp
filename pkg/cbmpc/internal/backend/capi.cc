@@ -706,6 +706,85 @@ int cbmpc_ecc_point_get_curve(cbmpc_ecc_point point) {
   return nid_to_curve_enum(nid);
 }
 
+// Curve operations
+int cbmpc_curve_random_scalar(int curve_nid, cmem_t *scalar_out) {
+  if (!scalar_out) {
+    return E_BADARG;
+  }
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  // Generate random scalar using curve's get_random_value
+  coinbase::crypto::bn_t random_scalar = curve.get_random_value();
+
+  // Serialize to bytes (big-endian)
+  buf_t scalar_bytes = random_scalar.to_bin();
+  *scalar_out = alloc_and_copy(scalar_bytes.data(), static_cast<size_t>(scalar_bytes.size()));
+
+  return 0;
+}
+
+int cbmpc_curve_get_generator(int curve_nid, cbmpc_ecc_point *generator_out) {
+  if (!generator_out) {
+    return E_BADARG;
+  }
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  // Get generator point from curve
+  const auto& gen = curve.generator();
+
+  // Create a copy of the generator point
+  auto point_copy = std::make_unique<coinbase::crypto::ecc_point_t>(gen);
+
+  *generator_out = reinterpret_cast<cbmpc_ecc_point>(point_copy.release());
+  return 0;
+}
+
+int cbmpc_curve_mul_generator(int curve_nid, cmem_t scalar_bytes, cbmpc_ecc_point *point_out) {
+  if (!scalar_bytes.data || scalar_bytes.size <= 0 || !point_out) {
+    return E_BADARG;
+  }
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  // Deserialize scalar from bytes
+  coinbase::crypto::bn_t scalar = coinbase::crypto::bn_t::from_bin(mem_t(scalar_bytes.data, scalar_bytes.size));
+
+  // Multiply generator by scalar: result = scalar * G
+  coinbase::crypto::ecc_point_t result = curve.mul_to_generator(scalar);
+
+  // Return as new point (caller must free)
+  auto point_ptr = std::make_unique<coinbase::crypto::ecc_point_t>(std::move(result));
+  *point_out = reinterpret_cast<cbmpc_ecc_point>(point_ptr.release());
+
+  return 0;
+}
+
+int cbmpc_ecc_point_mul(cbmpc_ecc_point point, cmem_t scalar_bytes, cbmpc_ecc_point *result_out) {
+  if (!point || !scalar_bytes.data || scalar_bytes.size <= 0 || !result_out) {
+    return E_BADARG;
+  }
+
+  const auto* ecc_point = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(point);
+
+  // Deserialize scalar from bytes
+  coinbase::crypto::bn_t scalar = coinbase::crypto::bn_t::from_bin(mem_t(scalar_bytes.data, scalar_bytes.size));
+
+  // Multiply point by scalar: result = scalar * point
+  // Using the operator* overload from base_ecc.h
+  coinbase::crypto::ecc_point_t result = scalar * (*ecc_point);
+
+  // Return as new point (caller must free)
+  auto result_ptr = std::make_unique<coinbase::crypto::ecc_point_t>(std::move(result));
+  *result_out = reinterpret_cast<cbmpc_ecc_point>(result_ptr.release());
+
+  return 0;
+}
+
 // PVE operations using ecc_point_t directly
 int cbmpc_pve_get_Q_point(cmem_t pve_ct, cbmpc_ecc_point *Q_point_out) {
   if (!pve_ct.data || pve_ct.size <= 0 || !Q_point_out) {

@@ -113,6 +113,24 @@ void cbmpc_ecc_point_free(cbmpc_ecc_point point);
 // Get the curve for an ECC point (returns curve enum value, not NID).
 int cbmpc_ecc_point_get_curve(cbmpc_ecc_point point);
 
+// Curve operations
+// Generate a random scalar for a given curve (returns bytes in big-endian format).
+int cbmpc_curve_random_scalar(int curve_nid, cmem_t *scalar_out);
+
+// Get the generator point for a given curve.
+// Returns a NEW point that must be freed with cbmpc_ecc_point_free.
+int cbmpc_curve_get_generator(int curve_nid, cbmpc_ecc_point *generator_out);
+
+// Multiply a scalar by the generator: result = scalar * G
+// scalar_bytes: big-endian scalar bytes
+// Returns a NEW point that must be freed with cbmpc_ecc_point_free.
+int cbmpc_curve_mul_generator(int curve_nid, cmem_t scalar_bytes, cbmpc_ecc_point *point_out);
+
+// Multiply a scalar by a point: result = scalar * point
+// scalar_bytes: big-endian scalar bytes
+// Returns a NEW point that must be freed with cbmpc_ecc_point_free.
+int cbmpc_ecc_point_mul(cbmpc_ecc_point point, cmem_t scalar_bytes, cbmpc_ecc_point *result_out);
+
 // PVE operations using ecc_point_t directly (more efficient)
 // Extract public key Q from a PVE ciphertext as an ecc_point_t.
 // Returns a borrowed reference - do NOT free the returned point.

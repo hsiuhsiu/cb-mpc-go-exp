@@ -2,6 +2,10 @@
 
 package curve
 
+import "errors"
+
+var errNotBuilt = errors.New("curve: native bindings not built")
+
 // Curve represents an elliptic curve for cryptographic operations.
 // This is a stable Go enum that is independent of backend implementation details.
 type Curve int
@@ -51,4 +55,19 @@ func (c Curve) MaxHashSize() int {
 	default:
 		return 0
 	}
+}
+
+// RandomScalar stub for non-CGO builds.
+func RandomScalar(c Curve) (*Scalar, error) {
+	return nil, errNotBuilt
+}
+
+// Generator stub for non-CGO builds.
+func Generator(c Curve) (*Point, error) {
+	return nil, errNotBuilt
+}
+
+// MulGenerator stub for non-CGO builds.
+func MulGenerator(c Curve, scalar *Scalar) (*Point, error) {
+	return nil, errNotBuilt
 }

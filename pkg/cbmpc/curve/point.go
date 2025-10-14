@@ -3,6 +3,7 @@
 package curve
 
 import (
+	"errors"
 	"runtime"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/backend"
@@ -45,7 +46,7 @@ func NewPointFromBytes(curve Curve, bytes []byte) (*Point, error) {
 // Returns a defensive copy to prevent external modification of internal data.
 func (p *Point) Bytes() ([]byte, error) {
 	if p == nil || p.cpoint == nil {
-		return nil, nil
+		return nil, errors.New("nil point")
 	}
 
 	bytes, err := backend.ECCPointToBytes(p.cpoint)
@@ -96,4 +97,27 @@ func NewPointFromBackend(cpoint backend.ECCPoint) *Point {
 	p := &Point{cpoint: cpoint}
 	runtime.SetFinalizer(p, (*Point).Free)
 	return p
+}
+
+// Mul multiplies this point by a scalar: result = scalar * point.
+// Returns a new Point that must be freed with Free() when no longer needed.
+func (p *Point) Mul(scalar *Scalar) (*Point, error) {
+	if p == nil || p.cpoint == nil {
+		return nil, errors.New("nil point")
+	}
+	if scalar == nil {
+		return nil, errors.New("nil scalar")
+	}
+
+	resultCPoint, err := backend.ECCPointMul(p.cpoint, scalar.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	runtime.KeepAlive(p)
+	runtime.KeepAlive(scalar)
+
+	result := &Point{cpoint: resultCPoint}
+	runtime.SetFinalizer(result, (*Point).Free)
+	return result, nil
 }

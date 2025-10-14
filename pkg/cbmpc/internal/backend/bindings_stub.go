@@ -261,3 +261,20 @@ func SchnorrMPSign(unsafe.Pointer, ECDSAMPKey, []byte, int, SchnorrVariant) ([]b
 func SchnorrMPSignBatch(unsafe.Pointer, ECDSAMPKey, [][]byte, int, SchnorrVariant) ([][]byte, error) {
 	return nil, ErrNotBuilt
 }
+
+// Curve operations stubs
+func CurveRandomScalar(int) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func CurveGetGenerator(int) (ECCPoint, error) {
+	return nil, ErrNotBuilt
+}
+
+func CurveMulGenerator(int, []byte) (ECCPoint, error) {
+	return nil, ErrNotBuilt
+}
+
+func ECCPointMul(ECCPoint, []byte) (ECCPoint, error) {
+	return nil, ErrNotBuilt
+}

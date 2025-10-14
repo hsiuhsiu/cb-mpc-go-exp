@@ -978,3 +978,66 @@ func SchnorrMPSignBatch(cj unsafe.Pointer, key ECDSAMPKey, msgs [][]byte, sigRec
 
 	return cmemsToGoByteSlices(sigsOut), nil
 }
+
+// ============================================================
+// Curve Operations
+// ============================================================
+
+// CurveRandomScalar generates a random scalar for the given curve.
+// Returns scalar bytes in big-endian format.
+func CurveRandomScalar(curveNID int) ([]byte, error) {
+	var scalarOut C.cmem_t
+	rc := C.cbmpc_curve_random_scalar(C.int(curveNID), &scalarOut)
+	if rc != 0 {
+		return nil, formatNativeErr("curve_random_scalar", rc)
+	}
+	return cmemToGoBytes(scalarOut), nil
+}
+
+// CurveGetGenerator returns the generator point for the given curve.
+// The returned ECCPoint must be freed by the caller.
+func CurveGetGenerator(curveNID int) (ECCPoint, error) {
+	var generatorOut C.cbmpc_ecc_point
+	rc := C.cbmpc_curve_get_generator(C.int(curveNID), &generatorOut)
+	if rc != 0 {
+		return nil, formatNativeErr("curve_get_generator", rc)
+	}
+	return ECCPoint(generatorOut), nil
+}
+
+// CurveMulGenerator multiplies the generator point by a scalar: result = scalar * G.
+// scalarBytes should be in big-endian format.
+// The returned ECCPoint must be freed by the caller.
+func CurveMulGenerator(curveNID int, scalarBytes []byte) (ECCPoint, error) {
+	if len(scalarBytes) == 0 {
+		return nil, errors.New("empty scalar")
+	}
+
+	scalarMem := goBytesToCmem(scalarBytes)
+	var pointOut C.cbmpc_ecc_point
+	rc := C.cbmpc_curve_mul_generator(C.int(curveNID), scalarMem, &pointOut)
+	if rc != 0 {
+		return nil, formatNativeErr("curve_mul_generator", rc)
+	}
+	return ECCPoint(pointOut), nil
+}
+
+// ECCPointMul multiplies a point by a scalar: result = scalar * point.
+// scalarBytes should be in big-endian format.
+// The returned ECCPoint must be freed by the caller.
+func ECCPointMul(point ECCPoint, scalarBytes []byte) (ECCPoint, error) {
+	if point == nil {
+		return nil, errors.New("nil point")
+	}
+	if len(scalarBytes) == 0 {
+		return nil, errors.New("empty scalar")
+	}
+
+	scalarMem := goBytesToCmem(scalarBytes)
+	var resultOut C.cbmpc_ecc_point
+	rc := C.cbmpc_ecc_point_mul(point, scalarMem, &resultOut)
+	if rc != 0 {
+		return nil, formatNativeErr("ecc_point_mul", rc)
+	}
+	return ECCPoint(resultOut), nil
+}
