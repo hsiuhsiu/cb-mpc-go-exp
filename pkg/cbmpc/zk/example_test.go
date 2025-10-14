@@ -19,7 +19,7 @@ func Example() {
 		log.Fatalf("example failed: %v", err)
 	}
 	// Output:
-	// Generated proof of size: 2315 bytes
+	// Generated proof
 	// Proof verified successfully!
 }
 
@@ -70,7 +70,7 @@ func runExample() error {
 		return fmt.Errorf("failed to generate proof: %w", err)
 	}
 
-	fmt.Printf("Generated proof of size: %d bytes\n", len(proof))
+	fmt.Println("Generated proof")
 
 	// Proof can be used directly - it's already serialized bytes
 	// Can pass across goroutines, store in database, send over network, etc.
