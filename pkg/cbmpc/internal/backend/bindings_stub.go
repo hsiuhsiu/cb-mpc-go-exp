@@ -196,3 +196,44 @@ func ECDSAMPRefresh(unsafe.Pointer, ECDSAMPKey, []byte) (ECDSAMPKey, []byte, err
 func ECDSAMPSign(unsafe.Pointer, ECDSAMPKey, []byte, int) ([]byte, error) {
 	return nil, ErrNotBuilt
 }
+
+// Schnorr2PKey is a stub type for non-CGO builds
+type Schnorr2PKey = unsafe.Pointer
+
+func Schnorr2PDKG(unsafe.Pointer, int) (Schnorr2PKey, error) {
+	return nil, ErrNotBuilt
+}
+
+func Schnorr2PKeyFree(Schnorr2PKey) {}
+
+func Schnorr2PKeySerialize(Schnorr2PKey) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func Schnorr2PKeyDeserialize([]byte) (Schnorr2PKey, error) {
+	return nil, ErrNotBuilt
+}
+
+func Schnorr2PKeyGetPublicKey(Schnorr2PKey) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func Schnorr2PKeyGetCurve(Schnorr2PKey) (int, error) {
+	return 0, ErrNotBuilt
+}
+
+// SchnorrVariant is a stub type for non-CGO builds
+type SchnorrVariant int
+
+const (
+	SchnorrVariantEdDSA  SchnorrVariant = 0
+	SchnorrVariantBIP340 SchnorrVariant = 1
+)
+
+func Schnorr2PSign(unsafe.Pointer, Schnorr2PKey, []byte, SchnorrVariant) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func Schnorr2PSignBatch(unsafe.Pointer, Schnorr2PKey, [][]byte, SchnorrVariant) ([][]byte, error) {
+	return nil, ErrNotBuilt
+}
