@@ -18,9 +18,6 @@ import (
 // DLProof is a value type ([]byte) that can be safely copied, passed across goroutines,
 // and serialized without resource management concerns. There is no Close() method or finalizer.
 //
-// Internally, native handles are created ephemerally during prove/verify operations
-// and immediately freed, eliminating resource leak risks.
-//
 // Example:
 //
 //	proof, err := zk.Prove(&zk.DLProveParams{
@@ -35,26 +32,6 @@ import (
 //	// No Close() needed - proof is just bytes
 //	// Can serialize, pass to other goroutines, etc.
 type DLProof []byte
-
-// withNativeHandle creates an ephemeral native proof handle, calls the provided function,
-// and immediately frees the handle. This helper ensures native resources are never leaked.
-func (p DLProof) withNativeHandle(fn func(backend.UCDLProof) error) error {
-	if len(p) == 0 {
-		return errors.New("empty proof")
-	}
-
-	// Deserialize to native handle
-	cproof, err := backend.UCDLProofFromBytes([]byte(p))
-	if err != nil {
-		return cbmpc.RemapError(err)
-	}
-
-	// Ensure handle is freed even if fn panics
-	defer backend.UCDLProofFree(cproof)
-
-	// Use the handle
-	return fn(cproof)
-}
 
 // DLProveParams contains parameters for UC_DL proof generation.
 // This proves knowledge of the discrete logarithm: Point = Exponent * G.
@@ -88,16 +65,7 @@ func Prove(params *DLProveParams) (DLProof, error) {
 		return nil, errors.New("point has been freed")
 	}
 
-	// Create ephemeral native handle
-	cproof, err := backend.UCDLProve(qPoint, params.Exponent.Bytes, params.SessionID.Bytes(), params.Aux)
-	if err != nil {
-		return nil, cbmpc.RemapError(err)
-	}
-
-	// Immediately serialize to bytes and free native handle
-	defer backend.UCDLProofFree(cproof)
-
-	proofBytes, err := backend.UCDLProofToBytes(cproof)
+	proofBytes, err := backend.UCDLProve(qPoint, params.Exponent.Bytes, params.SessionID.Bytes(), params.Aux)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -116,7 +84,6 @@ type DLVerifyParams struct {
 }
 
 // Verify verifies a UC_DL proof.
-// Creates an ephemeral native handle for verification and immediately frees it.
 // The proof bytes are not modified and remain valid.
 // See cb-mpc/src/cbmpc/zk/zk_ec.h for protocol details.
 func Verify(params *DLVerifyParams) error {
@@ -138,10 +105,7 @@ func Verify(params *DLVerifyParams) error {
 		return errors.New("point has been freed")
 	}
 
-	// Use ephemeral native handle for verification
-	err := params.Proof.withNativeHandle(func(cproof backend.UCDLProof) error {
-		return backend.UCDLVerify(cproof, qPoint, params.SessionID.Bytes(), params.Aux)
-	})
+	err := backend.UCDLVerify([]byte(params.Proof), qPoint, params.SessionID.Bytes(), params.Aux)
 	if err != nil {
 		return cbmpc.RemapError(err)
 	}

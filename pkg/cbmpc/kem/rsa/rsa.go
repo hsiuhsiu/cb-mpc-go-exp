@@ -14,22 +14,59 @@ import (
 	"sync"
 )
 
-// KEM is a production-grade RSA-based Key Encapsulation Mechanism.
-// It uses RSA-OAEP with SHA-256 for secure key encapsulation.
+// Typed errors for handle validation.
+var (
+	// ErrInvalidHandleType indicates the handle is not a *privateKeyHandle.
+	ErrInvalidHandleType = errors.New("invalid handle type: expected RSA private key handle")
+
+	// ErrAlgorithmMismatch indicates the handle's algorithm family doesn't match this KEM.
+	ErrAlgorithmMismatch = errors.New("algorithm family mismatch: handle is not for RSA-OAEP")
+
+	// ErrUnsupportedKeySize indicates the handle's key size is not supported.
+	ErrUnsupportedKeySize = errors.New("unsupported key size")
+
+	// ErrPublicKeyHashMismatch indicates the public key hash doesn't match.
+	ErrPublicKeyHashMismatch = errors.New("public key hash mismatch")
+)
+
+// KEM is a DETERMINISTIC RSA-OAEP implementation for PVE (Publicly Verifiable Encryption).
 //
-// Security considerations:
-//   - Minimum recommended key size is 2048 bits
-//   - 3072 bits recommended for long-term security (post-2030)
-//   - 4096 bits for high-security applications
-//   - Uses RSA-OAEP with SHA-256 hash function
-//   - Private keys are held in DER form in memory and zeroized on free
+// SECURITY WARNING: This is NOT a general-purpose randomized KEM!
 //
-// This KEM is suitable for production use with PVE encryption.
+// This implementation provides DETERMINISTIC RSA-OAEP encryption specifically designed
+// for PVE. It uses a deterministic seed (rho) instead of random bytes, which makes it
+// UNSUITABLE for general public-key encryption but REQUIRED for PVE's verifiability.
+//
+// Key security properties:
+//   - DETERMINISTIC: Same (ek, rho) always produces the same ciphertext
+//   - DOMAIN-SEPARATED: Different keys with same rho produce different ciphertexts
+//   - KEY-BOUND: OAEP label includes SHA-256 hash of the public key
+//   - Uses RSA-OAEP with SHA-256 for both encryption and label generation
+//
+// DO NOT use this for general-purpose encryption! Only use within PVE protocol context.
+//
+// Recommended key sizes:
+//   - 2048 bits: Minimum for current use
+//   - 3072 bits: Recommended for long-term security (post-2030)
+//   - 4096 bits: High security applications
+//
+// Security guarantees:
+//   - Private key material held in PKCS#8 DER format and zeroized on free
+//   - Deterministic seed (rho) must be fresh and unpredictable per encryption
+//   - OAEP label binds ciphertext to specific public key (prevents cross-key attacks)
+//   - Seed derivation: SHA-256(rho || SHA-256(ek)) for domain separation
 type KEM struct {
 	keySize int
+	// boundEKHash optionally binds this KEM instance to a specific public key
+	// (by SHA-256 hash) for additional misuse resistance during decapsulation.
+	boundEKHash    [32]byte
+	hasBoundEKHash bool
 }
 
-// New creates a new production-grade RSA KEM.
+// New creates a new DETERMINISTIC RSA-OAEP KEM for PVE.
+//
+// WARNING: This creates a DETERMINISTIC KEM for PVE only!
+//
 // Recommended key sizes:
 //   - 2048: Minimum for current use
 //   - 3072: Recommended for long-term security
@@ -44,12 +81,39 @@ func New(keySize int) (*KEM, error) {
 	return &KEM{keySize: keySize}, nil
 }
 
+// BindPublicKeyHash restricts Decapsulate to use only a handle whose public key
+// hash matches the provided 32-byte SHA-256 hash. Passing an incorrectly sized
+// hash is ignored (no binding applied).
+func (k *KEM) BindPublicKeyHash(h []byte) {
+	if len(h) != 32 {
+		return
+	}
+	copy(k.boundEKHash[:], h)
+	k.hasBoundEKHash = true
+}
+
+// BindPublicKey restricts Decapsulate to a specific public key by hashing it
+// with SHA-256 and calling BindPublicKeyHash.
+func (k *KEM) BindPublicKey(ek []byte) {
+	sum := sha256.Sum256(ek)
+	k.boundEKHash = sum
+	k.hasBoundEKHash = true
+}
+
 // privateKeyHandle represents a handle to an RSA private key.
-// The private key is stored in DER format for security.
+// Private key material is held in DER form and zeroized on free.
+//
+// The handle includes algorithm metadata to prevent misuse:
+//   - algorithmID identifies the algorithm family and key size (e.g., "rsa-oaep-2048")
+//   - keySize is the modulus size in bytes (256 = 2048 bits, 384 = 3072 bits, 512 = 4096 bits)
+//   - pubKeyHash is SHA-256 of the public key for integrity checking
 type privateKeyHandle struct {
-	mu        sync.RWMutex
-	keyDER    []byte // PKCS#8 DER encoding
-	publicKey []byte // PKIX DER encoding
+	mu          sync.RWMutex
+	algorithmID string   // Algorithm family and key size (e.g., "rsa-oaep-2048")
+	keySize     int      // Modulus size in bytes
+	pubKeyHash  [32]byte // SHA-256 hash of public key
+	keyDER      []byte   // PKCS#8 DER encoding
+	publicKey   []byte   // PKIX DER encoding
 }
 
 // Generate generates a new RSA key pair.
@@ -82,6 +146,10 @@ func (k *KEM) Generate() (skRef []byte, ek []byte, err error) {
 // Encapsulate generates a ciphertext and shared secret for the given public key.
 // Uses RSA-OAEP with SHA-256 for encryption.
 //
+// Security: This implementation provides domain separation by binding the deterministic
+// encryption to the public key. The OAEP label and random seed are derived from both
+// rho and the public key hash, preventing randomness reuse across different keys.
+//
 // Parameters:
 //   - ek: Public key in PKIX DER format
 //   - rho: 32-byte random seed for deterministic encapsulation
@@ -108,13 +176,27 @@ func (k *KEM) Encapsulate(ek []byte, rho [32]byte) (ct, ss []byte, err error) {
 		return nil, nil, fmt.Errorf("public key too small: %d bytes (minimum 256 bytes)", keySize)
 	}
 
+	// Compute ekHash for domain separation
+	// This ensures different keys use different randomness streams
+	ekHash := sha256.Sum256(ek)
+
+	// Create key-bound OAEP label: "cbmpc/pve/rsa-oaep:" + ekHash
+	// This prevents ciphertexts from being valid under different keys
+	label := append([]byte("cbmpc/pve/rsa-oaep:"), ekHash[:]...)
+
+	// Derive key-bound seed by combining rho and ekHash
+	// This ensures the same rho with different keys produces different randomness
+	h := sha256.New()
+	h.Write(rho[:])
+	h.Write(ekHash[:])
+	keyBoundSeed := h.Sum(nil)
+
 	// Use rho as the shared secret (for PVE determinism)
 	ss = make([]byte, 32)
 	copy(ss, rho[:])
 
-	// Encrypt shared secret with RSA-OAEP
-	// Use deterministic reader for PVE compatibility
-	ct, err = rsa.EncryptOAEP(sha256.New(), &deterministicReader{seed: rho[:]}, publicKey, ss, nil)
+	// Encrypt shared secret with RSA-OAEP using key-bound parameters
+	ct, err = rsa.EncryptOAEP(sha256.New(), &deterministicReader{seed: keyBoundSeed}, publicKey, ss, label)
 	if err != nil {
 		return nil, nil, fmt.Errorf("RSA-OAEP encapsulation failed: %w", err)
 	}
@@ -124,6 +206,9 @@ func (k *KEM) Encapsulate(ek []byte, rho [32]byte) (ct, ss []byte, err error) {
 
 // Decapsulate recovers the shared secret from a ciphertext using the private key.
 // Uses RSA-OAEP with SHA-256 for decryption.
+//
+// Security: Uses the same key-bound OAEP label as Encapsulate to ensure ciphertexts
+// can only be decrypted with the matching key. This prevents cross-key attacks.
 //
 // Parameters:
 //   - skHandle: Private key handle (must be *privateKeyHandle)
@@ -135,15 +220,49 @@ func (k *KEM) Encapsulate(ek []byte, rho [32]byte) (ct, ss []byte, err error) {
 func (k *KEM) Decapsulate(skHandle any, ct []byte) (ss []byte, err error) {
 	handle, ok := skHandle.(*privateKeyHandle)
 	if !ok {
-		return nil, errors.New("invalid handle type: expected *privateKeyHandle")
+		return nil, ErrInvalidHandleType
+	}
+
+	// Validate handle metadata (algorithm family and key size checks)
+	handle.mu.RLock()
+	algorithmID := handle.algorithmID
+	keySize := handle.keySize
+	pubKeyHash := handle.pubKeyHash
+	keyDER := make([]byte, len(handle.keyDER))
+	copy(keyDER, handle.keyDER)
+	publicKey := make([]byte, len(handle.publicKey))
+	copy(publicKey, handle.publicKey)
+	handle.mu.RUnlock()
+
+	// Check algorithm family
+	if len(algorithmID) < 8 || algorithmID[:8] != "rsa-oaep" {
+		return nil, fmt.Errorf("%w: got %q", ErrAlgorithmMismatch, algorithmID)
+	}
+
+	// Check key size is supported (2048, 3072, 4096 bits = 256, 384, 512 bytes)
+	if keySize != 256 && keySize != 384 && keySize != 512 {
+		return nil, fmt.Errorf("%w: %d bytes (%d bits)", ErrUnsupportedKeySize, keySize, keySize*8)
+	}
+
+	// Check handle key size matches this KEM's configured modulus size.
+	expectedBytes := k.keySize / 8
+	if keySize != expectedBytes {
+		return nil, fmt.Errorf("%w: expected %d bytes (%d bits), got %d bytes", ErrUnsupportedKeySize, expectedBytes, expectedBytes*8, keySize)
+	}
+
+	// Verify public key hash matches (integrity check)
+	expectedHash := sha256.Sum256(publicKey)
+	if pubKeyHash != expectedHash {
+		return nil, ErrPublicKeyHashMismatch
+	}
+
+	// Optional: if this KEM instance is bound to an expected public key hash,
+	// enforce it here to prevent cross-key misuse.
+	if k.hasBoundEKHash && pubKeyHash != k.boundEKHash {
+		return nil, ErrPublicKeyHashMismatch
 	}
 
 	// Parse private key from DER
-	handle.mu.RLock()
-	keyDER := make([]byte, len(handle.keyDER))
-	copy(keyDER, handle.keyDER)
-	handle.mu.RUnlock()
-
 	keyInterface, err := x509.ParsePKCS8PrivateKey(keyDER)
 	if err != nil {
 		zeroizeBytes(keyDER)
@@ -156,8 +275,12 @@ func (k *KEM) Decapsulate(skHandle any, ct []byte) (ss []byte, err error) {
 		return nil, errors.New("not an RSA private key")
 	}
 
-	// Decrypt ciphertext with RSA-OAEP
-	ss, err = rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, ct, nil)
+	// Compute the same key-bound OAEP label used during encapsulation
+	ekHash := sha256.Sum256(publicKey)
+	label := append([]byte("cbmpc/pve/rsa-oaep:"), ekHash[:]...)
+
+	// Decrypt ciphertext with RSA-OAEP using the key-bound label
+	ss, err = rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, ct, label)
 
 	// Zeroize sensitive data
 	zeroizeBytes(keyDER)
@@ -201,7 +324,7 @@ func (k *KEM) DerivePub(skRef []byte) ([]byte, error) {
 }
 
 // NewPrivateKeyHandle creates a handle to a private key.
-// The private key is stored in DER format for security.
+// Private key material is held in DER form and zeroized on free.
 //
 // Parameters:
 //   - skRef: Private key reference in PKCS#8 DER format
@@ -233,10 +356,20 @@ func (k *KEM) NewPrivateKeyHandle(skRef []byte) (any, error) {
 		return nil, fmt.Errorf("failed to marshal public key: %w", err)
 	}
 
-	// Create handle with DER-encoded key
+	// Compute algorithm ID (e.g., "rsa-oaep-2048")
+	keySizeBits := keySize * 8
+	algorithmID := fmt.Sprintf("rsa-oaep-%d", keySizeBits)
+
+	// Compute public key hash for integrity checking
+	pubKeyHash := sha256.Sum256(publicKey)
+
+	// Create handle with DER-encoded key and metadata
 	handle := &privateKeyHandle{
-		keyDER:    make([]byte, len(skRef)),
-		publicKey: publicKey,
+		algorithmID: algorithmID,
+		keySize:     keySize,
+		pubKeyHash:  pubKeyHash,
+		keyDER:      make([]byte, len(skRef)),
+		publicKey:   publicKey,
 	}
 	copy(handle.keyDER, skRef)
 

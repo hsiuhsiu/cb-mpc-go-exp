@@ -1,4 +1,4 @@
-// Example demonstrating Publicly Verifiable Encryption (PVE) with production-grade RSA KEM.
+// Example demonstrating Publicly Verifiable Encryption (PVE) with deterministic RSA KEM.
 //
 // This example shows:
 //   - PVE encryption with RSA KEM
@@ -31,7 +31,7 @@ func main() {
 	fmt.Println("=== PVE (Publicly Verifiable Encryption) Example ===")
 	fmt.Println()
 
-	// Step 1: Create production-grade RSA KEM (3072-bit for long-term security)
+	// Step 1: Create deterministic RSA KEM (3072-bit for long-term security)
 	fmt.Println("Step 1: Creating RSA KEM (3072-bit)...")
 	kem, err := rsa.New(3072)
 	if err != nil {
@@ -243,5 +243,5 @@ func main() {
 	fmt.Println("  ✓ Successfully detected verification failures (wrong parameters)")
 	fmt.Println("  ✓ Successfully decrypted ciphertext")
 	fmt.Println("  ✓ Successfully detected decryption failures (wrong parameters)")
-	fmt.Println("  ✓ Production-grade RSA KEM (3072-bit) used throughout")
+	fmt.Println("  ✓ Deterministic RSA KEM (3072-bit) used throughout")
 }
