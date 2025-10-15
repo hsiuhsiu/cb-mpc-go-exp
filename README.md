@@ -1,12 +1,14 @@
 # cb-mpc-go
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/coinbase/cb-mpc-go.svg)](https://pkg.go.dev/github.com/coinbase/cb-mpc-go)
+
 A production-focused Go wrapper around [Coinbase's cb-mpc](https://github.com/coinbase/cb-mpc) multi-party computation (MPC) library. The goal of this repository is to surface a safe, ergonomic, and well-structured Go API while building directly from the C++ source tree. All tooling runs natively by default, and you can opt into a reproducible Docker environment by exporting `CBMPC_USE_DOCKER=1` (the same mode used by CI).
 
 ## Repository layout
 
 - `cb-mpc`: git submodule tracking the upstream C++ library.
 - `pkg/cbmpc`: public Go API surface with MPC protocol implementations.
-- `internal/bindings`: CGO bridge to the C++ cb-mpc library.
+- `pkg/cbmpc/internal/backend`: CGO bridge to the C++ cb-mpc library.
 - `examples/`: example programs demonstrating MPC protocols (agree-random-2p, agree-random-mp, etc.).
 - `Dockerfile`: development container image that matches the CI environment.
 - `.github/workflows/`: GitHub Actions pipelines for linting and testing pull requests.
@@ -50,7 +52,7 @@ A production-focused Go wrapper around [Coinbase's cb-mpc](https://github.com/co
    make test
    ```
 
-   On a clean macOS install the helper script automatically downloads Go 1.23.12 into `build/go-host`. Set `CBMPC_USE_DOCKER=1` if you prefer to run the tests inside the dev container, which will keep its own toolchain under `build/go-docker`.
+   On a clean macOS install the helper script automatically downloads Go 1.25.2 into `build/go-host`. Set `CBMPC_USE_DOCKER=1` if you prefer to run the tests inside the dev container, which will keep its own toolchain under `build/go-docker`.
 
 5. Run Go linters:
 
@@ -69,6 +71,17 @@ A production-focused Go wrapper around [Coinbase's cb-mpc](https://github.com/co
 - `make clean` removes all generated build artefacts, including the local cb-mpc build directory.
 - Tool shims bootstrap pinned Go and `golangci-lint` toolchains automatically and keep separate caches per environment flavour (`*-host` vs `*-docker`) so you can switch between native macOS and Linux container runs without manual cleanup. Export `CBMPC_USE_DOCKER=1` to run the same workflow inside the dev container.
 - The `Dockerfile` mirrors the tooling used in CI, allowing local validation via `docker build .`.
+
+## Documentation
+
+- View docs locally with:
+
+  ```bash
+  make doc
+  # then open http://localhost:6060/github.com/coinbase/cb-mpc-go
+  ```
+
+- Hosted API docs are available on pkg.go.dev: https://pkg.go.dev/github.com/coinbase/cb-mpc-go
 
 ## Continuous integration
 

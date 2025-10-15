@@ -6,6 +6,7 @@ This package provides zero-knowledge proof protocols for use in secure multi-par
 
 - **UC_DL**: Universally composable discrete logarithm proof (single point)
 - **UC_Batch_DL**: Batch discrete logarithm proof (multiple points)
+- **UC_ElGamal_Com**: ElGamal commitment proof (proves knowledge of commitment opening)
 - **DH**: Diffie-Hellman proof
 
 ## UC_DL - Universally Composable Discrete Logarithm Proof
@@ -84,6 +85,105 @@ err = zk.VerifyBatchDL(&zk.BatchDLVerifyParams{
 })
 ```
 
+## UC_ElGamal_Com - ElGamal Commitment Proof
+
+The UC_ElGamal_Com protocol is a non-interactive zero-knowledge proof that proves knowledge of the opening of an ElGamal commitment. Specifically, given an ElGamal commitment `UV = (L, R)` where `L = r*G` and `R = x*Q + r*G`, the prover demonstrates knowledge of both the secret value `x` and the randomness `r` without revealing them.
+
+### What is an ElGamal Commitment?
+
+An ElGamal commitment is a cryptographic commitment scheme based on the Diffie-Hellman problem:
+- **Commitment**: `UV = (L, R)` where `L = r*G` and `R = x*Q + r*G`
+- **Q**: Base point (public key)
+- **x**: Secret value (the committed value)
+- **r**: Secret randomness (blinding factor)
+- **G**: Curve generator point
+
+The commitment is:
+- **Hiding**: Without knowing `r`, the commitment reveals no information about `x`
+- **Binding**: The prover cannot change `x` after committing without being detected
+
+### Usage
+
+```go
+import (
+    "github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+    "github.com/coinbase/cb-mpc-go/pkg/cbmpc/curve"
+    "github.com/coinbase/cb-mpc-go/pkg/cbmpc/zk"
+)
+
+// Generate base point Q
+qScalar, _ := curve.RandomScalar(curve.P256)
+defer qScalar.Free()
+
+qPoint, _ := curve.MulGenerator(curve.P256, qScalar)
+defer qPoint.Free()
+
+// Secret value x and randomness r
+x, _ := curve.RandomScalar(curve.P256)
+defer x.Free()
+
+r, _ := curve.RandomScalar(curve.P256)
+defer r.Free()
+
+// Create ElGamal commitment UV = (r*G, x*Q + r*G)
+commitment, _ := curve.MakeElGamalCom(qPoint, x, r)
+defer commitment.Free()
+
+// Create session ID
+sessionID := cbmpc.NewSessionID(sessionIDBytes)
+
+// Generate proof of knowledge of x and r
+proof, _ := zk.ProveElGamalCom(&zk.ElGamalComProveParams{
+    BasePoint:  qPoint,
+    Commitment: commitment,
+    X:          x,
+    R:          r,
+    SessionID:  sessionID,
+    Aux:        partyID,
+})
+// Proof is just []byte - no Close() needed
+
+// Verify the proof (anyone can verify)
+err := zk.VerifyElGamalCom(&zk.ElGamalComVerifyParams{
+    Proof:      proof,
+    BasePoint:  qPoint,
+    Commitment: commitment,
+    SessionID:  sessionID,
+    Aux:        partyID,
+})
+// err == nil means verification succeeded
+```
+
+### Convenience Function
+
+For convenience, you can create a commitment and proof in one step:
+
+```go
+// Create commitment + proof in one call
+result, _ := zk.MakeElGamalComWithProof(qPoint, x, r, sessionID, partyID)
+defer result.Commitment.Free()
+
+// result.Commitment is the ElGamal commitment
+// result.Proof is the ZK proof ([]byte)
+
+// Verify as usual
+err := zk.VerifyElGamalCom(&zk.ElGamalComVerifyParams{
+    Proof:      result.Proof,
+    BasePoint:  qPoint,
+    Commitment: result.Commitment,
+    SessionID:  sessionID,
+    Aux:        partyID,
+})
+```
+
+### Use Cases
+
+ElGamal commitment proofs are commonly used in:
+- **Secure multi-party computation**: Parties commit to their inputs and prove correctness
+- **Threshold signatures**: Proving knowledge of secret shares without revealing them
+- **Verifiable secret sharing**: Ensuring shares are correctly distributed
+- **Anonymous credentials**: Committing to attributes while preserving privacy
+
 ## DH - Diffie-Hellman Proof
 
 Proves that three points Q, A, B satisfy the Diffie-Hellman relation: B = w*A where Q = w*G.
@@ -149,5 +249,6 @@ These provide strong security guarantees in the UC model.
 
 ## References
 
-- See `cb-mpc/src/cbmpc/zk/zk_ec.h` for the C++ implementation details
+- See `cb-mpc/src/cbmpc/zk/zk_ec.h` for UC_DL, UC_Batch_DL, and DH implementation details
+- See `cb-mpc/src/cbmpc/zk/zk_elgamal_com.h` for UC_ElGamal_Com implementation details
 - Fischlin, M. (2005). "Communication-Efficient Non-Interactive Proofs of Knowledge with Online Extractors"

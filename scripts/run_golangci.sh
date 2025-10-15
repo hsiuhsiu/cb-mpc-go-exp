@@ -33,7 +33,7 @@ if command -v golangci-lint >/dev/null 2>&1; then
   exec golangci-lint "$@"
 fi
 
-GO_VERSION="${GO_VERSION:-1.23.12}"
+GO_VERSION="${GO_VERSION:-1.25.2}"
 GO_ROOT="${CBMPC_GO_ROOT:-${PWD}/build/go-${ENV_FLAVOR}}"
 LOCAL_GO="${GO_ROOT}/go/bin/go"
 

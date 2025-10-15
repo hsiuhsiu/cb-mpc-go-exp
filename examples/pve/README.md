@@ -119,7 +119,7 @@ See `pkg/cbmpc/internal/testkem/hsm_kem.go` for an HSM integration example.
 ## Related Tests
 
 See comprehensive tests in:
-- `pkg/cbmpc/pve_test.go` - Basic PVE operations
-- `pkg/cbmpc/pve_concurrent_test.go` - Concurrent usage
-- `pkg/cbmpc/pve_isolation_test.go` - KEM isolation
-- `pkg/cbmpc/pve_hsm_test.go` - HSM integration
+- `pkg/cbmpc/pve/pve_test.go` - Basic PVE operations
+- `pkg/cbmpc/pve/pve_concurrent_test.go` - Concurrent usage
+- `pkg/cbmpc/pve/pve_isolation_test.go` - KEM isolation
+- `pkg/cbmpc/pve/pve_hsm_test.go` - HSM integration
