@@ -24,6 +24,7 @@
 #include "cbmpc/protocol/schnorr_mp.h"
 #include "cbmpc/zk/zk_ec.h"
 #include "cbmpc/zk/zk_elgamal_com.h"
+#include "cbmpc/zk/zk_paillier.h"
 
 namespace {
 
@@ -1677,6 +1678,240 @@ int cbmpc_uc_elgamal_com_mult_private_scalar_verify(cmem_t proof_bytes, cbmpc_ec
 
   // Verify
   rv = proof.verify(*E, *eA, *eB, mem_t(session_id.data, session_id.size), aux);
+  return rv;
+}
+
+// =====================
+// ZK Proof Operations - Valid_Paillier
+// =====================
+
+// Valid_Paillier Prove
+int cbmpc_valid_paillier_prove(cbmpc_paillier paillier, cmem_t session_id, uint64_t aux, cmem_t *proof_out) {
+  if (!paillier || !session_id.data || session_id.size <= 0 || !proof_out) {
+    return E_BADARG;
+  }
+
+  const auto* p = static_cast<const coinbase::crypto::paillier_t*>(paillier);
+
+  // Verify that the paillier instance has a private key (required for proving)
+  if (!p->has_private_key()) {
+    return E_BADARG;
+  }
+
+  // Create proof
+  coinbase::zk::valid_paillier_t proof;
+  proof.prove(*p, mem_t(session_id.data, session_id.size), aux);
+
+  // Serialize proof to bytes and return
+  buf_t serialized = coinbase::ser(proof);
+  *proof_out = alloc_and_copy(serialized.data(), static_cast<size_t>(serialized.size()));
+
+  return 0;
+}
+
+// Valid_Paillier Verify
+int cbmpc_valid_paillier_verify(cmem_t proof_bytes, cbmpc_paillier paillier, cmem_t session_id, uint64_t aux) {
+  if (!proof_bytes.data || proof_bytes.size <= 0 || !paillier || !session_id.data || session_id.size <= 0) {
+    return E_BADARG;
+  }
+
+  // Deserialize proof from bytes
+  coinbase::zk::valid_paillier_t proof;
+  error_t rv = coinbase::deser(mem_t(proof_bytes.data, proof_bytes.size), proof);
+  if (rv != SUCCESS) return rv;
+
+  const auto* p = static_cast<const coinbase::crypto::paillier_t*>(paillier);
+
+  // Verify (public key only is sufficient for verification)
+  rv = proof.verify(*p, mem_t(session_id.data, session_id.size), aux);
+  return rv;
+}
+
+// =====================
+// ZK Proof Operations - Paillier_Zero
+// =====================
+
+// Paillier_Zero Prove
+int cbmpc_paillier_zero_prove(cbmpc_paillier paillier, cmem_t c, cmem_t r, cmem_t session_id, uint64_t aux, cmem_t *proof_out) {
+  if (!paillier || !c.data || c.size <= 0 || !r.data || r.size <= 0 || !session_id.data || session_id.size <= 0 || !proof_out) {
+    return E_BADARG;
+  }
+
+  const auto* p = static_cast<const coinbase::crypto::paillier_t*>(paillier);
+
+  // Verify that the paillier instance has a private key (required for proving)
+  if (!p->has_private_key()) {
+    return E_BADARG;
+  }
+
+  // Deserialize c and r from bytes
+  coinbase::crypto::bn_t c_bn = coinbase::crypto::bn_t::from_bin(mem_t(c.data, c.size));
+  coinbase::crypto::bn_t r_bn = coinbase::crypto::bn_t::from_bin(mem_t(r.data, r.size));
+
+  // Create proof
+  coinbase::zk::paillier_zero_t proof;
+  proof.prove(*p, c_bn, r_bn, mem_t(session_id.data, session_id.size), aux);
+
+  // Serialize proof to bytes and return
+  buf_t serialized = coinbase::ser(proof);
+  *proof_out = alloc_and_copy(serialized.data(), static_cast<size_t>(serialized.size()));
+
+  return 0;
+}
+
+// Paillier_Zero Verify
+int cbmpc_paillier_zero_verify(cmem_t proof_bytes, cbmpc_paillier paillier, cmem_t c, cmem_t session_id, uint64_t aux) {
+  if (!proof_bytes.data || proof_bytes.size <= 0 || !paillier || !c.data || c.size <= 0 || !session_id.data || session_id.size <= 0) {
+    return E_BADARG;
+  }
+
+  // Deserialize proof from bytes
+  coinbase::zk::paillier_zero_t proof;
+  error_t rv = coinbase::deser(mem_t(proof_bytes.data, proof_bytes.size), proof);
+  if (rv != SUCCESS) return rv;
+
+  const auto* p = static_cast<const coinbase::crypto::paillier_t*>(paillier);
+
+  // Deserialize c from bytes
+  coinbase::crypto::bn_t c_bn = coinbase::crypto::bn_t::from_bin(mem_t(c.data, c.size));
+
+  // Verify (public key only is sufficient for verification)
+  rv = proof.verify(*p, c_bn, mem_t(session_id.data, session_id.size), aux);
+  return rv;
+}
+
+// =====================
+// ZK Proof Operations - Two_Paillier_Equal
+// =====================
+
+// Two_Paillier_Equal Prove
+int cbmpc_two_paillier_equal_prove(cmem_t q, cbmpc_paillier P0, cmem_t c0, cbmpc_paillier P1, cmem_t c1, cmem_t x, cmem_t r0, cmem_t r1, cmem_t session_id, uint64_t aux, cmem_t *proof_out) {
+  if (!q.data || q.size <= 0 || !P0 || !P1 ||
+      !c0.data || c0.size <= 0 || !c1.data || c1.size <= 0 ||
+      !x.data || x.size <= 0 || !r0.data || r0.size <= 0 || !r1.data || r1.size <= 0 ||
+      !session_id.data || session_id.size <= 0 || !proof_out) {
+    return E_BADARG;
+  }
+
+  const auto* p0 = static_cast<const coinbase::crypto::paillier_t*>(P0);
+  const auto* p1 = static_cast<const coinbase::crypto::paillier_t*>(P1);
+
+  // Verify that both paillier instances have private keys (required for proving)
+  if (!p0->has_private_key() || !p1->has_private_key()) {
+    return E_BADARG;
+  }
+
+  // Deserialize parameters from bytes
+  coinbase::crypto::bn_t q_bn = coinbase::crypto::bn_t::from_bin(mem_t(q.data, q.size));
+  coinbase::crypto::mod_t q_mod(q_bn);
+
+  coinbase::crypto::bn_t c0_bn = coinbase::crypto::bn_t::from_bin(mem_t(c0.data, c0.size));
+  coinbase::crypto::bn_t c1_bn = coinbase::crypto::bn_t::from_bin(mem_t(c1.data, c1.size));
+  coinbase::crypto::bn_t x_bn = coinbase::crypto::bn_t::from_bin(mem_t(x.data, x.size));
+  coinbase::crypto::bn_t r0_bn = coinbase::crypto::bn_t::from_bin(mem_t(r0.data, r0.size));
+  coinbase::crypto::bn_t r1_bn = coinbase::crypto::bn_t::from_bin(mem_t(r1.data, r1.size));
+
+  // Create proof
+  coinbase::zk::two_paillier_equal_t proof;
+  proof.prove(q_mod, *p0, c0_bn, *p1, c1_bn, x_bn, r0_bn, r1_bn, mem_t(session_id.data, session_id.size), aux);
+
+  // Serialize proof to bytes and return
+  buf_t serialized = coinbase::ser(proof);
+  *proof_out = alloc_and_copy(serialized.data(), static_cast<size_t>(serialized.size()));
+
+  return 0;
+}
+
+// Two_Paillier_Equal Verify
+int cbmpc_two_paillier_equal_verify(cmem_t proof_bytes, cmem_t q, cbmpc_paillier P0, cmem_t c0, cbmpc_paillier P1, cmem_t c1, cmem_t session_id, uint64_t aux) {
+  if (!proof_bytes.data || proof_bytes.size <= 0 ||
+      !q.data || q.size <= 0 || !P0 || !P1 ||
+      !c0.data || c0.size <= 0 || !c1.data || c1.size <= 0 ||
+      !session_id.data || session_id.size <= 0) {
+    return E_BADARG;
+  }
+
+  // Deserialize proof from bytes
+  coinbase::zk::two_paillier_equal_t proof;
+  error_t rv = coinbase::deser(mem_t(proof_bytes.data, proof_bytes.size), proof);
+  if (rv != SUCCESS) return rv;
+
+  const auto* p0 = static_cast<const coinbase::crypto::paillier_t*>(P0);
+  const auto* p1 = static_cast<const coinbase::crypto::paillier_t*>(P1);
+
+  // Deserialize parameters from bytes
+  coinbase::crypto::bn_t q_bn = coinbase::crypto::bn_t::from_bin(mem_t(q.data, q.size));
+  coinbase::crypto::mod_t q_mod(q_bn);
+
+  coinbase::crypto::bn_t c0_bn = coinbase::crypto::bn_t::from_bin(mem_t(c0.data, c0.size));
+  coinbase::crypto::bn_t c1_bn = coinbase::crypto::bn_t::from_bin(mem_t(c1.data, c1.size));
+
+  // Verify (public keys only are sufficient for verification)
+  rv = proof.verify(q_mod, *p0, c0_bn, *p1, c1_bn, mem_t(session_id.data, session_id.size), aux);
+  return rv;
+}
+
+// =====================
+// ZK Proof Operations - Paillier_Range_Exp_Slack
+// =====================
+
+// Paillier_Range_Exp_Slack Prove
+int cbmpc_paillier_range_exp_slack_prove(cbmpc_paillier paillier, cmem_t q, cmem_t c, cmem_t x, cmem_t r, cmem_t session_id, uint64_t aux, cmem_t *proof_out) {
+  if (!paillier || !q.data || q.size <= 0 ||
+      !c.data || c.size <= 0 || !x.data || x.size <= 0 || !r.data || r.size <= 0 ||
+      !session_id.data || session_id.size <= 0 || !proof_out) {
+    return E_BADARG;
+  }
+
+  const auto* p = static_cast<const coinbase::crypto::paillier_t*>(paillier);
+
+  // Verify that the paillier instance has a private key (required for proving)
+  if (!p->has_private_key()) {
+    return E_BADARG;
+  }
+
+  // Deserialize parameters from bytes
+  coinbase::crypto::bn_t q_bn = coinbase::crypto::bn_t::from_bin(mem_t(q.data, q.size));
+  coinbase::crypto::mod_t q_mod(q_bn);
+
+  coinbase::crypto::bn_t c_bn = coinbase::crypto::bn_t::from_bin(mem_t(c.data, c.size));
+  coinbase::crypto::bn_t x_bn = coinbase::crypto::bn_t::from_bin(mem_t(x.data, x.size));
+  coinbase::crypto::bn_t r_bn = coinbase::crypto::bn_t::from_bin(mem_t(r.data, r.size));
+
+  // Create proof
+  coinbase::zk::paillier_range_exp_slack_t proof;
+  proof.prove(*p, q_mod, c_bn, x_bn, r_bn, mem_t(session_id.data, session_id.size), aux);
+
+  // Serialize proof to bytes and return
+  buf_t serialized = coinbase::ser(proof);
+  *proof_out = alloc_and_copy(serialized.data(), static_cast<size_t>(serialized.size()));
+
+  return 0;
+}
+
+// Paillier_Range_Exp_Slack Verify
+int cbmpc_paillier_range_exp_slack_verify(cmem_t proof_bytes, cbmpc_paillier paillier, cmem_t q, cmem_t c, cmem_t session_id, uint64_t aux) {
+  if (!proof_bytes.data || proof_bytes.size <= 0 || !paillier ||
+      !q.data || q.size <= 0 || !c.data || c.size <= 0 ||
+      !session_id.data || session_id.size <= 0) {
+    return E_BADARG;
+  }
+
+  // Deserialize proof from bytes
+  coinbase::zk::paillier_range_exp_slack_t proof;
+  error_t rv = coinbase::deser(mem_t(proof_bytes.data, proof_bytes.size), proof);
+  if (rv != SUCCESS) return rv;
+
+  const auto* p = static_cast<const coinbase::crypto::paillier_t*>(paillier);
+
+  // Deserialize parameters from bytes
+  coinbase::crypto::bn_t q_bn = coinbase::crypto::bn_t::from_bin(mem_t(q.data, q.size));
+  coinbase::crypto::mod_t q_mod(q_bn);
+
+  coinbase::crypto::bn_t c_bn = coinbase::crypto::bn_t::from_bin(mem_t(c.data, c.size));
+
+  // Verify (public key only is sufficient for verification)
+  rv = proof.verify(*p, q_mod, c_bn, mem_t(session_id.data, session_id.size), aux);
   return rv;
 }
 

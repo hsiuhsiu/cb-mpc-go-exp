@@ -13,6 +13,10 @@
 //   - ElGamal-Com-PubShare-Equ: Proves equality of public share in ElGamal commitment
 //   - ElGamal-Com-Mult: Proves multiplicative relationship between ElGamal commitments
 //   - UC-ElGamal-Com-Mult-Private-Scalar: UC-secure multiplication with private scalar
+//   - Valid-Paillier: Proves that a Paillier key is well-formed (no small factors)
+//   - Paillier-Zero: Proves that a Paillier ciphertext encrypts zero
+//   - Two-Paillier-Equal: Proves two Paillier ciphertexts (under different keys) encrypt the same value
+//   - Paillier-Range-Exp-Slack: Proves a Paillier ciphertext encrypts a value in valid range with slack
 //
 // # Usage
 //

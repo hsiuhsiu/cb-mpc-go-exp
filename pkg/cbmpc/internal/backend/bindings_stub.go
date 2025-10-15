@@ -347,3 +347,64 @@ func ECCPointAdd(ECCPoint, ECCPoint) (ECCPoint, error) {
 func ScalarAdd([]byte, []byte, int) ([]byte, error) {
 	return nil, ErrNotBuilt
 }
+
+// Paillier is a stub type for non-CGO builds
+type Paillier = unsafe.Pointer
+
+func PaillierGenerate() (Paillier, error) {
+	return nil, ErrNotBuilt
+}
+
+func PaillierCreatePub([]byte) (Paillier, error) {
+	return nil, ErrNotBuilt
+}
+
+func PaillierCreatePrv([]byte, []byte, []byte) (Paillier, error) {
+	return nil, ErrNotBuilt
+}
+
+func PaillierFree(Paillier) {}
+
+func PaillierHasPrivateKey(Paillier) bool {
+	return false
+}
+
+func PaillierGetN(Paillier) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func PaillierEncrypt(Paillier, []byte) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func PaillierDecrypt(Paillier, []byte) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func PaillierAddCiphers(Paillier, []byte, []byte) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func PaillierMulScalar(Paillier, []byte, []byte) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func PaillierVerifyCipher(Paillier, []byte) error {
+	return ErrNotBuilt
+}
+
+func PaillierSerialize(Paillier) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func PaillierDeserialize([]byte) (Paillier, error) {
+	return nil, ErrNotBuilt
+}
+
+func ValidPaillierProve(Paillier, []byte, uint64) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func ValidPaillierVerify([]byte, Paillier, []byte, uint64) error {
+	return ErrNotBuilt
+}
