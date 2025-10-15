@@ -130,3 +130,26 @@ func (p *Point) Mul(scalar *Scalar) (*Point, error) {
 	runtime.SetFinalizer(result, (*Point).Free)
 	return result, nil
 }
+
+// Add adds two points: result = this + other.
+// Returns a new Point that must be freed with Free() when no longer needed.
+func (p *Point) Add(other *Point) (*Point, error) {
+	if p == nil || p.cpoint == nil {
+		return nil, errors.New("nil point")
+	}
+	if other == nil || other.cpoint == nil {
+		return nil, errors.New("nil other point")
+	}
+
+	resultCPoint, err := backend.ECCPointAdd(p.cpoint, other.cpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	runtime.KeepAlive(p)
+	runtime.KeepAlive(other)
+
+	result := &Point{cpoint: resultCPoint}
+	runtime.SetFinalizer(result, (*Point).Free)
+	return result, nil
+}

@@ -131,6 +131,16 @@ int cbmpc_curve_mul_generator(int curve_nid, cmem_t scalar_bytes, cbmpc_ecc_poin
 // Returns a NEW point that must be freed with cbmpc_ecc_point_free.
 int cbmpc_ecc_point_mul(cbmpc_ecc_point point, cmem_t scalar_bytes, cbmpc_ecc_point *result_out);
 
+// Add two points: result = point_a + point_b
+// Returns a NEW point that must be freed with cbmpc_ecc_point_free.
+int cbmpc_ecc_point_add(cbmpc_ecc_point point_a, cbmpc_ecc_point point_b, cbmpc_ecc_point *result_out);
+
+// Scalar arithmetic operations
+// Add two scalars: result = scalar_a + scalar_b (mod curve_order)
+// scalar_a_bytes, scalar_b_bytes: big-endian scalar bytes
+// Returns result scalar bytes (big-endian).
+int cbmpc_scalar_add(cmem_t scalar_a_bytes, cmem_t scalar_b_bytes, int curve_nid, cmem_t *result_out);
+
 // PVE operations using ecc_point_t directly (more efficient)
 // Extract public key Q from a PVE ciphertext as an ecc_point_t.
 // Returns a borrowed reference - do NOT free the returned point.
@@ -288,6 +298,64 @@ int cbmpc_uc_elgamal_com_prove(cbmpc_ecc_point Q_point, cbmpc_ec_elgamal_commitm
 // Q_point: the public base point
 // UV_commitment: the ElGamal commitment to verify against
 int cbmpc_uc_elgamal_com_verify(cmem_t proof, cbmpc_ecc_point Q_point, cbmpc_ec_elgamal_commitment UV_commitment, cmem_t session_id, uint64_t aux);
+
+// ElGamalCom_PubShare_Equ proof - proves equality of public share in ElGamal commitment
+// Proves that A and the public share of B are equal: A = r*G where B.L = r*G
+
+// Create ElGamalCom_PubShare_Equ proof
+// Q_point: the base point Q
+// A_point: the public point A = r*G
+// B_commitment: the ElGamal commitment B where B.L should equal A
+// r: the secret randomness (witness)
+// session_id: session identifier for security, aux: auxiliary data
+// Returns serialized proof bytes.
+int cbmpc_elgamal_com_pub_share_equ_prove(cbmpc_ecc_point Q_point, cbmpc_ecc_point A_point, cbmpc_ec_elgamal_commitment B_commitment, cmem_t r, cmem_t session_id, uint64_t aux, cmem_t *proof_out);
+
+// Verify an ElGamalCom_PubShare_Equ proof
+// proof: serialized proof bytes
+// Q_point, A_point: the points to verify against
+// B_commitment: the ElGamal commitment to verify against
+int cbmpc_elgamal_com_pub_share_equ_verify(cmem_t proof, cbmpc_ecc_point Q_point, cbmpc_ecc_point A_point, cbmpc_ec_elgamal_commitment B_commitment, cmem_t session_id, uint64_t aux);
+
+// ElGamalCom_Mult proof - proves multiplicative relationship between ElGamal commitments
+// Proves that C = b * A (scalar multiplication of commitment A by secret scalar b)
+
+// Create ElGamalCom_Mult proof
+// Q_point: the base point Q
+// A_commitment: the ElGamal commitment A
+// B_commitment: the ElGamal commitment B
+// C_commitment: the ElGamal commitment C (should be b * A)
+// r_B: randomness for commitment B (witness)
+// r_C: randomness for commitment C (witness)
+// b: the secret scalar multiplier (witness)
+// session_id: session identifier for security, aux: auxiliary data
+// Returns serialized proof bytes.
+int cbmpc_elgamal_com_mult_prove(cbmpc_ecc_point Q_point, cbmpc_ec_elgamal_commitment A_commitment, cbmpc_ec_elgamal_commitment B_commitment, cbmpc_ec_elgamal_commitment C_commitment, cmem_t r_B, cmem_t r_C, cmem_t b, cmem_t session_id, uint64_t aux, cmem_t *proof_out);
+
+// Verify an ElGamalCom_Mult proof
+// proof: serialized proof bytes
+// Q_point: the base point
+// A_commitment, B_commitment, C_commitment: the ElGamal commitments to verify against
+int cbmpc_elgamal_com_mult_verify(cmem_t proof, cbmpc_ecc_point Q_point, cbmpc_ec_elgamal_commitment A_commitment, cbmpc_ec_elgamal_commitment B_commitment, cbmpc_ec_elgamal_commitment C_commitment, cmem_t session_id, uint64_t aux);
+
+// UC_ElGamalCom_Mult_Private_Scalar proof - UC version of multiplication with private scalar
+// Proves that eB = c * eA with universally composable security
+
+// Create UC_ElGamalCom_Mult_Private_Scalar proof
+// E_point: the base point E
+// eA_commitment: the ElGamal commitment eA
+// eB_commitment: the ElGamal commitment eB (should be c * eA)
+// r0: the randomness for eB (witness)
+// c: the secret scalar multiplier (witness)
+// session_id: session identifier for security, aux: auxiliary data
+// Returns serialized proof bytes.
+int cbmpc_uc_elgamal_com_mult_private_scalar_prove(cbmpc_ecc_point E_point, cbmpc_ec_elgamal_commitment eA_commitment, cbmpc_ec_elgamal_commitment eB_commitment, cmem_t r0, cmem_t c, cmem_t session_id, uint64_t aux, cmem_t *proof_out);
+
+// Verify a UC_ElGamalCom_Mult_Private_Scalar proof
+// proof: serialized proof bytes
+// E_point: the base point
+// eA_commitment, eB_commitment: the ElGamal commitments to verify against
+int cbmpc_uc_elgamal_com_mult_private_scalar_verify(cmem_t proof, cbmpc_ecc_point E_point, cbmpc_ec_elgamal_commitment eA_commitment, cbmpc_ec_elgamal_commitment eB_commitment, cmem_t session_id, uint64_t aux);
 
 #ifdef __cplusplus
 }

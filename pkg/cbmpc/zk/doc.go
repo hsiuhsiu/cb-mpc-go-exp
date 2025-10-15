@@ -10,6 +10,9 @@
 //   - UC-Batch-DL: Batch proof for multiple discrete logs
 //   - DH: Proves Diffie-Hellman relation (B = w*A where Q = w*G)
 //   - UC-ElGamal-Com: Proves correct ElGamal commitment opening
+//   - ElGamal-Com-PubShare-Equ: Proves equality of public share in ElGamal commitment
+//   - ElGamal-Com-Mult: Proves multiplicative relationship between ElGamal commitments
+//   - UC-ElGamal-Com-Mult-Private-Scalar: UC-secure multiplication with private scalar
 //
 // # Usage
 //

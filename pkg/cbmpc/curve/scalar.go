@@ -168,3 +168,31 @@ func (s *Scalar) Free() {
 	// Remove finalizer since we've freed
 	runtime.SetFinalizer(s, nil)
 }
+
+// Add adds two scalars modulo curve order: result = (this + other) mod q.
+// Returns a new Scalar that must be freed with Free() when no longer needed.
+func (s *Scalar) Add(other *Scalar, curve Curve) (*Scalar, error) {
+	if s == nil || len(s.Bytes) == 0 {
+		return nil, errors.New("nil scalar")
+	}
+	if other == nil || len(other.Bytes) == 0 {
+		return nil, errors.New("nil other scalar")
+	}
+
+	nid, err := backend.CurveToNID(backend.Curve(curve))
+	if err != nil {
+		return nil, err
+	}
+
+	resultBytes, err := backend.ScalarAdd(s.Bytes, other.Bytes, nid)
+	if err != nil {
+		return nil, err
+	}
+
+	runtime.KeepAlive(s)
+	runtime.KeepAlive(other)
+
+	result := &Scalar{Bytes: resultBytes}
+	runtime.SetFinalizer(result, (*Scalar).Free)
+	return result, nil
+}

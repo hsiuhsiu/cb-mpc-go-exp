@@ -8,6 +8,9 @@ This package provides zero-knowledge proof protocols for use in secure multi-par
 - **UC_Batch_DL**: Batch discrete logarithm proof (multiple points)
 - **UC_ElGamal_Com**: ElGamal commitment proof (proves knowledge of commitment opening)
 - **DH**: Diffie-Hellman proof
+- **ElGamal_Com_PubShare_Equ**: Proves equality of public share in ElGamal commitment
+- **ElGamal_Com_Mult**: Proves multiplicative relationship between ElGamal commitments
+- **UC_ElGamal_Com_Mult_Private_Scalar**: UC-secure multiplication with private scalar
 
 ## UC_DL - Universally Composable Discrete Logarithm Proof
 
@@ -247,8 +250,280 @@ The default Fischlin parameters are:
 
 These provide strong security guarantees in the UC model.
 
+## ElGamal_Com_PubShare_Equ - ElGamal Commitment Public Share Equality Proof
+
+The ElGamal_Com_PubShare_Equ protocol proves that the public share (L component) of an ElGamal commitment equals a given public point. Specifically, it proves that `A = r*G` where `B.L = r*G` for an ElGamal commitment `B = (L, R)`.
+
+### What does this prove?
+
+Given:
+- Point `A = r*G` (public)
+- ElGamal commitment `B = (L, R)` where `L = r*G` and `R = m*Q + r*G` (public)
+- Secret randomness `r` (witness)
+
+The proof demonstrates that `A` and `B.L` use the same randomness `r`, without revealing `r`.
+
+### Usage
+
+```go
+import (
+    "github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+    "github.com/coinbase/cb-mpc-go/pkg/cbmpc/curve"
+    "github.com/coinbase/cb-mpc-go/pkg/cbmpc/zk"
+)
+
+// Generate randomness r
+r, _ := curve.RandomScalar(curve.P256)
+defer r.Free()
+
+// Compute A = r*G
+a, _ := curve.MulGenerator(curve.P256, r)
+defer a.Free()
+
+// Create ElGamal commitment B = (r*G, m*Q + r*G)
+// where B.L = A
+q, _ := /* base point Q */
+m, _ := curve.RandomScalar(curve.P256)
+defer m.Free()
+
+b, _ := curve.MakeElGamalCom(q, m, r)
+defer b.Free()
+
+sessionID := cbmpc.NewSessionID(sessionIDBytes)
+
+// Generate proof that A = B.L (same randomness r)
+proof, _ := zk.ProveElGamalComPubShareEqu(&zk.ElGamalComPubShareEquProveParams{
+    Q:         q,
+    A:         a,
+    B:         b,
+    R:         r,
+    SessionID: sessionID,
+    Aux:       partyID,
+})
+
+// Verify the proof
+err := zk.VerifyElGamalComPubShareEqu(&zk.ElGamalComPubShareEquVerifyParams{
+    Proof:     proof,
+    Q:         q,
+    A:         a,
+    B:         b,
+    SessionID: sessionID,
+    Aux:       partyID,
+})
+```
+
+### Use Cases
+
+- **Proving consistent randomness**: Demonstrating that multiple commitments use the same blinding factor
+- **Verifiable re-randomization**: Proving a commitment was correctly re-randomized
+- **Threshold protocols**: Ensuring shares use consistent randomness
+
+## ElGamal_Com_Mult - ElGamal Commitment Multiplication Proof
+
+The ElGamal_Com_Mult protocol proves a multiplicative relationship between ElGamal commitments. Specifically, it proves that `C = b * A` where `b` is a secret scalar and `A, B, C` are ElGamal commitments.
+
+### What does this prove?
+
+Given:
+- ElGamal commitments `A`, `B`, `C` (public)
+- Secret scalar `b` (witness)
+- Randomness `r_B`, `r_C` (witnesses)
+
+The proof demonstrates that commitment `C` is the scalar multiplication of commitment `A` by `b`, without revealing `b`, `r_B`, or `r_C`.
+
+### Usage
+
+```go
+import (
+    "github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+    "github.com/coinbase/cb-mpc-go/pkg/cbmpc/curve"
+    "github.com/coinbase/cb-mpc-go/pkg/cbmpc/zk"
+)
+
+// Create commitment A
+q, _ := /* base point Q */
+mA, _ := curve.RandomScalar(curve.P256)
+defer mA.Free()
+
+rA, _ := curve.RandomScalar(curve.P256)
+defer rA.Free()
+
+a, _ := curve.MakeElGamalCom(q, mA, rA)
+defer a.Free()
+
+// Create commitment B
+mB, _ := curve.RandomScalar(curve.P256)
+defer mB.Free()
+
+rB, _ := curve.RandomScalar(curve.P256)
+defer rB.Free()
+
+b, _ := curve.MakeElGamalCom(q, mB, rB)
+defer b.Free()
+
+// Scalar multiplier
+scalarB, _ := curve.RandomScalar(curve.P256)
+defer scalarB.Free()
+
+// Compute C = scalarB * A
+// (multiply both L and R components)
+aL, _ := a.PointL()
+defer aL.Free()
+aR, _ := a.PointR()
+defer aR.Free()
+
+cL, _ := aL.Mul(scalarB)
+defer cL.Free()
+cR, _ := aR.Mul(scalarB)
+defer cR.Free()
+
+c, _ := curve.NewECElGamalCom(cL, cR)
+defer c.Free()
+
+rC, _ := curve.RandomScalar(curve.P256)
+defer rC.Free()
+
+sessionID := cbmpc.NewSessionID(sessionIDBytes)
+
+// Generate proof that C = scalarB * A
+proof, _ := zk.ProveElGamalComMult(&zk.ElGamalComMultProveParams{
+    Q:         q,
+    A:         a,
+    B:         b,
+    C:         c,
+    RB:        rB,
+    RC:        rC,
+    ScalarB:   scalarB,
+    SessionID: sessionID,
+    Aux:       partyID,
+})
+
+// Verify the proof
+err := zk.VerifyElGamalComMult(&zk.ElGamalComMultVerifyParams{
+    Proof:     proof,
+    Q:         q,
+    A:         a,
+    B:         b,
+    C:         c,
+    SessionID: sessionID,
+    Aux:       partyID,
+})
+```
+
+### Use Cases
+
+- **Homomorphic operations**: Proving correctness of encrypted computations
+- **Threshold signatures**: Proving share multiplications are correct
+- **Secure computation**: Verifying encrypted intermediate values
+
+## UC_ElGamal_Com_Mult_Private_Scalar - UC-Secure ElGamal Commitment Multiplication with Private Scalar
+
+The UC_ElGamal_Com_Mult_Private_Scalar protocol is a universally composable proof that `eB = c * eA` where `c` is a secret scalar and `eA`, `eB` are ElGamal commitments. This provides the strongest security guarantees (UC-security).
+
+### What does this prove?
+
+Given:
+- Base point `E` (public)
+- ElGamal commitments `eA`, `eB` (public)
+- Secret scalar `c` (witness)
+- Randomness `r0` (witness)
+
+The proof demonstrates that `eB` is `c` times `eA`, without revealing `c` or `r0`, with universally composable security.
+
+### Features
+
+- **UC-secure**: Provides universal composability guarantees
+- **Fischlin transform**: Uses optimized Fischlin parameters (t=19, l=7, r=12)
+- **Prover optimization**: Includes optimizations from the specification
+- **Verifier optimization**: Includes verifier-side optimizations
+
+### Usage
+
+```go
+import (
+    "github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+    "github.com/coinbase/cb-mpc-go/pkg/cbmpc/curve"
+    "github.com/coinbase/cb-mpc-go/pkg/cbmpc/zk"
+)
+
+// Generate base point E
+eScalar, _ := curve.RandomScalar(curve.P256)
+defer eScalar.Free()
+
+e, _ := curve.MulGenerator(curve.P256, eScalar)
+defer e.Free()
+
+// Create commitment eA
+mA, _ := curve.RandomScalar(curve.P256)
+defer mA.Free()
+
+rA, _ := curve.RandomScalar(curve.P256)
+defer rA.Free()
+
+ea, _ := curve.MakeElGamalCom(e, mA, rA)
+defer ea.Free()
+
+// Secret scalar c
+c, _ := curve.RandomScalar(curve.P256)
+defer c.Free()
+
+// Compute eB = c * eA
+eaL, _ := ea.PointL()
+defer eaL.Free()
+eaR, _ := ea.PointR()
+defer eaR.Free()
+
+ebL, _ := eaL.Mul(c)
+defer ebL.Free()
+ebR, _ := eaR.Mul(c)
+defer ebR.Free()
+
+eb, _ := curve.NewECElGamalCom(ebL, ebR)
+defer eb.Free()
+
+// Randomness for eB
+r0, _ := curve.RandomScalar(curve.P256)
+defer r0.Free()
+
+sessionID := cbmpc.NewSessionID(sessionIDBytes)
+
+// Generate UC-secure proof
+proof, _ := zk.ProveUCElGamalComMultPrivateScalar(&zk.UCElGamalComMultPrivateScalarProveParams{
+    E:         e,
+    EA:        ea,
+    EB:        eb,
+    R0:        r0,
+    C:         c,
+    SessionID: sessionID,
+    Aux:       partyID,
+})
+
+// Verify the proof
+err := zk.VerifyUCElGamalComMultPrivateScalar(&zk.UCElGamalComMultPrivateScalarVerifyParams{
+    Proof:     proof,
+    E:         e,
+    EA:        ea,
+    EB:        eb,
+    SessionID: sessionID,
+    Aux:       partyID,
+})
+```
+
+### Use Cases
+
+- **Threshold cryptography**: UC-secure share operations
+- **Secure multi-party computation**: Composable encrypted computations
+- **Privacy-preserving protocols**: When UC security is required
+
+### Security Parameters
+
+This protocol uses optimized Fischlin parameters:
+- `t = 19`: Challenge bits
+- `l = 7`: Parallel executions
+- `r = 12`: Repetition factor
+
 ## References
 
 - See `cb-mpc/src/cbmpc/zk/zk_ec.h` for UC_DL, UC_Batch_DL, and DH implementation details
-- See `cb-mpc/src/cbmpc/zk/zk_elgamal_com.h` for UC_ElGamal_Com implementation details
+- See `cb-mpc/src/cbmpc/zk/zk_elgamal_com.h` for all ElGamal commitment proof implementations
 - Fischlin, M. (2005). "Communication-Efficient Non-Interactive Proofs of Knowledge with Online Extractors"
