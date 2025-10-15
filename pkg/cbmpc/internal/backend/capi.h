@@ -197,6 +197,34 @@ int cbmpc_schnorrmp_sign(cbmpc_jobmp *j, const cbmpc_ecdsamp_key *key, cmem_t ms
 // variant: CBMPC_SCHNORR_VARIANT_EDDSA or CBMPC_SCHNORR_VARIANT_BIP340
 int cbmpc_schnorrmp_sign_batch(cbmpc_jobmp *j, const cbmpc_ecdsamp_key *key, cmems_t msgs, int sig_receiver, int variant, cmems_t *sigs_out);
 
+// EC ElGamal Commitment operations (coinbase::crypto namespace)
+// Opaque pointer to ec_elgamal_commitment_t (C++ type).
+typedef void* cbmpc_ec_elgamal_commitment;
+
+// Create a new EC ElGamal commitment from two points (L and R).
+// Returns a pointer to ec_elgamal_commitment_t that must be freed with cbmpc_ec_elgamal_commitment_free.
+int cbmpc_ec_elgamal_commitment_new(cbmpc_ecc_point point_L, cbmpc_ecc_point point_R, cbmpc_ec_elgamal_commitment *commitment_out);
+
+// Serialize an EC ElGamal commitment to bytes.
+int cbmpc_ec_elgamal_commitment_to_bytes(cbmpc_ec_elgamal_commitment commitment, cmem_t *bytes_out);
+
+// Deserialize bytes into an EC ElGamal commitment.
+int cbmpc_ec_elgamal_commitment_from_bytes(int curve_nid, cmem_t bytes, cbmpc_ec_elgamal_commitment *commitment_out);
+
+// Get the L point from a commitment (returns a NEW point that must be freed).
+int cbmpc_ec_elgamal_commitment_get_L(cbmpc_ec_elgamal_commitment commitment, cbmpc_ecc_point *point_L_out);
+
+// Get the R point from a commitment (returns a NEW point that must be freed).
+int cbmpc_ec_elgamal_commitment_get_R(cbmpc_ec_elgamal_commitment commitment, cbmpc_ecc_point *point_R_out);
+
+// Free an EC ElGamal commitment.
+void cbmpc_ec_elgamal_commitment_free(cbmpc_ec_elgamal_commitment commitment);
+
+// Create an EC ElGamal commitment using make_commitment: UV = (r*G, m*P + r*G)
+// P: the public key point, m: the message scalar, r: the randomness scalar
+// Returns a pointer to ec_elgamal_commitment_t that must be freed with cbmpc_ec_elgamal_commitment_free.
+int cbmpc_ec_elgamal_commitment_make(cbmpc_ecc_point P, cmem_t m, cmem_t r, cbmpc_ec_elgamal_commitment *commitment_out);
+
 // ZK proof operations (coinbase::zk namespace)
 // UC_DL proof - universally composable discrete log proof
 
@@ -242,6 +270,24 @@ int cbmpc_dh_prove(cbmpc_ecc_point Q_point, cbmpc_ecc_point A_point, cbmpc_ecc_p
 // proof: serialized proof bytes
 // Q_point, A_point, B_point: the points to verify against
 int cbmpc_dh_verify(cmem_t proof, cbmpc_ecc_point Q_point, cbmpc_ecc_point A_point, cbmpc_ecc_point B_point, cmem_t session_id, uint64_t aux);
+
+// UC_ElGamalCom proof - universally composable ElGamal commitment proof
+// Proves knowledge of discrete log and randomness for an ElGamal commitment
+
+// Create UC_ElGamalCom proof for proving knowledge of x and r such that UV = (r*G, x*Q + r*G)
+// Q_point: the public base point
+// UV_commitment: the ElGamal commitment (L, R) where L = r*G and R = x*Q + r*G
+// x: the secret value (witness)
+// r: the secret randomness (witness)
+// session_id: session identifier for security, aux: auxiliary data
+// Returns serialized proof bytes.
+int cbmpc_uc_elgamal_com_prove(cbmpc_ecc_point Q_point, cbmpc_ec_elgamal_commitment UV_commitment, cmem_t x, cmem_t r, cmem_t session_id, uint64_t aux, cmem_t *proof_out);
+
+// Verify a UC_ElGamalCom proof
+// proof: serialized proof bytes
+// Q_point: the public base point
+// UV_commitment: the ElGamal commitment to verify against
+int cbmpc_uc_elgamal_com_verify(cmem_t proof, cbmpc_ecc_point Q_point, cbmpc_ec_elgamal_commitment UV_commitment, cmem_t session_id, uint64_t aux);
 
 #ifdef __cplusplus
 }

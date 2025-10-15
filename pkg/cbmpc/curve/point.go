@@ -14,6 +14,15 @@ import (
 //
 // The point is stored as a C cbmpc_ecc_point (via backend) and must be freed when no longer needed.
 // Use runtime.SetFinalizer or call Free() explicitly to release resources.
+//
+// Concurrency Safety:
+//   - Point methods are safe to call concurrently from multiple goroutines.
+//   - However, calling Free() while another goroutine is using the Point is unsafe and will cause
+//     use-after-free errors. The caller is responsible for ensuring all operations on a Point
+//     complete before calling Free().
+//   - runtime.KeepAlive in methods prevents premature garbage collection, not user-initiated Free().
+//   - Safe pattern: Use defer p.Free() immediately after creation, or ensure exclusive ownership
+//     during Free().
 type Point struct {
 	// cpoint stores the C pointer as returned from backend layer
 	// The backend layer uses C.cbmpc_ecc_point, which we store here

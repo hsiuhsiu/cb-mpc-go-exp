@@ -13,6 +13,7 @@
 #include "cbmpc/core/error.h"
 #include "cbmpc/crypto/base_ecc.h"
 #include "cbmpc/crypto/base_pki.h"
+#include "cbmpc/crypto/elgamal.h"
 #include "cbmpc/protocol/agree_random.h"
 #include "cbmpc/protocol/ecdsa_2p.h"
 #include "cbmpc/protocol/ecdsa_mp.h"
@@ -22,6 +23,7 @@
 #include "cbmpc/protocol/schnorr_2p.h"
 #include "cbmpc/protocol/schnorr_mp.h"
 #include "cbmpc/zk/zk_ec.h"
+#include "cbmpc/zk/zk_elgamal_com.h"
 
 namespace {
 
@@ -844,6 +846,123 @@ const void *cbmpc_get_kem_tls(void) {
 }
 
 // =====================
+// EC ElGamal Commitment Operations
+// =====================
+
+// Create EC ElGamal commitment from two points
+int cbmpc_ec_elgamal_commitment_new(cbmpc_ecc_point point_L, cbmpc_ecc_point point_R, cbmpc_ec_elgamal_commitment *commitment_out) {
+  if (!point_L || !point_R || !commitment_out) {
+    return E_BADARG;
+  }
+
+  const auto* L = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(point_L);
+  const auto* R = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(point_R);
+
+  // Create commitment from two points
+  auto commitment = std::make_unique<coinbase::crypto::ec_elgamal_commitment_t>(*L, *R);
+
+  *commitment_out = reinterpret_cast<cbmpc_ec_elgamal_commitment>(commitment.release());
+  return 0;
+}
+
+// Serialize EC ElGamal commitment to bytes
+int cbmpc_ec_elgamal_commitment_to_bytes(cbmpc_ec_elgamal_commitment commitment, cmem_t *bytes_out) {
+  if (!commitment || !bytes_out) {
+    return E_BADARG;
+  }
+
+  const auto* elg_commitment = reinterpret_cast<const coinbase::crypto::ec_elgamal_commitment_t*>(commitment);
+
+  // Serialize using converter_t
+  buf_t serialized = coinbase::ser(*elg_commitment);
+  *bytes_out = alloc_and_copy(serialized.data(), static_cast<size_t>(serialized.size()));
+
+  return 0;
+}
+
+// Deserialize bytes into EC ElGamal commitment
+int cbmpc_ec_elgamal_commitment_from_bytes(int curve_nid, cmem_t bytes, cbmpc_ec_elgamal_commitment *commitment_out) {
+  if (!bytes.data || bytes.size <= 0 || !commitment_out) {
+    return E_BADARG;
+  }
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  auto commitment = std::make_unique<coinbase::crypto::ec_elgamal_commitment_t>();
+
+  // Deserialize using converter_t
+  error_t rv = coinbase::deser(mem_t(bytes.data, bytes.size), *commitment);
+  if (rv != SUCCESS) return rv;
+
+  // Verify curve consistency
+  rv = commitment->check_curve(curve);
+  if (rv != SUCCESS) return rv;
+
+  *commitment_out = reinterpret_cast<cbmpc_ec_elgamal_commitment>(commitment.release());
+  return 0;
+}
+
+// Get the L point from commitment (returns a NEW point)
+int cbmpc_ec_elgamal_commitment_get_L(cbmpc_ec_elgamal_commitment commitment, cbmpc_ecc_point *point_L_out) {
+  if (!commitment || !point_L_out) {
+    return E_BADARG;
+  }
+
+  const auto* elg_commitment = reinterpret_cast<const coinbase::crypto::ec_elgamal_commitment_t*>(commitment);
+
+  // Create a copy of the L point
+  auto point_copy = std::make_unique<coinbase::crypto::ecc_point_t>(elg_commitment->L);
+
+  *point_L_out = reinterpret_cast<cbmpc_ecc_point>(point_copy.release());
+  return 0;
+}
+
+// Get the R point from commitment (returns a NEW point)
+int cbmpc_ec_elgamal_commitment_get_R(cbmpc_ec_elgamal_commitment commitment, cbmpc_ecc_point *point_R_out) {
+  if (!commitment || !point_R_out) {
+    return E_BADARG;
+  }
+
+  const auto* elg_commitment = reinterpret_cast<const coinbase::crypto::ec_elgamal_commitment_t*>(commitment);
+
+  // Create a copy of the R point
+  auto point_copy = std::make_unique<coinbase::crypto::ecc_point_t>(elg_commitment->R);
+
+  *point_R_out = reinterpret_cast<cbmpc_ecc_point>(point_copy.release());
+  return 0;
+}
+
+// Free an EC ElGamal commitment
+void cbmpc_ec_elgamal_commitment_free(cbmpc_ec_elgamal_commitment commitment) {
+  if (commitment) {
+    auto* elg_commitment = reinterpret_cast<coinbase::crypto::ec_elgamal_commitment_t*>(commitment);
+    delete elg_commitment;
+  }
+}
+
+// Create EC ElGamal commitment using make_commitment
+int cbmpc_ec_elgamal_commitment_make(cbmpc_ecc_point P, cmem_t m, cmem_t r, cbmpc_ec_elgamal_commitment *commitment_out) {
+  if (!P || !m.data || m.size <= 0 || !r.data || r.size <= 0 || !commitment_out) {
+    return E_BADARG;
+  }
+
+  const auto* P_point = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(P);
+
+  // Deserialize scalars m and r from bytes
+  coinbase::crypto::bn_t m_bn = coinbase::crypto::bn_t::from_bin(mem_t(m.data, m.size));
+  coinbase::crypto::bn_t r_bn = coinbase::crypto::bn_t::from_bin(mem_t(r.data, r.size));
+
+  // Create commitment using make_commitment: UV = (r*G, m*P + r*G)
+  auto commitment = std::make_unique<coinbase::crypto::ec_elgamal_commitment_t>(
+    coinbase::crypto::ec_elgamal_commitment_t::make_commitment(*P_point, m_bn, r_bn)
+  );
+
+  *commitment_out = reinterpret_cast<cbmpc_ec_elgamal_commitment>(commitment.release());
+  return 0;
+}
+
+// =====================
 // ZK Proof Operations - UC_DL
 // =====================
 
@@ -1297,6 +1416,58 @@ int cbmpc_schnorrmp_sign_batch(cbmpc_jobmp *j, const cbmpc_ecdsamp_key *key, cme
   // Copy outputs (signatures may be empty for non-receiver parties)
   *sigs_out = alloc_and_copy_vector(signatures);
   return 0;
+}
+
+// =====================
+// ZK Proof Operations - UC_ElGamalCom
+// =====================
+
+// UC_ElGamalCom Prove
+int cbmpc_uc_elgamal_com_prove(cbmpc_ecc_point Q_point, cbmpc_ec_elgamal_commitment UV_commitment, cmem_t x, cmem_t r, cmem_t session_id, uint64_t aux, cmem_t *proof_out) {
+  if (!Q_point || !UV_commitment ||
+      !x.data || x.size <= 0 ||
+      !r.data || r.size <= 0 ||
+      !session_id.data || session_id.size <= 0 || !proof_out) {
+    return E_BADARG;
+  }
+
+  const auto* Q = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(Q_point);
+  const auto* UV = reinterpret_cast<const coinbase::crypto::ec_elgamal_commitment_t*>(UV_commitment);
+
+  // Deserialize scalars x and r from bytes
+  coinbase::crypto::bn_t x_bn = coinbase::crypto::bn_t::from_bin(mem_t(x.data, x.size));
+  coinbase::crypto::bn_t r_bn = coinbase::crypto::bn_t::from_bin(mem_t(r.data, r.size));
+
+  // Create proof
+  coinbase::zk::uc_elgamal_com_t proof;
+  proof.prove(*Q, *UV, x_bn, r_bn, mem_t(session_id.data, session_id.size), aux);
+
+  // Serialize proof to bytes and return
+  buf_t serialized = coinbase::ser(proof);
+  *proof_out = alloc_and_copy(serialized.data(), static_cast<size_t>(serialized.size()));
+
+  return 0;
+}
+
+// UC_ElGamalCom Verify
+int cbmpc_uc_elgamal_com_verify(cmem_t proof_bytes, cbmpc_ecc_point Q_point, cbmpc_ec_elgamal_commitment UV_commitment, cmem_t session_id, uint64_t aux) {
+  if (!proof_bytes.data || proof_bytes.size <= 0 ||
+      !Q_point || !UV_commitment ||
+      !session_id.data || session_id.size <= 0) {
+    return E_BADARG;
+  }
+
+  // Deserialize proof from bytes
+  coinbase::zk::uc_elgamal_com_t proof;
+  error_t rv = coinbase::deser(mem_t(proof_bytes.data, proof_bytes.size), proof);
+  if (rv != SUCCESS) return rv;
+
+  const auto* Q = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(Q_point);
+  const auto* UV = reinterpret_cast<const coinbase::crypto::ec_elgamal_commitment_t*>(UV_commitment);
+
+  // Verify
+  rv = proof.verify(*Q, *UV, mem_t(session_id.data, session_id.size), aux);
+  return rv;
 }
 
 }  // extern "C"

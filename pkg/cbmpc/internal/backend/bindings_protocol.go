@@ -706,6 +706,69 @@ func DHVerify(proof []byte, qPoint, aPoint, bPoint ECCPoint, sessionID []byte, a
 }
 
 // =====================
+// ZK Proof Operations - UC_ElGamalCom
+// =====================
+
+// UCElGamalComProve creates a UC_ElGamalCom proof for proving knowledge of x and r such that UV = (x*G, r*G + x*Q).
+// Returns the serialized proof as bytes.
+func UCElGamalComProve(qPoint ECCPoint, uvCommitment ECElGamalCommitment, x, r, sessionID []byte, aux uint64) ([]byte, error) {
+	if qPoint == nil {
+		return nil, errors.New("nil Q point")
+	}
+	if uvCommitment == nil {
+		return nil, errors.New("nil UV commitment")
+	}
+	if len(x) == 0 {
+		return nil, errors.New("empty x witness")
+	}
+	if len(r) == 0 {
+		return nil, errors.New("empty r witness")
+	}
+	if len(sessionID) == 0 {
+		return nil, errors.New("empty session ID")
+	}
+
+	xMem := goBytesToCmem(x)
+	rMem := goBytesToCmem(r)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	var out C.cmem_t
+	rc := C.cbmpc_uc_elgamal_com_prove(qPoint, uvCommitment, xMem, rMem, sessionIDMem, C.uint64_t(aux), &out)
+	if rc != 0 {
+		return nil, formatNativeErr("uc_elgamal_com_prove", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// UCElGamalComVerify verifies a UC_ElGamalCom proof.
+// The proof parameter should be serialized proof bytes.
+func UCElGamalComVerify(proof []byte, qPoint ECCPoint, uvCommitment ECElGamalCommitment, sessionID []byte, aux uint64) error {
+	if len(proof) == 0 {
+		return errors.New("empty proof")
+	}
+	if qPoint == nil {
+		return errors.New("nil Q point")
+	}
+	if uvCommitment == nil {
+		return errors.New("nil UV commitment")
+	}
+	if len(sessionID) == 0 {
+		return errors.New("empty session ID")
+	}
+
+	proofMem := goBytesToCmem(proof)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	rc := C.cbmpc_uc_elgamal_com_verify(proofMem, qPoint, uvCommitment, sessionIDMem, C.uint64_t(aux))
+	if rc != 0 {
+		return formatNativeErr("uc_elgamal_com_verify", rc)
+	}
+
+	return nil
+}
+
+// =====================
 // ECDSA MP Protocols
 // =====================
 
