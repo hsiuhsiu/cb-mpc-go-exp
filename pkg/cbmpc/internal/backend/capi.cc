@@ -787,6 +787,52 @@ int cbmpc_ecc_point_mul(cbmpc_ecc_point point, cmem_t scalar_bytes, cbmpc_ecc_po
   return 0;
 }
 
+int cbmpc_ecc_point_add(cbmpc_ecc_point point_a, cbmpc_ecc_point point_b, cbmpc_ecc_point *result_out) {
+  if (!point_a || !point_b || !result_out) {
+    return E_BADARG;
+  }
+
+  const auto* ecc_point_a = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(point_a);
+  const auto* ecc_point_b = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(point_b);
+
+  // Add two points: result = point_a + point_b
+  // Using the operator+ overload from base_ec_core.h
+  coinbase::crypto::ecc_point_t result = (*ecc_point_a) + (*ecc_point_b);
+
+  // Return as new point (caller must free)
+  auto result_ptr = std::make_unique<coinbase::crypto::ecc_point_t>(std::move(result));
+  *result_out = reinterpret_cast<cbmpc_ecc_point>(result_ptr.release());
+
+  return 0;
+}
+
+int cbmpc_scalar_add(cmem_t scalar_a_bytes, cmem_t scalar_b_bytes, int curve_nid, cmem_t *result_out) {
+  if (!scalar_a_bytes.data || scalar_a_bytes.size <= 0 ||
+      !scalar_b_bytes.data || scalar_b_bytes.size <= 0 || !result_out) {
+    return E_BADARG;
+  }
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  // Deserialize scalars from bytes
+  coinbase::crypto::bn_t scalar_a = coinbase::crypto::bn_t::from_bin(mem_t(scalar_a_bytes.data, scalar_a_bytes.size));
+  coinbase::crypto::bn_t scalar_b = coinbase::crypto::bn_t::from_bin(mem_t(scalar_b_bytes.data, scalar_b_bytes.size));
+
+  // Add scalars modulo curve order: result = (scalar_a + scalar_b) mod q
+  const auto& q = curve.order();
+  coinbase::crypto::bn_t result;
+  MODULO(q) {
+    result = scalar_a + scalar_b;
+  }
+
+  // Serialize result to bytes (big-endian)
+  buf_t result_bytes = result.to_bin();
+  *result_out = alloc_and_copy(result_bytes.data(), static_cast<size_t>(result_bytes.size()));
+
+  return 0;
+}
+
 // PVE operations using ecc_point_t directly
 int cbmpc_pve_get_Q_point(cmem_t pve_ct, cbmpc_ecc_point *Q_point_out) {
   if (!pve_ct.data || pve_ct.size <= 0 || !Q_point_out) {
@@ -1467,6 +1513,170 @@ int cbmpc_uc_elgamal_com_verify(cmem_t proof_bytes, cbmpc_ecc_point Q_point, cbm
 
   // Verify
   rv = proof.verify(*Q, *UV, mem_t(session_id.data, session_id.size), aux);
+  return rv;
+}
+
+// =====================
+// ZK Proof Operations - ElGamalCom_PubShare_Equ
+// =====================
+
+// ElGamalCom_PubShare_Equ Prove
+int cbmpc_elgamal_com_pub_share_equ_prove(cbmpc_ecc_point Q_point, cbmpc_ecc_point A_point, cbmpc_ec_elgamal_commitment B_commitment, cmem_t r, cmem_t session_id, uint64_t aux, cmem_t *proof_out) {
+  if (!Q_point || !A_point || !B_commitment ||
+      !r.data || r.size <= 0 ||
+      !session_id.data || session_id.size <= 0 || !proof_out) {
+    return E_BADARG;
+  }
+
+  const auto* Q = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(Q_point);
+  const auto* A = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(A_point);
+  const auto* B = reinterpret_cast<const coinbase::crypto::ec_elgamal_commitment_t*>(B_commitment);
+
+  // Deserialize scalar r from bytes
+  coinbase::crypto::bn_t r_bn = coinbase::crypto::bn_t::from_bin(mem_t(r.data, r.size));
+
+  // Create proof
+  coinbase::zk::elgamal_com_pub_share_equ_t proof;
+  proof.prove(*Q, *A, *B, r_bn, mem_t(session_id.data, session_id.size), aux);
+
+  // Serialize proof to bytes and return
+  buf_t serialized = coinbase::ser(proof);
+  *proof_out = alloc_and_copy(serialized.data(), static_cast<size_t>(serialized.size()));
+
+  return 0;
+}
+
+// ElGamalCom_PubShare_Equ Verify
+int cbmpc_elgamal_com_pub_share_equ_verify(cmem_t proof_bytes, cbmpc_ecc_point Q_point, cbmpc_ecc_point A_point, cbmpc_ec_elgamal_commitment B_commitment, cmem_t session_id, uint64_t aux) {
+  if (!proof_bytes.data || proof_bytes.size <= 0 ||
+      !Q_point || !A_point || !B_commitment ||
+      !session_id.data || session_id.size <= 0) {
+    return E_BADARG;
+  }
+
+  // Deserialize proof from bytes
+  coinbase::zk::elgamal_com_pub_share_equ_t proof;
+  error_t rv = coinbase::deser(mem_t(proof_bytes.data, proof_bytes.size), proof);
+  if (rv != SUCCESS) return rv;
+
+  const auto* Q = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(Q_point);
+  const auto* A = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(A_point);
+  const auto* B = reinterpret_cast<const coinbase::crypto::ec_elgamal_commitment_t*>(B_commitment);
+
+  // Verify
+  rv = proof.verify(*Q, *A, *B, mem_t(session_id.data, session_id.size), aux);
+  return rv;
+}
+
+// =====================
+// ZK Proof Operations - ElGamalCom_Mult
+// =====================
+
+// ElGamalCom_Mult Prove
+int cbmpc_elgamal_com_mult_prove(cbmpc_ecc_point Q_point, cbmpc_ec_elgamal_commitment A_commitment, cbmpc_ec_elgamal_commitment B_commitment, cbmpc_ec_elgamal_commitment C_commitment, cmem_t r_B, cmem_t r_C, cmem_t b, cmem_t session_id, uint64_t aux, cmem_t *proof_out) {
+  if (!Q_point || !A_commitment || !B_commitment || !C_commitment ||
+      !r_B.data || r_B.size <= 0 ||
+      !r_C.data || r_C.size <= 0 ||
+      !b.data || b.size <= 0 ||
+      !session_id.data || session_id.size <= 0 || !proof_out) {
+    return E_BADARG;
+  }
+
+  const auto* Q = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(Q_point);
+  const auto* A = reinterpret_cast<const coinbase::crypto::ec_elgamal_commitment_t*>(A_commitment);
+  const auto* B = reinterpret_cast<const coinbase::crypto::ec_elgamal_commitment_t*>(B_commitment);
+  const auto* C = reinterpret_cast<const coinbase::crypto::ec_elgamal_commitment_t*>(C_commitment);
+
+  // Deserialize scalars from bytes
+  coinbase::crypto::bn_t r_B_bn = coinbase::crypto::bn_t::from_bin(mem_t(r_B.data, r_B.size));
+  coinbase::crypto::bn_t r_C_bn = coinbase::crypto::bn_t::from_bin(mem_t(r_C.data, r_C.size));
+  coinbase::crypto::bn_t b_bn = coinbase::crypto::bn_t::from_bin(mem_t(b.data, b.size));
+
+  // Create proof
+  coinbase::zk::elgamal_com_mult_t proof;
+  proof.prove(*Q, *A, *B, *C, r_B_bn, r_C_bn, b_bn, mem_t(session_id.data, session_id.size), aux);
+
+  // Serialize proof to bytes and return
+  buf_t serialized = coinbase::ser(proof);
+  *proof_out = alloc_and_copy(serialized.data(), static_cast<size_t>(serialized.size()));
+
+  return 0;
+}
+
+// ElGamalCom_Mult Verify
+int cbmpc_elgamal_com_mult_verify(cmem_t proof_bytes, cbmpc_ecc_point Q_point, cbmpc_ec_elgamal_commitment A_commitment, cbmpc_ec_elgamal_commitment B_commitment, cbmpc_ec_elgamal_commitment C_commitment, cmem_t session_id, uint64_t aux) {
+  if (!proof_bytes.data || proof_bytes.size <= 0 ||
+      !Q_point || !A_commitment || !B_commitment || !C_commitment ||
+      !session_id.data || session_id.size <= 0) {
+    return E_BADARG;
+  }
+
+  // Deserialize proof from bytes
+  coinbase::zk::elgamal_com_mult_t proof;
+  error_t rv = coinbase::deser(mem_t(proof_bytes.data, proof_bytes.size), proof);
+  if (rv != SUCCESS) return rv;
+
+  const auto* Q = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(Q_point);
+  const auto* A = reinterpret_cast<const coinbase::crypto::ec_elgamal_commitment_t*>(A_commitment);
+  const auto* B = reinterpret_cast<const coinbase::crypto::ec_elgamal_commitment_t*>(B_commitment);
+  const auto* C = reinterpret_cast<const coinbase::crypto::ec_elgamal_commitment_t*>(C_commitment);
+
+  // Verify
+  rv = proof.verify(*Q, *A, *B, *C, mem_t(session_id.data, session_id.size), aux);
+  return rv;
+}
+
+// =====================
+// ZK Proof Operations - UC_ElGamalCom_Mult_Private_Scalar
+// =====================
+
+// UC_ElGamalCom_Mult_Private_Scalar Prove
+int cbmpc_uc_elgamal_com_mult_private_scalar_prove(cbmpc_ecc_point E_point, cbmpc_ec_elgamal_commitment eA_commitment, cbmpc_ec_elgamal_commitment eB_commitment, cmem_t r0, cmem_t c, cmem_t session_id, uint64_t aux, cmem_t *proof_out) {
+  if (!E_point || !eA_commitment || !eB_commitment ||
+      !r0.data || r0.size <= 0 ||
+      !c.data || c.size <= 0 ||
+      !session_id.data || session_id.size <= 0 || !proof_out) {
+    return E_BADARG;
+  }
+
+  const auto* E = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(E_point);
+  const auto* eA = reinterpret_cast<const coinbase::crypto::ec_elgamal_commitment_t*>(eA_commitment);
+  const auto* eB = reinterpret_cast<const coinbase::crypto::ec_elgamal_commitment_t*>(eB_commitment);
+
+  // Deserialize scalars from bytes
+  coinbase::crypto::bn_t r0_bn = coinbase::crypto::bn_t::from_bin(mem_t(r0.data, r0.size));
+  coinbase::crypto::bn_t c_bn = coinbase::crypto::bn_t::from_bin(mem_t(c.data, c.size));
+
+  // Create proof
+  coinbase::zk::uc_elgamal_com_mult_private_scalar_t proof;
+  proof.prove(*E, *eA, *eB, r0_bn, c_bn, mem_t(session_id.data, session_id.size), aux);
+
+  // Serialize proof to bytes and return
+  buf_t serialized = coinbase::ser(proof);
+  *proof_out = alloc_and_copy(serialized.data(), static_cast<size_t>(serialized.size()));
+
+  return 0;
+}
+
+// UC_ElGamalCom_Mult_Private_Scalar Verify
+int cbmpc_uc_elgamal_com_mult_private_scalar_verify(cmem_t proof_bytes, cbmpc_ecc_point E_point, cbmpc_ec_elgamal_commitment eA_commitment, cbmpc_ec_elgamal_commitment eB_commitment, cmem_t session_id, uint64_t aux) {
+  if (!proof_bytes.data || proof_bytes.size <= 0 ||
+      !E_point || !eA_commitment || !eB_commitment ||
+      !session_id.data || session_id.size <= 0) {
+    return E_BADARG;
+  }
+
+  // Deserialize proof from bytes
+  coinbase::zk::uc_elgamal_com_mult_private_scalar_t proof;
+  error_t rv = coinbase::deser(mem_t(proof_bytes.data, proof_bytes.size), proof);
+  if (rv != SUCCESS) return rv;
+
+  const auto* E = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(E_point);
+  const auto* eA = reinterpret_cast<const coinbase::crypto::ec_elgamal_commitment_t*>(eA_commitment);
+  const auto* eB = reinterpret_cast<const coinbase::crypto::ec_elgamal_commitment_t*>(eB_commitment);
+
+  // Verify
+  rv = proof.verify(*E, *eA, *eB, mem_t(session_id.data, session_id.size), aux);
   return rv;
 }
 

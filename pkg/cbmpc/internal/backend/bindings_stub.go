@@ -217,6 +217,30 @@ func UCElGamalComVerify([]byte, ECCPoint, ECElGamalCommitment, []byte, uint64) e
 	return ErrNotBuilt
 }
 
+func ElGamalComPubShareEquProve(ECCPoint, ECCPoint, ECElGamalCommitment, []byte, []byte, uint64) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func ElGamalComPubShareEquVerify([]byte, ECCPoint, ECCPoint, ECElGamalCommitment, []byte, uint64) error {
+	return ErrNotBuilt
+}
+
+func ElGamalComMultProve(ECCPoint, ECElGamalCommitment, ECElGamalCommitment, ECElGamalCommitment, []byte, []byte, []byte, []byte, uint64) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func ElGamalComMultVerify([]byte, ECCPoint, ECElGamalCommitment, ECElGamalCommitment, ECElGamalCommitment, []byte, uint64) error {
+	return ErrNotBuilt
+}
+
+func UCElGamalComMultPrivateScalarProve(ECCPoint, ECElGamalCommitment, ECElGamalCommitment, []byte, []byte, []byte, uint64) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func UCElGamalComMultPrivateScalarVerify([]byte, ECCPoint, ECElGamalCommitment, ECElGamalCommitment, []byte, uint64) error {
+	return ErrNotBuilt
+}
+
 // ECDSAMPKey is a stub type for non-CGO builds
 type ECDSAMPKey = unsafe.Pointer
 
@@ -313,5 +337,13 @@ func CurveMulGenerator(int, []byte) (ECCPoint, error) {
 }
 
 func ECCPointMul(ECCPoint, []byte) (ECCPoint, error) {
+	return nil, ErrNotBuilt
+}
+
+func ECCPointAdd(ECCPoint, ECCPoint) (ECCPoint, error) {
+	return nil, ErrNotBuilt
+}
+
+func ScalarAdd([]byte, []byte, int) ([]byte, error) {
 	return nil, ErrNotBuilt
 }

@@ -769,6 +769,219 @@ func UCElGamalComVerify(proof []byte, qPoint ECCPoint, uvCommitment ECElGamalCom
 }
 
 // =====================
+// ZK Proof Operations - ElGamalCom_PubShare_Equ
+// =====================
+
+// ElGamalComPubShareEquProve creates an ElGamalCom_PubShare_Equ proof.
+// Returns the serialized proof as bytes.
+func ElGamalComPubShareEquProve(qPoint, aPoint ECCPoint, bCommitment ECElGamalCommitment, r, sessionID []byte, aux uint64) ([]byte, error) {
+	if qPoint == nil {
+		return nil, errors.New("nil Q point")
+	}
+	if aPoint == nil {
+		return nil, errors.New("nil A point")
+	}
+	if bCommitment == nil {
+		return nil, errors.New("nil B commitment")
+	}
+	if len(r) == 0 {
+		return nil, errors.New("empty r witness")
+	}
+	if len(sessionID) == 0 {
+		return nil, errors.New("empty session ID")
+	}
+
+	rMem := goBytesToCmem(r)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	var out C.cmem_t
+	rc := C.cbmpc_elgamal_com_pub_share_equ_prove(qPoint, aPoint, bCommitment, rMem, sessionIDMem, C.uint64_t(aux), &out)
+	if rc != 0 {
+		return nil, formatNativeErr("elgamal_com_pub_share_equ_prove", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// ElGamalComPubShareEquVerify verifies an ElGamalCom_PubShare_Equ proof.
+// The proof parameter should be serialized proof bytes.
+func ElGamalComPubShareEquVerify(proof []byte, qPoint, aPoint ECCPoint, bCommitment ECElGamalCommitment, sessionID []byte, aux uint64) error {
+	if len(proof) == 0 {
+		return errors.New("empty proof")
+	}
+	if qPoint == nil {
+		return errors.New("nil Q point")
+	}
+	if aPoint == nil {
+		return errors.New("nil A point")
+	}
+	if bCommitment == nil {
+		return errors.New("nil B commitment")
+	}
+	if len(sessionID) == 0 {
+		return errors.New("empty session ID")
+	}
+
+	proofMem := goBytesToCmem(proof)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	rc := C.cbmpc_elgamal_com_pub_share_equ_verify(proofMem, qPoint, aPoint, bCommitment, sessionIDMem, C.uint64_t(aux))
+	if rc != 0 {
+		return formatNativeErr("elgamal_com_pub_share_equ_verify", rc)
+	}
+
+	return nil
+}
+
+// =====================
+// ZK Proof Operations - ElGamalCom_Mult
+// =====================
+
+// ElGamalComMultProve creates an ElGamalCom_Mult proof.
+// Returns the serialized proof as bytes.
+func ElGamalComMultProve(qPoint ECCPoint, aCommitment, bCommitment, cCommitment ECElGamalCommitment, rB, rC, b, sessionID []byte, aux uint64) ([]byte, error) {
+	if qPoint == nil {
+		return nil, errors.New("nil Q point")
+	}
+	if aCommitment == nil {
+		return nil, errors.New("nil A commitment")
+	}
+	if bCommitment == nil {
+		return nil, errors.New("nil B commitment")
+	}
+	if cCommitment == nil {
+		return nil, errors.New("nil C commitment")
+	}
+	if len(rB) == 0 {
+		return nil, errors.New("empty rB witness")
+	}
+	if len(rC) == 0 {
+		return nil, errors.New("empty rC witness")
+	}
+	if len(b) == 0 {
+		return nil, errors.New("empty b witness")
+	}
+	if len(sessionID) == 0 {
+		return nil, errors.New("empty session ID")
+	}
+
+	rBMem := goBytesToCmem(rB)
+	rCMem := goBytesToCmem(rC)
+	bMem := goBytesToCmem(b)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	var out C.cmem_t
+	rc := C.cbmpc_elgamal_com_mult_prove(qPoint, aCommitment, bCommitment, cCommitment, rBMem, rCMem, bMem, sessionIDMem, C.uint64_t(aux), &out)
+	if rc != 0 {
+		return nil, formatNativeErr("elgamal_com_mult_prove", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// ElGamalComMultVerify verifies an ElGamalCom_Mult proof.
+// The proof parameter should be serialized proof bytes.
+func ElGamalComMultVerify(proof []byte, qPoint ECCPoint, aCommitment, bCommitment, cCommitment ECElGamalCommitment, sessionID []byte, aux uint64) error {
+	if len(proof) == 0 {
+		return errors.New("empty proof")
+	}
+	if qPoint == nil {
+		return errors.New("nil Q point")
+	}
+	if aCommitment == nil {
+		return errors.New("nil A commitment")
+	}
+	if bCommitment == nil {
+		return errors.New("nil B commitment")
+	}
+	if cCommitment == nil {
+		return errors.New("nil C commitment")
+	}
+	if len(sessionID) == 0 {
+		return errors.New("empty session ID")
+	}
+
+	proofMem := goBytesToCmem(proof)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	rc := C.cbmpc_elgamal_com_mult_verify(proofMem, qPoint, aCommitment, bCommitment, cCommitment, sessionIDMem, C.uint64_t(aux))
+	if rc != 0 {
+		return formatNativeErr("elgamal_com_mult_verify", rc)
+	}
+
+	return nil
+}
+
+// =====================
+// ZK Proof Operations - UC_ElGamalCom_Mult_Private_Scalar
+// =====================
+
+// UCElGamalComMultPrivateScalarProve creates a UC_ElGamalCom_Mult_Private_Scalar proof.
+// Returns the serialized proof as bytes.
+func UCElGamalComMultPrivateScalarProve(ePoint ECCPoint, eACommitment, eBCommitment ECElGamalCommitment, r0, c, sessionID []byte, aux uint64) ([]byte, error) {
+	if ePoint == nil {
+		return nil, errors.New("nil E point")
+	}
+	if eACommitment == nil {
+		return nil, errors.New("nil eA commitment")
+	}
+	if eBCommitment == nil {
+		return nil, errors.New("nil eB commitment")
+	}
+	if len(r0) == 0 {
+		return nil, errors.New("empty r0 witness")
+	}
+	if len(c) == 0 {
+		return nil, errors.New("empty c witness")
+	}
+	if len(sessionID) == 0 {
+		return nil, errors.New("empty session ID")
+	}
+
+	r0Mem := goBytesToCmem(r0)
+	cMem := goBytesToCmem(c)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	var out C.cmem_t
+	rc := C.cbmpc_uc_elgamal_com_mult_private_scalar_prove(ePoint, eACommitment, eBCommitment, r0Mem, cMem, sessionIDMem, C.uint64_t(aux), &out)
+	if rc != 0 {
+		return nil, formatNativeErr("uc_elgamal_com_mult_private_scalar_prove", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// UCElGamalComMultPrivateScalarVerify verifies a UC_ElGamalCom_Mult_Private_Scalar proof.
+// The proof parameter should be serialized proof bytes.
+func UCElGamalComMultPrivateScalarVerify(proof []byte, ePoint ECCPoint, eACommitment, eBCommitment ECElGamalCommitment, sessionID []byte, aux uint64) error {
+	if len(proof) == 0 {
+		return errors.New("empty proof")
+	}
+	if ePoint == nil {
+		return errors.New("nil E point")
+	}
+	if eACommitment == nil {
+		return errors.New("nil eA commitment")
+	}
+	if eBCommitment == nil {
+		return errors.New("nil eB commitment")
+	}
+	if len(sessionID) == 0 {
+		return errors.New("empty session ID")
+	}
+
+	proofMem := goBytesToCmem(proof)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	rc := C.cbmpc_uc_elgamal_com_mult_private_scalar_verify(proofMem, ePoint, eACommitment, eBCommitment, sessionIDMem, C.uint64_t(aux))
+	if rc != 0 {
+		return formatNativeErr("uc_elgamal_com_mult_private_scalar_verify", rc)
+	}
+
+	return nil
+}
+
+// =====================
 // ECDSA MP Protocols
 // =====================
 
@@ -1103,4 +1316,44 @@ func ECCPointMul(point ECCPoint, scalarBytes []byte) (ECCPoint, error) {
 		return nil, formatNativeErr("ecc_point_mul", rc)
 	}
 	return ECCPoint(resultOut), nil
+}
+
+// ECCPointAdd adds two ECC points: result = pointA + pointB.
+// The returned ECCPoint must be freed by the caller.
+func ECCPointAdd(pointA, pointB ECCPoint) (ECCPoint, error) {
+	if pointA == nil {
+		return nil, errors.New("nil pointA")
+	}
+	if pointB == nil {
+		return nil, errors.New("nil pointB")
+	}
+
+	var resultOut C.cbmpc_ecc_point
+	rc := C.cbmpc_ecc_point_add(pointA, pointB, &resultOut)
+	if rc != 0 {
+		return nil, formatNativeErr("ecc_point_add", rc)
+	}
+	return ECCPoint(resultOut), nil
+}
+
+// ScalarAdd adds two scalars modulo curve order: result = (scalarA + scalarB) mod q.
+// scalarABytes and scalarBBytes should be in big-endian format.
+// Returns result scalar bytes in big-endian format.
+func ScalarAdd(scalarABytes, scalarBBytes []byte, curveNID int) ([]byte, error) {
+	if len(scalarABytes) == 0 {
+		return nil, errors.New("empty scalarA")
+	}
+	if len(scalarBBytes) == 0 {
+		return nil, errors.New("empty scalarB")
+	}
+
+	scalarAMem := goBytesToCmem(scalarABytes)
+	scalarBMem := goBytesToCmem(scalarBBytes)
+
+	var resultOut C.cmem_t
+	rc := C.cbmpc_scalar_add(scalarAMem, scalarBMem, C.int(curveNID), &resultOut)
+	if rc != 0 {
+		return nil, formatNativeErr("scalar_add", rc)
+	}
+	return cmemToGoBytes(resultOut), nil
 }
