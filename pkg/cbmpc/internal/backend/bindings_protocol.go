@@ -1357,3 +1357,279 @@ func ScalarAdd(scalarABytes, scalarBBytes []byte, curveNID int) ([]byte, error) 
 	}
 	return cmemToGoBytes(resultOut), nil
 }
+
+// =====================
+// ZK Proof Operations - Valid_Paillier
+// =====================
+
+// ValidPaillierProve creates a Valid_Paillier proof for proving that a Paillier key is well-formed.
+// Returns the serialized proof as bytes.
+func ValidPaillierProve(paillier Paillier, sessionID []byte, aux uint64) ([]byte, error) {
+	if paillier == nil {
+		return nil, errors.New("nil paillier")
+	}
+	if len(sessionID) == 0 {
+		return nil, errors.New("empty session ID")
+	}
+
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	var out C.cmem_t
+	rc := C.cbmpc_valid_paillier_prove(paillier, sessionIDMem, C.uint64_t(aux), &out)
+	if rc != 0 {
+		return nil, formatNativeErr("valid_paillier_prove", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// ValidPaillierVerify verifies a Valid_Paillier proof.
+// The proof parameter should be serialized proof bytes.
+func ValidPaillierVerify(proof []byte, paillier Paillier, sessionID []byte, aux uint64) error {
+	if len(proof) == 0 {
+		return errors.New("empty proof")
+	}
+	if paillier == nil {
+		return errors.New("nil paillier")
+	}
+	if len(sessionID) == 0 {
+		return errors.New("empty session ID")
+	}
+
+	proofMem := goBytesToCmem(proof)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	rc := C.cbmpc_valid_paillier_verify(proofMem, paillier, sessionIDMem, C.uint64_t(aux))
+	if rc != 0 {
+		return formatNativeErr("valid_paillier_verify", rc)
+	}
+
+	return nil
+}
+
+// =====================
+// ZK Proof Operations - Paillier_Zero
+// =====================
+
+// PaillierZeroProve creates a Paillier_Zero proof for proving that a ciphertext encrypts zero.
+// Returns the serialized proof as bytes.
+func PaillierZeroProve(paillier Paillier, c, r, sessionID []byte, aux uint64) ([]byte, error) {
+	if paillier == nil {
+		return nil, errors.New("nil paillier")
+	}
+	if len(c) == 0 {
+		return nil, errors.New("empty ciphertext")
+	}
+	if len(r) == 0 {
+		return nil, errors.New("empty randomness")
+	}
+	if len(sessionID) == 0 {
+		return nil, errors.New("empty session ID")
+	}
+
+	cMem := goBytesToCmem(c)
+	rMem := goBytesToCmem(r)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	var out C.cmem_t
+	rc := C.cbmpc_paillier_zero_prove(paillier, cMem, rMem, sessionIDMem, C.uint64_t(aux), &out)
+	if rc != 0 {
+		return nil, formatNativeErr("paillier_zero_prove", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// PaillierZeroVerify verifies a Paillier_Zero proof.
+// The proof parameter should be serialized proof bytes.
+func PaillierZeroVerify(proof []byte, paillier Paillier, c, sessionID []byte, aux uint64) error {
+	if len(proof) == 0 {
+		return errors.New("empty proof")
+	}
+	if paillier == nil {
+		return errors.New("nil paillier")
+	}
+	if len(c) == 0 {
+		return errors.New("empty ciphertext")
+	}
+	if len(sessionID) == 0 {
+		return errors.New("empty session ID")
+	}
+
+	proofMem := goBytesToCmem(proof)
+	cMem := goBytesToCmem(c)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	rc := C.cbmpc_paillier_zero_verify(proofMem, paillier, cMem, sessionIDMem, C.uint64_t(aux))
+	if rc != 0 {
+		return formatNativeErr("paillier_zero_verify", rc)
+	}
+
+	return nil
+}
+
+// =====================
+// ZK Proof Operations - Two_Paillier_Equal
+// =====================
+
+// TwoPaillierEqualProve creates a Two_Paillier_Equal proof for proving that two ciphertexts
+// (under different Paillier keys) encrypt the same plaintext.
+// Returns the serialized proof as bytes.
+func TwoPaillierEqualProve(q []byte, p0 Paillier, c0 []byte, p1 Paillier, c1, x, r0, r1, sessionID []byte, aux uint64) ([]byte, error) {
+	if len(q) == 0 {
+		return nil, errors.New("empty modulus q")
+	}
+	if p0 == nil {
+		return nil, errors.New("nil paillier P0")
+	}
+	if len(c0) == 0 {
+		return nil, errors.New("empty ciphertext c0")
+	}
+	if p1 == nil {
+		return nil, errors.New("nil paillier P1")
+	}
+	if len(c1) == 0 {
+		return nil, errors.New("empty ciphertext c1")
+	}
+	if len(x) == 0 {
+		return nil, errors.New("empty plaintext x")
+	}
+	if len(r0) == 0 {
+		return nil, errors.New("empty randomness r0")
+	}
+	if len(r1) == 0 {
+		return nil, errors.New("empty randomness r1")
+	}
+	if len(sessionID) == 0 {
+		return nil, errors.New("empty session ID")
+	}
+
+	qMem := goBytesToCmem(q)
+	c0Mem := goBytesToCmem(c0)
+	c1Mem := goBytesToCmem(c1)
+	xMem := goBytesToCmem(x)
+	r0Mem := goBytesToCmem(r0)
+	r1Mem := goBytesToCmem(r1)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	var out C.cmem_t
+	rc := C.cbmpc_two_paillier_equal_prove(qMem, p0, c0Mem, p1, c1Mem, xMem, r0Mem, r1Mem, sessionIDMem, C.uint64_t(aux), &out)
+	if rc != 0 {
+		return nil, formatNativeErr("two_paillier_equal_prove", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// TwoPaillierEqualVerify verifies a Two_Paillier_Equal proof.
+// The proof parameter should be serialized proof bytes.
+func TwoPaillierEqualVerify(proof, q []byte, p0 Paillier, c0 []byte, p1 Paillier, c1, sessionID []byte, aux uint64) error {
+	if len(proof) == 0 {
+		return errors.New("empty proof")
+	}
+	if len(q) == 0 {
+		return errors.New("empty modulus q")
+	}
+	if p0 == nil {
+		return errors.New("nil paillier P0")
+	}
+	if len(c0) == 0 {
+		return errors.New("empty ciphertext c0")
+	}
+	if p1 == nil {
+		return errors.New("nil paillier P1")
+	}
+	if len(c1) == 0 {
+		return errors.New("empty ciphertext c1")
+	}
+	if len(sessionID) == 0 {
+		return errors.New("empty session ID")
+	}
+
+	proofMem := goBytesToCmem(proof)
+	qMem := goBytesToCmem(q)
+	c0Mem := goBytesToCmem(c0)
+	c1Mem := goBytesToCmem(c1)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	rc := C.cbmpc_two_paillier_equal_verify(proofMem, qMem, p0, c0Mem, p1, c1Mem, sessionIDMem, C.uint64_t(aux))
+	if rc != 0 {
+		return formatNativeErr("two_paillier_equal_verify", rc)
+	}
+
+	return nil
+}
+
+// =====================
+// ZK Proof Operations - Paillier_Range_Exp_Slack
+// =====================
+
+// PaillierRangeExpSlackProve creates a Paillier_Range_Exp_Slack proof for proving that
+// a ciphertext encrypts a value within a valid range with slack.
+// Returns the serialized proof as bytes.
+func PaillierRangeExpSlackProve(paillier Paillier, q, c, x, r, sessionID []byte, aux uint64) ([]byte, error) {
+	if paillier == nil {
+		return nil, errors.New("nil paillier")
+	}
+	if len(q) == 0 {
+		return nil, errors.New("empty modulus q")
+	}
+	if len(c) == 0 {
+		return nil, errors.New("empty ciphertext")
+	}
+	if len(x) == 0 {
+		return nil, errors.New("empty plaintext")
+	}
+	if len(r) == 0 {
+		return nil, errors.New("empty randomness")
+	}
+	if len(sessionID) == 0 {
+		return nil, errors.New("empty session ID")
+	}
+
+	qMem := goBytesToCmem(q)
+	cMem := goBytesToCmem(c)
+	xMem := goBytesToCmem(x)
+	rMem := goBytesToCmem(r)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	var out C.cmem_t
+	rc := C.cbmpc_paillier_range_exp_slack_prove(paillier, qMem, cMem, xMem, rMem, sessionIDMem, C.uint64_t(aux), &out)
+	if rc != 0 {
+		return nil, formatNativeErr("paillier_range_exp_slack_prove", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// PaillierRangeExpSlackVerify verifies a Paillier_Range_Exp_Slack proof.
+// The proof parameter should be serialized proof bytes.
+func PaillierRangeExpSlackVerify(proof []byte, paillier Paillier, q, c, sessionID []byte, aux uint64) error {
+	if len(proof) == 0 {
+		return errors.New("empty proof")
+	}
+	if paillier == nil {
+		return errors.New("nil paillier")
+	}
+	if len(q) == 0 {
+		return errors.New("empty modulus q")
+	}
+	if len(c) == 0 {
+		return errors.New("empty ciphertext")
+	}
+	if len(sessionID) == 0 {
+		return errors.New("empty session ID")
+	}
+
+	proofMem := goBytesToCmem(proof)
+	qMem := goBytesToCmem(q)
+	cMem := goBytesToCmem(c)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	rc := C.cbmpc_paillier_range_exp_slack_verify(proofMem, paillier, qMem, cMem, sessionIDMem, C.uint64_t(aux))
+	if rc != 0 {
+		return formatNativeErr("paillier_range_exp_slack_verify", rc)
+	}
+
+	return nil
+}

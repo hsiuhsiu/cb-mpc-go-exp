@@ -654,3 +654,206 @@ func RegisterHandle(obj any) unsafe.Pointer {
 func FreeHandle(handle unsafe.Pointer) {
 	freeHandle(handle)
 }
+
+// =====================
+// Paillier cryptosystem bridging
+// =====================
+
+// Paillier is a type alias for C.cbmpc_paillier (opaque pointer to paillier_t).
+type Paillier = C.cbmpc_paillier
+
+// PaillierGenerate generates a new Paillier keypair (2048-bit modulus).
+// Returns a Paillier instance that must be freed with PaillierFree.
+func PaillierGenerate() (Paillier, error) {
+	var paillier Paillier
+	rc := C.cbmpc_paillier_generate(&paillier)
+	if rc != 0 {
+		return nil, formatNativeErr("paillier_generate", rc)
+	}
+	return paillier, nil
+}
+
+// PaillierCreatePub creates a Paillier instance from a public key (modulus n only).
+// Returns a Paillier instance that must be freed with PaillierFree.
+func PaillierCreatePub(n []byte) (Paillier, error) {
+	if len(n) == 0 {
+		return nil, errors.New("empty modulus n")
+	}
+
+	nMem := goBytesToCmem(n)
+	var paillier Paillier
+	rc := C.cbmpc_paillier_create_pub(nMem, &paillier)
+	if rc != 0 {
+		return nil, formatNativeErr("paillier_create_pub", rc)
+	}
+	return paillier, nil
+}
+
+// PaillierCreatePrv creates a Paillier instance from a private key (modulus n and factors p, q).
+// Returns a Paillier instance that must be freed with PaillierFree.
+func PaillierCreatePrv(n, p, q []byte) (Paillier, error) {
+	if len(n) == 0 || len(p) == 0 || len(q) == 0 {
+		return nil, errors.New("empty n, p, or q")
+	}
+
+	nMem := goBytesToCmem(n)
+	pMem := goBytesToCmem(p)
+	qMem := goBytesToCmem(q)
+
+	var paillier Paillier
+	rc := C.cbmpc_paillier_create_prv(nMem, pMem, qMem, &paillier)
+	if rc != 0 {
+		return nil, formatNativeErr("paillier_create_prv", rc)
+	}
+	return paillier, nil
+}
+
+// PaillierFree frees a Paillier instance.
+func PaillierFree(paillier Paillier) {
+	if paillier != nil {
+		C.cbmpc_paillier_free(paillier)
+	}
+}
+
+// PaillierHasPrivateKey checks if the Paillier instance has a private key.
+func PaillierHasPrivateKey(paillier Paillier) bool {
+	if paillier == nil {
+		return false
+	}
+	return C.cbmpc_paillier_has_private_key(paillier) != 0
+}
+
+// PaillierGetN gets the modulus N from a Paillier instance.
+func PaillierGetN(paillier Paillier) ([]byte, error) {
+	if paillier == nil {
+		return nil, errors.New("nil paillier")
+	}
+
+	var out C.cmem_t
+	rc := C.cbmpc_paillier_get_N(paillier, &out)
+	if rc != 0 {
+		return nil, formatNativeErr("paillier_get_N", rc)
+	}
+	return cmemToGoBytes(out), nil
+}
+
+// PaillierEncrypt encrypts a plaintext value with the Paillier cryptosystem.
+func PaillierEncrypt(paillier Paillier, plaintext []byte) ([]byte, error) {
+	if paillier == nil {
+		return nil, errors.New("nil paillier")
+	}
+	if len(plaintext) == 0 {
+		return nil, errors.New("empty plaintext")
+	}
+
+	ptMem := goBytesToCmem(plaintext)
+	var out C.cmem_t
+	rc := C.cbmpc_paillier_encrypt(paillier, ptMem, &out)
+	if rc != 0 {
+		return nil, formatNativeErr("paillier_encrypt", rc)
+	}
+	return cmemToGoBytes(out), nil
+}
+
+// PaillierDecrypt decrypts a ciphertext value with the Paillier cryptosystem (requires private key).
+func PaillierDecrypt(paillier Paillier, ciphertext []byte) ([]byte, error) {
+	if paillier == nil {
+		return nil, errors.New("nil paillier")
+	}
+	if len(ciphertext) == 0 {
+		return nil, errors.New("empty ciphertext")
+	}
+
+	ctMem := goBytesToCmem(ciphertext)
+	var out C.cmem_t
+	rc := C.cbmpc_paillier_decrypt(paillier, ctMem, &out)
+	if rc != 0 {
+		return nil, formatNativeErr("paillier_decrypt", rc)
+	}
+	return cmemToGoBytes(out), nil
+}
+
+// PaillierAddCiphers adds two Paillier ciphertexts homomorphically.
+func PaillierAddCiphers(paillier Paillier, c1, c2 []byte) ([]byte, error) {
+	if paillier == nil {
+		return nil, errors.New("nil paillier")
+	}
+	if len(c1) == 0 || len(c2) == 0 {
+		return nil, errors.New("empty ciphertext")
+	}
+
+	c1Mem := goBytesToCmem(c1)
+	c2Mem := goBytesToCmem(c2)
+	var out C.cmem_t
+	rc := C.cbmpc_paillier_add_ciphers(paillier, c1Mem, c2Mem, &out)
+	if rc != 0 {
+		return nil, formatNativeErr("paillier_add_ciphers", rc)
+	}
+	return cmemToGoBytes(out), nil
+}
+
+// PaillierMulScalar multiplies a Paillier ciphertext by a scalar homomorphically.
+func PaillierMulScalar(paillier Paillier, ciphertext, scalar []byte) ([]byte, error) {
+	if paillier == nil {
+		return nil, errors.New("nil paillier")
+	}
+	if len(ciphertext) == 0 || len(scalar) == 0 {
+		return nil, errors.New("empty ciphertext or scalar")
+	}
+
+	ctMem := goBytesToCmem(ciphertext)
+	scMem := goBytesToCmem(scalar)
+	var out C.cmem_t
+	rc := C.cbmpc_paillier_mul_scalar(paillier, ctMem, scMem, &out)
+	if rc != 0 {
+		return nil, formatNativeErr("paillier_mul_scalar", rc)
+	}
+	return cmemToGoBytes(out), nil
+}
+
+// PaillierVerifyCipher verifies that a ciphertext is well-formed for this Paillier instance.
+func PaillierVerifyCipher(paillier Paillier, ciphertext []byte) error {
+	if paillier == nil {
+		return errors.New("nil paillier")
+	}
+	if len(ciphertext) == 0 {
+		return errors.New("empty ciphertext")
+	}
+
+	ctMem := goBytesToCmem(ciphertext)
+	rc := C.cbmpc_paillier_verify_cipher(paillier, ctMem)
+	if rc != 0 {
+		return formatNativeErr("paillier_verify_cipher", rc)
+	}
+	return nil
+}
+
+// PaillierSerialize serializes a Paillier instance to bytes.
+func PaillierSerialize(paillier Paillier) ([]byte, error) {
+	if paillier == nil {
+		return nil, errors.New("nil paillier")
+	}
+
+	var out C.cmem_t
+	rc := C.cbmpc_paillier_serialize(paillier, &out)
+	if rc != 0 {
+		return nil, formatNativeErr("paillier_serialize", rc)
+	}
+	return cmemToGoBytes(out), nil
+}
+
+// PaillierDeserialize deserializes a Paillier instance from bytes.
+// Returns a Paillier instance that must be freed with PaillierFree.
+func PaillierDeserialize(data []byte) (Paillier, error) {
+	if len(data) == 0 {
+		return nil, errors.New("empty data")
+	}
+
+	dataMem := goBytesToCmem(data)
+	var paillier Paillier
+	rc := C.cbmpc_paillier_deserialize(dataMem, &paillier)
+	if rc != 0 {
+		return nil, formatNativeErr("paillier_deserialize", rc)
+	}
+	return paillier, nil
+}

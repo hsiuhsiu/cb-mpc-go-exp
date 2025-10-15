@@ -8,6 +8,8 @@
 #include "cbmpc/core/convert.h"
 #include "cbmpc/core/error.h"
 #include "cbmpc/crypto/base_ecc.h"
+#include "cbmpc/crypto/base_pki.h"
+#include "cbmpc/crypto/base_paillier.h"
 #include "cbmpc/protocol/ecdsa_2p.h"
 #include "cbmpc/protocol/ecdsa_mp.h"
 
@@ -366,6 +368,183 @@ int cbmpc_ecdsamp_key_deserialize(cmem_t serialized, cbmpc_ecdsamp_key **key) {
   auto wrapper = new cbmpc_ecdsamp_key;
   wrapper->opaque = k.release();
   *key = wrapper;
+  return 0;
+}
+
+// ============================================================
+// Paillier cryptosystem management functions
+// ============================================================
+
+// Generate a new Paillier keypair
+int cbmpc_paillier_generate(cbmpc_paillier *paillier_out) {
+  if (!paillier_out) return E_BADARG;
+
+  auto paillier = std::make_unique<coinbase::crypto::paillier_t>();
+  paillier->generate();
+  *paillier_out = paillier.release();
+  return 0;
+}
+
+// Create Paillier instance from public key
+int cbmpc_paillier_create_pub(cmem_t N, cbmpc_paillier *paillier_out) {
+  if (!N.data || N.size <= 0 || !paillier_out) return E_BADARG;
+
+  auto paillier = std::make_unique<coinbase::crypto::paillier_t>();
+  coinbase::crypto::bn_t N_bn = coinbase::crypto::bn_t::from_bin(mem_t(N.data, N.size));
+  paillier->create_pub(N_bn);
+  *paillier_out = paillier.release();
+  return 0;
+}
+
+// Create Paillier instance from private key
+int cbmpc_paillier_create_prv(cmem_t N, cmem_t p, cmem_t q, cbmpc_paillier *paillier_out) {
+  if (!N.data || N.size <= 0 || !p.data || p.size <= 0 || !q.data || q.size <= 0 || !paillier_out) {
+    return E_BADARG;
+  }
+
+  auto paillier = std::make_unique<coinbase::crypto::paillier_t>();
+  coinbase::crypto::bn_t N_bn = coinbase::crypto::bn_t::from_bin(mem_t(N.data, N.size));
+  coinbase::crypto::bn_t p_bn = coinbase::crypto::bn_t::from_bin(mem_t(p.data, p.size));
+  coinbase::crypto::bn_t q_bn = coinbase::crypto::bn_t::from_bin(mem_t(q.data, q.size));
+  paillier->create_prv(N_bn, p_bn, q_bn);
+  *paillier_out = paillier.release();
+  return 0;
+}
+
+// Free a Paillier instance
+void cbmpc_paillier_free(cbmpc_paillier paillier) {
+  if (paillier) {
+    delete static_cast<coinbase::crypto::paillier_t *>(paillier);
+  }
+}
+
+// Check if Paillier instance has a private key
+int cbmpc_paillier_has_private_key(cbmpc_paillier paillier) {
+  if (!paillier) return 0;
+  const auto *p = static_cast<const coinbase::crypto::paillier_t *>(paillier);
+  return p->has_private_key() ? 1 : 0;
+}
+
+// Get the modulus N from a Paillier instance
+int cbmpc_paillier_get_N(cbmpc_paillier paillier, cmem_t *out) {
+  if (!paillier || !out) return E_BADARG;
+
+  const auto *p = static_cast<const coinbase::crypto::paillier_t *>(paillier);
+  const coinbase::crypto::mod_t& N = p->get_N();
+  buf_t N_bin = N.value().to_bin();
+  *out = alloc_and_copy(N_bin.data(), static_cast<size_t>(N_bin.size()));
+  if (!out->data && N_bin.size() > 0) return E_BADARG;
+
+  return 0;
+}
+
+// Encrypt a plaintext
+int cbmpc_paillier_encrypt(cbmpc_paillier paillier, cmem_t plaintext, cmem_t *ciphertext_out) {
+  if (!paillier || !plaintext.data || plaintext.size <= 0 || !ciphertext_out) return E_BADARG;
+
+  const auto *p = static_cast<const coinbase::crypto::paillier_t *>(paillier);
+  coinbase::crypto::bn_t pt = coinbase::crypto::bn_t::from_bin(mem_t(plaintext.data, plaintext.size));
+  coinbase::crypto::bn_t ct = p->encrypt(pt);
+  buf_t ct_bin = ct.to_bin();
+  *ciphertext_out = alloc_and_copy(ct_bin.data(), static_cast<size_t>(ct_bin.size()));
+  if (!ciphertext_out->data && ct_bin.size() > 0) return E_BADARG;
+
+  return 0;
+}
+
+// Decrypt a ciphertext
+int cbmpc_paillier_decrypt(cbmpc_paillier paillier, cmem_t ciphertext, cmem_t *plaintext_out) {
+  if (!paillier || !ciphertext.data || ciphertext.size <= 0 || !plaintext_out) return E_BADARG;
+
+  const auto *p = static_cast<const coinbase::crypto::paillier_t *>(paillier);
+  if (!p->has_private_key()) return E_BADARG;
+
+  coinbase::crypto::bn_t ct = coinbase::crypto::bn_t::from_bin(mem_t(ciphertext.data, ciphertext.size));
+  coinbase::crypto::bn_t pt = p->decrypt(ct);
+  buf_t pt_bin = pt.to_bin();
+  *plaintext_out = alloc_and_copy(pt_bin.data(), static_cast<size_t>(pt_bin.size()));
+  if (!plaintext_out->data && pt_bin.size() > 0) return E_BADARG;
+
+  return 0;
+}
+
+// Add two ciphertexts homomorphically
+int cbmpc_paillier_add_ciphers(cbmpc_paillier paillier, cmem_t c1, cmem_t c2, cmem_t *result_out) {
+  if (!paillier || !c1.data || c1.size <= 0 || !c2.data || c2.size <= 0 || !result_out) {
+    return E_BADARG;
+  }
+
+  const auto *p = static_cast<const coinbase::crypto::paillier_t *>(paillier);
+  coinbase::crypto::bn_t ct1 = coinbase::crypto::bn_t::from_bin(mem_t(c1.data, c1.size));
+  coinbase::crypto::bn_t ct2 = coinbase::crypto::bn_t::from_bin(mem_t(c2.data, c2.size));
+  coinbase::crypto::bn_t result = p->add_ciphers(ct1, ct2);
+  buf_t result_bin = result.to_bin();
+  *result_out = alloc_and_copy(result_bin.data(), static_cast<size_t>(result_bin.size()));
+  if (!result_out->data && result_bin.size() > 0) return E_BADARG;
+
+  return 0;
+}
+
+// Multiply a ciphertext by a scalar homomorphically
+int cbmpc_paillier_mul_scalar(cbmpc_paillier paillier, cmem_t ciphertext, cmem_t scalar, cmem_t *result_out) {
+  if (!paillier || !ciphertext.data || ciphertext.size <= 0 || !scalar.data || scalar.size <= 0 || !result_out) {
+    return E_BADARG;
+  }
+
+  const auto *p = static_cast<const coinbase::crypto::paillier_t *>(paillier);
+  coinbase::crypto::bn_t ct = coinbase::crypto::bn_t::from_bin(mem_t(ciphertext.data, ciphertext.size));
+  coinbase::crypto::bn_t sc = coinbase::crypto::bn_t::from_bin(mem_t(scalar.data, scalar.size));
+  coinbase::crypto::bn_t result = p->mul_scalar(ct, sc);
+  buf_t result_bin = result.to_bin();
+  *result_out = alloc_and_copy(result_bin.data(), static_cast<size_t>(result_bin.size()));
+  if (!result_out->data && result_bin.size() > 0) return E_BADARG;
+
+  return 0;
+}
+
+// Verify a ciphertext
+int cbmpc_paillier_verify_cipher(cbmpc_paillier paillier, cmem_t ciphertext) {
+  if (!paillier || !ciphertext.data || ciphertext.size <= 0) return E_BADARG;
+
+  const auto *p = static_cast<const coinbase::crypto::paillier_t *>(paillier);
+  coinbase::crypto::bn_t ct = coinbase::crypto::bn_t::from_bin(mem_t(ciphertext.data, ciphertext.size));
+  error_t rv = p->verify_cipher(ct);
+  return rv;
+}
+
+// Serialize a Paillier instance
+int cbmpc_paillier_serialize(cbmpc_paillier paillier, cmem_t *out) {
+  if (!paillier || !out) return E_BADARG;
+
+  auto *p = static_cast<coinbase::crypto::paillier_t *>(paillier);
+
+  // Calculate size
+  coinbase::converter_t size_calc(true);
+  p->convert(size_calc);
+  if (size_calc.is_error()) return E_CRYPTO;
+
+  // Allocate and serialize
+  buf_t result(size_calc.get_size());
+  coinbase::converter_t writer(result.data());
+  p->convert(writer);
+  if (writer.is_error()) return E_CRYPTO;
+
+  *out = alloc_and_copy(result.data(), static_cast<size_t>(result.size()));
+  if (!out->data && result.size() > 0) return E_BADARG;
+
+  return 0;
+}
+
+// Deserialize a Paillier instance
+int cbmpc_paillier_deserialize(cmem_t serialized, cbmpc_paillier *paillier_out) {
+  if (!serialized.data || serialized.size <= 0 || !paillier_out) return E_BADARG;
+
+  auto paillier = std::make_unique<coinbase::crypto::paillier_t>();
+  coinbase::converter_t reader(mem_t(serialized.data, serialized.size));
+  paillier->convert(reader);
+  if (reader.is_error()) return E_CRYPTO;
+
+  *paillier_out = paillier.release();
   return 0;
 }
 

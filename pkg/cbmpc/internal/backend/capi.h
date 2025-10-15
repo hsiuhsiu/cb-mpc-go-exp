@@ -357,6 +357,85 @@ int cbmpc_uc_elgamal_com_mult_private_scalar_prove(cbmpc_ecc_point E_point, cbmp
 // eA_commitment, eB_commitment: the ElGamal commitments to verify against
 int cbmpc_uc_elgamal_com_mult_private_scalar_verify(cmem_t proof, cbmpc_ecc_point E_point, cbmpc_ec_elgamal_commitment eA_commitment, cbmpc_ec_elgamal_commitment eB_commitment, cmem_t session_id, uint64_t aux);
 
+// Valid_Paillier proof - proves that a Paillier key is valid (no small factors)
+// This is a non-interactive zero-knowledge proof of Paillier key validity.
+
+// Create Valid_Paillier proof for proving that a Paillier key is well-formed
+// paillier: the Paillier instance (must have private key for proving)
+// session_id: session identifier for security, aux: auxiliary data
+// Returns serialized proof bytes.
+int cbmpc_valid_paillier_prove(cbmpc_paillier paillier, cmem_t session_id, uint64_t aux, cmem_t *proof_out);
+
+// Verify a Valid_Paillier proof
+// proof: serialized proof bytes
+// paillier: the Paillier instance to verify against (public key only)
+// session_id: session identifier (must match the one used in Prove)
+// aux: auxiliary data (must match the one used in Prove)
+int cbmpc_valid_paillier_verify(cmem_t proof, cbmpc_paillier paillier, cmem_t session_id, uint64_t aux);
+
+// Paillier_Zero proof - proves that a Paillier ciphertext encrypts zero
+// This is a non-interactive zero-knowledge proof that c is an encryption of 0.
+
+// Create Paillier_Zero proof for proving that c encrypts zero
+// paillier: the Paillier instance (must have private key for proving)
+// c: the ciphertext (as bytes)
+// r: the randomness used to encrypt (witness)
+// session_id: session identifier for security, aux: auxiliary data
+// Returns serialized proof bytes.
+int cbmpc_paillier_zero_prove(cbmpc_paillier paillier, cmem_t c, cmem_t r, cmem_t session_id, uint64_t aux, cmem_t *proof_out);
+
+// Verify a Paillier_Zero proof
+// proof: serialized proof bytes
+// paillier: the Paillier instance (public key only)
+// c: the ciphertext to verify encrypts zero
+// session_id: session identifier (must match the one used in Prove)
+// aux: auxiliary data (must match the one used in Prove)
+int cbmpc_paillier_zero_verify(cmem_t proof, cbmpc_paillier paillier, cmem_t c, cmem_t session_id, uint64_t aux);
+
+// Two_Paillier_Equal proof - proves two Paillier ciphertexts encrypt the same plaintext
+// This proves that c0 (under P0) and c1 (under P1) encrypt the same value x.
+
+// Create Two_Paillier_Equal proof
+// q: the modulus (as bytes)
+// P0, P1: two Paillier instances (must have private keys for proving)
+// c0, c1: the two ciphertexts (as bytes)
+// x: the plaintext value (witness)
+// r0, r1: the randomness used for c0 and c1 (witnesses)
+// session_id: session identifier for security, aux: auxiliary data
+// Returns serialized proof bytes.
+int cbmpc_two_paillier_equal_prove(cmem_t q, cbmpc_paillier P0, cmem_t c0, cbmpc_paillier P1, cmem_t c1, cmem_t x, cmem_t r0, cmem_t r1, cmem_t session_id, uint64_t aux, cmem_t *proof_out);
+
+// Verify a Two_Paillier_Equal proof
+// proof: serialized proof bytes
+// q: the modulus (as bytes)
+// P0, P1: two Paillier instances (public keys only)
+// c0, c1: the two ciphertexts to verify encrypt the same value
+// session_id: session identifier (must match the one used in Prove)
+// aux: auxiliary data (must match the one used in Prove)
+int cbmpc_two_paillier_equal_verify(cmem_t proof, cmem_t q, cbmpc_paillier P0, cmem_t c0, cbmpc_paillier P1, cmem_t c1, cmem_t session_id, uint64_t aux);
+
+// Paillier_Range_Exp_Slack proof - proves a Paillier ciphertext encrypts a value in range
+// This proves that c encrypts a value x within the valid range with some slack.
+
+// Create Paillier_Range_Exp_Slack proof
+// paillier: the Paillier instance (must have private key for proving)
+// q: the modulus (as bytes)
+// c: the ciphertext (as bytes)
+// x: the plaintext value (witness)
+// r: the randomness used to encrypt (witness)
+// session_id: session identifier for security, aux: auxiliary data
+// Returns serialized proof bytes.
+int cbmpc_paillier_range_exp_slack_prove(cbmpc_paillier paillier, cmem_t q, cmem_t c, cmem_t x, cmem_t r, cmem_t session_id, uint64_t aux, cmem_t *proof_out);
+
+// Verify a Paillier_Range_Exp_Slack proof
+// proof: serialized proof bytes
+// paillier: the Paillier instance (public key only)
+// q: the modulus (as bytes)
+// c: the ciphertext to verify
+// session_id: session identifier (must match the one used in Prove)
+// aux: auxiliary data (must match the one used in Prove)
+int cbmpc_paillier_range_exp_slack_verify(cmem_t proof, cbmpc_paillier paillier, cmem_t q, cmem_t c, cmem_t session_id, uint64_t aux);
+
 #ifdef __cplusplus
 }
 #endif
