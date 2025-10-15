@@ -130,6 +130,14 @@ $(CBMPC_STAMP): $(OPENSSL_LIB) $(addprefix cb-mpc/,$(CBMPC_SRC_FILES)) scripts/b
 ## Configure and build the cb-mpc static library from source without installing system-wide.
 build-cbmpc: $(CBMPC_STAMP)
 
+.PHONY: doc
+## Run pkgsite locally on port 6060 for viewing Go documentation.
+doc:
+	@command -v pkgsite >/dev/null 2>&1 || { echo "pkgsite not found. Install with: go install golang.org/x/pkgsite/cmd/pkgsite@latest" >&2; exit 1; }
+	@echo "Starting pkgsite on http://localhost:6060"
+	@echo "View documentation at: http://localhost:6060/github.com/coinbase/cb-mpc-go"
+	pkgsite -http :6060
+
 .PHONY: clean
 ## Remove build artefacts.
 clean:
