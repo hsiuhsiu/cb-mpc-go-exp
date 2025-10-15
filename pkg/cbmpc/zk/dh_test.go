@@ -3,7 +3,6 @@
 package zk_test
 
 import (
-	"crypto/elliptic"
 	"crypto/rand"
 	"testing"
 
@@ -14,55 +13,40 @@ import (
 
 // TestDHProofBasic tests basic DH proof generation and verification.
 func TestDHProofBasic(t *testing.T) {
-	// Use P-256 curve
-	ecCurve := elliptic.P256()
-
-	// Generate a random base point Q
-	qPriv, err := rand.Int(rand.Reader, ecCurve.Params().N)
+	// Generate a random scalar for Q
+	qScalar, err := curve.RandomScalar(curve.P256)
 	if err != nil {
-		t.Fatalf("failed to generate Q exponent: %v", err)
+		t.Fatalf("failed to generate Q scalar: %v", err)
 	}
-	qx, qy := ecCurve.ScalarBaseMult(qPriv.Bytes())
-	qBytes := elliptic.MarshalCompressed(ecCurve, qx, qy)
+	defer qScalar.Free()
 
-	qPoint, err := curve.NewPointFromBytes(cbmpc.CurveP256, qBytes)
+	// Compute Q = qScalar * G
+	qPoint, err := curve.MulGenerator(curve.P256, qScalar)
 	if err != nil {
 		t.Fatalf("failed to create Q point: %v", err)
 	}
 	defer qPoint.Free()
 
 	// Generate a random exponent w
-	w, err := rand.Int(rand.Reader, ecCurve.Params().N)
+	exponent, err := curve.RandomScalar(curve.P256)
 	if err != nil {
 		t.Fatalf("failed to generate exponent: %v", err)
 	}
+	defer exponent.Free()
 
 	// Compute A = w*G
-	ax, ay := ecCurve.ScalarBaseMult(w.Bytes())
-	aBytes := elliptic.MarshalCompressed(ecCurve, ax, ay)
-
-	aPoint, err := curve.NewPointFromBytes(cbmpc.CurveP256, aBytes)
+	aPoint, err := curve.MulGenerator(curve.P256, exponent)
 	if err != nil {
 		t.Fatalf("failed to create A point: %v", err)
 	}
 	defer aPoint.Free()
 
 	// Compute B = w*Q
-	bx, by := ecCurve.ScalarMult(qx, qy, w.Bytes())
-	bBytes := elliptic.MarshalCompressed(ecCurve, bx, by)
-
-	bPoint, err := curve.NewPointFromBytes(cbmpc.CurveP256, bBytes)
+	bPoint, err := qPoint.Mul(exponent)
 	if err != nil {
 		t.Fatalf("failed to create B point: %v", err)
 	}
 	defer bPoint.Free()
-
-	// Create scalar
-	exponent, err := curve.NewScalarFromBytes(w.Bytes())
-	if err != nil {
-		t.Fatalf("failed to create scalar: %v", err)
-	}
-	defer exponent.Free()
 
 	// Create session ID
 	sessionIDBytes := make([]byte, 32)
@@ -106,53 +90,40 @@ func TestDHProofBasic(t *testing.T) {
 
 // TestDHProofWrongB tests that verification fails with wrong B point.
 func TestDHProofWrongB(t *testing.T) {
-	ecCurve := elliptic.P256()
-
-	// Generate Q point
-	qPriv, err := rand.Int(rand.Reader, ecCurve.Params().N)
+	// Generate a random scalar for Q
+	qScalar, err := curve.RandomScalar(curve.P256)
 	if err != nil {
-		t.Fatalf("failed to generate Q exponent: %v", err)
+		t.Fatalf("failed to generate Q scalar: %v", err)
 	}
-	qx, qy := ecCurve.ScalarBaseMult(qPriv.Bytes())
-	qBytes := elliptic.MarshalCompressed(ecCurve, qx, qy)
+	defer qScalar.Free()
 
-	qPoint, err := curve.NewPointFromBytes(cbmpc.CurveP256, qBytes)
+	// Compute Q = qScalar * G
+	qPoint, err := curve.MulGenerator(curve.P256, qScalar)
 	if err != nil {
 		t.Fatalf("failed to create Q point: %v", err)
 	}
 	defer qPoint.Free()
 
 	// Generate exponent w
-	w, err := rand.Int(rand.Reader, ecCurve.Params().N)
+	exponent, err := curve.RandomScalar(curve.P256)
 	if err != nil {
 		t.Fatalf("failed to generate exponent: %v", err)
 	}
+	defer exponent.Free()
 
 	// Compute A = w*G
-	ax, ay := ecCurve.ScalarBaseMult(w.Bytes())
-	aBytes := elliptic.MarshalCompressed(ecCurve, ax, ay)
-
-	aPoint, err := curve.NewPointFromBytes(cbmpc.CurveP256, aBytes)
+	aPoint, err := curve.MulGenerator(curve.P256, exponent)
 	if err != nil {
 		t.Fatalf("failed to create A point: %v", err)
 	}
 	defer aPoint.Free()
 
 	// Compute B = w*Q
-	bx, by := ecCurve.ScalarMult(qx, qy, w.Bytes())
-	bBytes := elliptic.MarshalCompressed(ecCurve, bx, by)
-
-	bPoint, err := curve.NewPointFromBytes(cbmpc.CurveP256, bBytes)
+	bPoint, err := qPoint.Mul(exponent)
 	if err != nil {
 		t.Fatalf("failed to create B point: %v", err)
 	}
 	defer bPoint.Free()
-
-	exponent, err := curve.NewScalarFromBytes(w.Bytes())
-	if err != nil {
-		t.Fatalf("failed to create scalar: %v", err)
-	}
-	defer exponent.Free()
 
 	sessionIDBytes := make([]byte, 32)
 	if _, err := rand.Read(sessionIDBytes); err != nil {
@@ -176,15 +147,13 @@ func TestDHProofWrongB(t *testing.T) {
 	}
 
 	// Generate a different B point
-	w2, err := rand.Int(rand.Reader, ecCurve.Params().N)
+	w2, err := curve.RandomScalar(curve.P256)
 	if err != nil {
 		t.Fatalf("failed to generate second exponent: %v", err)
 	}
+	defer w2.Free()
 
-	b2x, b2y := ecCurve.ScalarMult(qx, qy, w2.Bytes())
-	b2Bytes := elliptic.MarshalCompressed(ecCurve, b2x, b2y)
-
-	b2Point, err := curve.NewPointFromBytes(cbmpc.CurveP256, b2Bytes)
+	b2Point, err := qPoint.Mul(w2)
 	if err != nil {
 		t.Fatalf("failed to create second B point: %v", err)
 	}
@@ -206,53 +175,40 @@ func TestDHProofWrongB(t *testing.T) {
 
 // TestDHProofWrongSessionID tests that verification fails with wrong session ID.
 func TestDHProofWrongSessionID(t *testing.T) {
-	ecCurve := elliptic.P256()
-
-	// Generate Q point
-	qPriv, err := rand.Int(rand.Reader, ecCurve.Params().N)
+	// Generate a random scalar for Q
+	qScalar, err := curve.RandomScalar(curve.P256)
 	if err != nil {
-		t.Fatalf("failed to generate Q exponent: %v", err)
+		t.Fatalf("failed to generate Q scalar: %v", err)
 	}
-	qx, qy := ecCurve.ScalarBaseMult(qPriv.Bytes())
-	qBytes := elliptic.MarshalCompressed(ecCurve, qx, qy)
+	defer qScalar.Free()
 
-	qPoint, err := curve.NewPointFromBytes(cbmpc.CurveP256, qBytes)
+	// Compute Q = qScalar * G
+	qPoint, err := curve.MulGenerator(curve.P256, qScalar)
 	if err != nil {
 		t.Fatalf("failed to create Q point: %v", err)
 	}
 	defer qPoint.Free()
 
 	// Generate exponent w
-	w, err := rand.Int(rand.Reader, ecCurve.Params().N)
+	exponent, err := curve.RandomScalar(curve.P256)
 	if err != nil {
 		t.Fatalf("failed to generate exponent: %v", err)
 	}
+	defer exponent.Free()
 
 	// Compute A = w*G
-	ax, ay := ecCurve.ScalarBaseMult(w.Bytes())
-	aBytes := elliptic.MarshalCompressed(ecCurve, ax, ay)
-
-	aPoint, err := curve.NewPointFromBytes(cbmpc.CurveP256, aBytes)
+	aPoint, err := curve.MulGenerator(curve.P256, exponent)
 	if err != nil {
 		t.Fatalf("failed to create A point: %v", err)
 	}
 	defer aPoint.Free()
 
 	// Compute B = w*Q
-	bx, by := ecCurve.ScalarMult(qx, qy, w.Bytes())
-	bBytes := elliptic.MarshalCompressed(ecCurve, bx, by)
-
-	bPoint, err := curve.NewPointFromBytes(cbmpc.CurveP256, bBytes)
+	bPoint, err := qPoint.Mul(exponent)
 	if err != nil {
 		t.Fatalf("failed to create B point: %v", err)
 	}
 	defer bPoint.Free()
-
-	exponent, err := curve.NewScalarFromBytes(w.Bytes())
-	if err != nil {
-		t.Fatalf("failed to create scalar: %v", err)
-	}
-	defer exponent.Free()
 
 	sessionIDBytes := make([]byte, 32)
 	if _, err := rand.Read(sessionIDBytes); err != nil {
@@ -298,53 +254,40 @@ func TestDHProofWrongSessionID(t *testing.T) {
 
 // TestDHProofValueSemantics tests that DH proofs have value semantics.
 func TestDHProofValueSemantics(t *testing.T) {
-	ecCurve := elliptic.P256()
-
-	// Generate Q point
-	qPriv, err := rand.Int(rand.Reader, ecCurve.Params().N)
+	// Generate a random scalar for Q
+	qScalar, err := curve.RandomScalar(curve.P256)
 	if err != nil {
-		t.Fatalf("failed to generate Q exponent: %v", err)
+		t.Fatalf("failed to generate Q scalar: %v", err)
 	}
-	qx, qy := ecCurve.ScalarBaseMult(qPriv.Bytes())
-	qBytes := elliptic.MarshalCompressed(ecCurve, qx, qy)
+	defer qScalar.Free()
 
-	qPoint, err := curve.NewPointFromBytes(cbmpc.CurveP256, qBytes)
+	// Compute Q = qScalar * G
+	qPoint, err := curve.MulGenerator(curve.P256, qScalar)
 	if err != nil {
 		t.Fatalf("failed to create Q point: %v", err)
 	}
 	defer qPoint.Free()
 
 	// Generate exponent w
-	w, err := rand.Int(rand.Reader, ecCurve.Params().N)
+	exponent, err := curve.RandomScalar(curve.P256)
 	if err != nil {
 		t.Fatalf("failed to generate exponent: %v", err)
 	}
+	defer exponent.Free()
 
 	// Compute A = w*G
-	ax, ay := ecCurve.ScalarBaseMult(w.Bytes())
-	aBytes := elliptic.MarshalCompressed(ecCurve, ax, ay)
-
-	aPoint, err := curve.NewPointFromBytes(cbmpc.CurveP256, aBytes)
+	aPoint, err := curve.MulGenerator(curve.P256, exponent)
 	if err != nil {
 		t.Fatalf("failed to create A point: %v", err)
 	}
 	defer aPoint.Free()
 
 	// Compute B = w*Q
-	bx, by := ecCurve.ScalarMult(qx, qy, w.Bytes())
-	bBytes := elliptic.MarshalCompressed(ecCurve, bx, by)
-
-	bPoint, err := curve.NewPointFromBytes(cbmpc.CurveP256, bBytes)
+	bPoint, err := qPoint.Mul(exponent)
 	if err != nil {
 		t.Fatalf("failed to create B point: %v", err)
 	}
 	defer bPoint.Free()
-
-	exponent, err := curve.NewScalarFromBytes(w.Bytes())
-	if err != nil {
-		t.Fatalf("failed to create scalar: %v", err)
-	}
-	defer exponent.Free()
 
 	sessionIDBytes := make([]byte, 32)
 	if _, err := rand.Read(sessionIDBytes); err != nil {

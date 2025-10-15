@@ -3,9 +3,7 @@
 package zk_test
 
 import (
-	"crypto/elliptic"
 	"crypto/rand"
-	"math/big"
 	"testing"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
@@ -15,39 +13,26 @@ import (
 
 // TestBatchDLProofBasic tests basic UC_Batch_DL proof generation and verification.
 func TestBatchDLProofBasic(t *testing.T) {
-	// Use P-256 curve
-	ecCurve := elliptic.P256()
-
-	// Generate 3 random exponents and corresponding points
+	// Generate 3 random exponents and corresponding points using C++ library
 	numPoints := 3
-	exponents := make([]*big.Int, numPoints)
 	points := make([]*curve.Point, numPoints)
 	scalars := make([]*curve.Scalar, numPoints)
 
 	for i := 0; i < numPoints; i++ {
-		w, err := rand.Int(rand.Reader, ecCurve.Params().N)
+		exponent, err := curve.RandomScalar(curve.P256)
 		if err != nil {
 			t.Fatalf("failed to generate exponent %d: %v", i, err)
 		}
-		exponents[i] = w
+		scalars[i] = exponent
+		defer exponent.Free()
 
-		// Compute Q[i] = w[i]*G
-		qx, qy := ecCurve.ScalarBaseMult(w.Bytes())
-		qBytes := elliptic.MarshalCompressed(ecCurve, qx, qy)
-
-		point, err := curve.NewPointFromBytes(cbmpc.CurveP256, qBytes)
+		// Compute Q[i] = w[i]*G using C++ library
+		point, err := curve.MulGenerator(curve.P256, exponent)
 		if err != nil {
-			t.Fatalf("failed to create point %d: %v", i, err)
+			t.Fatalf("failed to compute point %d: %v", i, err)
 		}
 		points[i] = point
 		defer point.Free()
-
-		scalar, err := curve.NewScalarFromBytes(w.Bytes())
-		if err != nil {
-			t.Fatalf("failed to create scalar %d: %v", i, err)
-		}
-		scalars[i] = scalar
-		defer scalar.Free()
 	}
 
 	// Create session ID
@@ -88,28 +73,18 @@ func TestBatchDLProofBasic(t *testing.T) {
 
 // TestBatchDLProofSinglePoint tests that batch proof works with a single point.
 func TestBatchDLProofSinglePoint(t *testing.T) {
-	ecCurve := elliptic.P256()
-
-	// Generate a single exponent and point
-	w, err := rand.Int(rand.Reader, ecCurve.Params().N)
+	// Generate a single exponent and point using C++ library
+	exponent, err := curve.RandomScalar(curve.P256)
 	if err != nil {
 		t.Fatalf("failed to generate exponent: %v", err)
 	}
+	defer exponent.Free()
 
-	qx, qy := ecCurve.ScalarBaseMult(w.Bytes())
-	qBytes := elliptic.MarshalCompressed(ecCurve, qx, qy)
-
-	point, err := curve.NewPointFromBytes(cbmpc.CurveP256, qBytes)
+	point, err := curve.MulGenerator(curve.P256, exponent)
 	if err != nil {
-		t.Fatalf("failed to create point: %v", err)
+		t.Fatalf("failed to compute point: %v", err)
 	}
 	defer point.Free()
-
-	scalar, err := curve.NewScalarFromBytes(w.Bytes())
-	if err != nil {
-		t.Fatalf("failed to create scalar: %v", err)
-	}
-	defer scalar.Free()
 
 	sessionIDBytes := make([]byte, 32)
 	if _, err := rand.Read(sessionIDBytes); err != nil {
@@ -122,7 +97,7 @@ func TestBatchDLProofSinglePoint(t *testing.T) {
 	// Generate proof with single point
 	proof, err := zk.ProveBatchDL(&zk.BatchDLProveParams{
 		Points:    []*curve.Point{point},
-		Exponents: []*curve.Scalar{scalar},
+		Exponents: []*curve.Scalar{exponent},
 		SessionID: sessionID,
 		Aux:       aux,
 	})
@@ -144,34 +119,24 @@ func TestBatchDLProofSinglePoint(t *testing.T) {
 
 // TestBatchDLProofWrongPoint tests that verification fails with wrong point.
 func TestBatchDLProofWrongPoint(t *testing.T) {
-	ecCurve := elliptic.P256()
-
-	// Generate 2 points with exponents
+	// Generate 2 points with exponents using C++ library
 	points := make([]*curve.Point, 2)
 	scalars := make([]*curve.Scalar, 2)
 
 	for i := 0; i < 2; i++ {
-		w, err := rand.Int(rand.Reader, ecCurve.Params().N)
+		exponent, err := curve.RandomScalar(curve.P256)
 		if err != nil {
 			t.Fatalf("failed to generate exponent %d: %v", i, err)
 		}
+		scalars[i] = exponent
+		defer exponent.Free()
 
-		qx, qy := ecCurve.ScalarBaseMult(w.Bytes())
-		qBytes := elliptic.MarshalCompressed(ecCurve, qx, qy)
-
-		point, err := curve.NewPointFromBytes(cbmpc.CurveP256, qBytes)
+		point, err := curve.MulGenerator(curve.P256, exponent)
 		if err != nil {
-			t.Fatalf("failed to create point %d: %v", i, err)
+			t.Fatalf("failed to compute point %d: %v", i, err)
 		}
 		points[i] = point
 		defer point.Free()
-
-		scalar, err := curve.NewScalarFromBytes(w.Bytes())
-		if err != nil {
-			t.Fatalf("failed to create scalar %d: %v", i, err)
-		}
-		scalars[i] = scalar
-		defer scalar.Free()
 	}
 
 	sessionIDBytes := make([]byte, 32)
@@ -193,18 +158,16 @@ func TestBatchDLProofWrongPoint(t *testing.T) {
 		t.Fatalf("ProveBatch failed: %v", err)
 	}
 
-	// Generate a different point
-	w3, err := rand.Int(rand.Reader, ecCurve.Params().N)
+	// Generate a different point using C++ library
+	exponent3, err := curve.RandomScalar(curve.P256)
 	if err != nil {
 		t.Fatalf("failed to generate third exponent: %v", err)
 	}
+	defer exponent3.Free()
 
-	q3x, q3y := ecCurve.ScalarBaseMult(w3.Bytes())
-	q3Bytes := elliptic.MarshalCompressed(ecCurve, q3x, q3y)
-
-	point3, err := curve.NewPointFromBytes(cbmpc.CurveP256, q3Bytes)
+	point3, err := curve.MulGenerator(curve.P256, exponent3)
 	if err != nil {
-		t.Fatalf("failed to create third point: %v", err)
+		t.Fatalf("failed to compute third point: %v", err)
 	}
 	defer point3.Free()
 
@@ -223,34 +186,24 @@ func TestBatchDLProofWrongPoint(t *testing.T) {
 
 // TestBatchDLProofWrongSessionID tests that verification fails with wrong session ID.
 func TestBatchDLProofWrongSessionID(t *testing.T) {
-	ecCurve := elliptic.P256()
-
-	// Generate 2 points with exponents
+	// Generate 2 points with exponents using C++ library
 	points := make([]*curve.Point, 2)
 	scalars := make([]*curve.Scalar, 2)
 
 	for i := 0; i < 2; i++ {
-		w, err := rand.Int(rand.Reader, ecCurve.Params().N)
+		exponent, err := curve.RandomScalar(curve.P256)
 		if err != nil {
 			t.Fatalf("failed to generate exponent %d: %v", i, err)
 		}
+		scalars[i] = exponent
+		defer exponent.Free()
 
-		qx, qy := ecCurve.ScalarBaseMult(w.Bytes())
-		qBytes := elliptic.MarshalCompressed(ecCurve, qx, qy)
-
-		point, err := curve.NewPointFromBytes(cbmpc.CurveP256, qBytes)
+		point, err := curve.MulGenerator(curve.P256, exponent)
 		if err != nil {
-			t.Fatalf("failed to create point %d: %v", i, err)
+			t.Fatalf("failed to compute point %d: %v", i, err)
 		}
 		points[i] = point
 		defer point.Free()
-
-		scalar, err := curve.NewScalarFromBytes(w.Bytes())
-		if err != nil {
-			t.Fatalf("failed to create scalar %d: %v", i, err)
-		}
-		scalars[i] = scalar
-		defer scalar.Free()
 	}
 
 	sessionIDBytes := make([]byte, 32)
@@ -293,35 +246,28 @@ func TestBatchDLProofWrongSessionID(t *testing.T) {
 
 // TestBatchDLProofCountMismatch tests that providing mismatched counts fails.
 func TestBatchDLProofCountMismatch(t *testing.T) {
-	ecCurve := elliptic.P256()
-
-	// Generate 2 points but only 1 exponent
+	// Generate 2 points but only 1 exponent using C++ library
 	points := make([]*curve.Point, 2)
 	scalars := make([]*curve.Scalar, 1)
 
 	for i := 0; i < 2; i++ {
-		w, err := rand.Int(rand.Reader, ecCurve.Params().N)
+		exponent, err := curve.RandomScalar(curve.P256)
 		if err != nil {
 			t.Fatalf("failed to generate exponent %d: %v", i, err)
 		}
 
-		qx, qy := ecCurve.ScalarBaseMult(w.Bytes())
-		qBytes := elliptic.MarshalCompressed(ecCurve, qx, qy)
-
-		point, err := curve.NewPointFromBytes(cbmpc.CurveP256, qBytes)
+		point, err := curve.MulGenerator(curve.P256, exponent)
 		if err != nil {
-			t.Fatalf("failed to create point %d: %v", i, err)
+			t.Fatalf("failed to compute point %d: %v", i, err)
 		}
 		points[i] = point
 		defer point.Free()
 
 		if i == 0 {
-			scalar, err := curve.NewScalarFromBytes(w.Bytes())
-			if err != nil {
-				t.Fatalf("failed to create scalar %d: %v", i, err)
-			}
-			scalars[i] = scalar
-			defer scalar.Free()
+			scalars[i] = exponent
+			defer exponent.Free()
+		} else {
+			exponent.Free()
 		}
 	}
 
