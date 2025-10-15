@@ -46,11 +46,9 @@
 // The cbmpc.KEM interface defines:
 //
 //	type KEM interface {
-//	    Generate() ([]byte, []byte, error)              // Generate (sk, ek)
-//	    NewPrivateKeyHandle([]byte) (any, error)        // Create handle from sk
-//	    FreePrivateKeyHandle(any)                       // Free handle
-//	    Encapsulate(ek []byte, rho [32]byte) ([]byte, []byte, error)  // Deterministic
-//	    Decapsulate(dk any, ek, ct []byte) ([]byte, error)
+//	    Encapsulate(ek []byte, rho [32]byte) (ct, ss []byte, err error)
+//	    Decapsulate(skHandle any, ct []byte) (ss []byte, err error)
+//	    DerivePub(skRef []byte) ([]byte, error)
 //	}
 //
 // # Usage

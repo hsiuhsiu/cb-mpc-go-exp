@@ -17,7 +17,6 @@
 //
 //   - DKG: Distributed Key Generation for n parties with threshold t
 //   - Sign: Threshold signature generation (requires t+1 parties)
-//   - SignBatch: Batch threshold signing for multiple messages
 //   - Refresh: Key share refresh while preserving the public key
 //
 // # Memory Management

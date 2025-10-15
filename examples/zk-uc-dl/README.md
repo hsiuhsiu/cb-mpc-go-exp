@@ -103,21 +103,19 @@ P2 will verify both proofs and show:
 ```go
 // Create point and exponent
 point, _ := curve.NewPointFromBytes(cbmpc.CurveP256, qBytes)
+defer point.Free()
 exponent, _ := curve.NewScalarFromBytes(wBytes)
+defer exponent.Free()
 
-// Generate proof
-proof, _ := zk.Prove(&zk.DLProveParams{
+// Generate proof (value type []byte)
+proof, _ := zk.ProveDL(&zk.DLProveParams{
     Point:     point,
     Exponent:  exponent,
     SessionID: sessionID,
     Aux:       1,
 })
-
-// Serialize for storage/transmission
-proofBytes, _ := proof.Bytes()
-
-// Later: restore from storage
-restoredProof, _ := zk.LoadDLProof(proofBytes)
+// proof is []byte; can be stored/transmitted directly
+proofBytes := []byte(proof)
 ```
 
 ### Verifier Side (P2)
@@ -125,13 +123,11 @@ restoredProof, _ := zk.LoadDLProof(proofBytes)
 ```go
 // Create point (same as P1)
 point, _ := curve.NewPointFromBytes(cbmpc.CurveP256, qBytes)
-
-// Deserialize proof received from P1
-proof, _ := zk.LoadDLProof(proofBytes)
+defer point.Free()
 
 // Verify
-err := zk.Verify(&zk.DLVerifyParams{
-    Proof:     proof,
+err := zk.VerifyDL(&zk.DLVerifyParams{
+    Proof:     proofBytes, // []byte from P1
     Point:     point,
     SessionID: sessionID,
     Aux:       1,

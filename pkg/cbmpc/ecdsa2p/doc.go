@@ -19,6 +19,7 @@
 //   - Sign: Generates an ECDSA signature on a message hash
 //   - SignBatch: Generates multiple ECDSA signatures efficiently
 //   - SignWithGlobalAbort: Signing with enhanced security checks
+//   - SignWithGlobalAbortBatch: Batch signing with enhanced security checks
 //   - Refresh: Refreshes a key share while preserving the public key
 //
 // # Memory Management
