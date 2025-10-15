@@ -1,13 +1,13 @@
+//go:build cgo && !windows
+
 package main
 
 import (
-	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
-	"math/big"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/curve"
@@ -39,17 +39,26 @@ func runProver() {
 	fmt.Println("=== Party 1 (Prover) ===\n")
 
 	// Generate a random exponent w
-	ecCurve := elliptic.P256()
-	w, err := rand.Int(rand.Reader, ecCurve.Params().N)
+	exponent, err := curve.RandomScalar(curve.P256)
 	if err != nil {
 		log.Fatalf("generate random exponent: %v", err)
 	}
+	defer exponent.Free()
 
 	// Compute Q = w*G (public point)
-	qx, qy := ecCurve.ScalarBaseMult(w.Bytes())
-	qBytes := elliptic.MarshalCompressed(ecCurve, qx, qy)
+	point, err := curve.MulGenerator(curve.P256, exponent)
+	if err != nil {
+		log.Fatalf("compute Q = w*G: %v", err)
+	}
+	defer point.Free()
 
-	fmt.Printf("Generated secret exponent w: %s\n", hex.EncodeToString(w.Bytes()[:8]))
+	qBytes, err := point.Bytes()
+	if err != nil {
+		log.Fatalf("get point bytes: %v", err)
+	}
+
+	wBytes := exponent.Bytes
+	fmt.Printf("Generated secret exponent w: %s\n", hex.EncodeToString(wBytes[:8]))
 	fmt.Printf("Computed public point Q = w*G: %s...\n\n", hex.EncodeToString(qBytes[:16]))
 
 	// Create session ID
@@ -59,26 +68,12 @@ func runProver() {
 	}
 	sessionID := cbmpc.NewSessionID(sessionIDBytes)
 
-	// Create curve point from Q
-	point, err := curve.NewPointFromBytes(cbmpc.CurveP256, qBytes)
-	if err != nil {
-		log.Fatalf("create point from bytes: %v", err)
-	}
-	defer point.Free()
-
-	// Create scalar from w
-	exponent, err := curve.NewScalarFromBytes(w.Bytes())
-	if err != nil {
-		log.Fatalf("create scalar from bytes: %v", err)
-	}
-	defer exponent.Free()
-
 	// Example 1: Generate valid proof (P1 has the correct exponent)
 	fmt.Println("--- Example 1: Valid Proof ---")
 	fmt.Println("P1 generates proof with correct exponent w")
 
 	// Proof is returned as bytes - no Close() needed
-	proof1, err := zk.Prove(&zk.DLProveParams{
+	proof1, err := zk.ProveDL(&zk.DLProveParams{
 		Point:     point,
 		Exponent:  exponent,
 		SessionID: sessionID,
@@ -99,21 +94,18 @@ func runProver() {
 	fmt.Println("P1 generates proof with WRONG exponent (should be rejected by P2)")
 
 	// Generate a different random exponent (wrong one!)
-	wrongW, err := rand.Int(rand.Reader, ecCurve.Params().N)
+	wrongExponent, err := curve.RandomScalar(curve.P256)
 	if err != nil {
 		log.Fatalf("generate wrong exponent: %v", err)
 	}
-	fmt.Printf("Using wrong exponent: %s (instead of correct %s)\n",
-		hex.EncodeToString(wrongW.Bytes()[:8]),
-		hex.EncodeToString(w.Bytes()[:8]))
-
-	wrongExponent, err := curve.NewScalarFromBytes(wrongW.Bytes())
-	if err != nil {
-		log.Fatalf("create wrong scalar: %v", err)
-	}
 	defer wrongExponent.Free()
 
-	proof2, err := zk.Prove(&zk.DLProveParams{
+	wrongWBytes := wrongExponent.Bytes
+	fmt.Printf("Using wrong exponent: %s (instead of correct %s)\n",
+		hex.EncodeToString(wrongWBytes[:8]),
+		hex.EncodeToString(wBytes[:8]))
+
+	proof2, err := zk.ProveDL(&zk.DLProveParams{
 		Point:     point, // Same public point Q
 		Exponent:  wrongExponent,
 		SessionID: sessionID,
@@ -187,7 +179,7 @@ func runVerifier(pointHex, sessionIDHex, validProofHex, invalidProofHex string) 
 	// Proof bytes are already in the right format - just use them directly
 	fmt.Println("--- Verifying Example 1: Valid Proof ---")
 
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     zk.DLProof(validProofBytes),
 		Point:     point,
 		SessionID: sessionID,
@@ -202,7 +194,7 @@ func runVerifier(pointHex, sessionIDHex, validProofHex, invalidProofHex string) 
 	// Verify Example 2: Invalid proof
 	fmt.Println("--- Verifying Example 2: Invalid Proof ---")
 
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     zk.DLProof(invalidProofBytes),
 		Point:     point,
 		SessionID: sessionID,
@@ -222,18 +214,27 @@ func demonstration() error {
 	fmt.Println("=== ZK UC_DL Proof Demonstration ===\n")
 
 	// Generate a random exponent w
-	ecCurve := elliptic.P256()
-	w, err := rand.Int(rand.Reader, ecCurve.Params().N)
+	exponent, err := curve.RandomScalar(curve.P256)
 	if err != nil {
 		return fmt.Errorf("generate random exponent: %w", err)
 	}
+	defer exponent.Free()
 
 	// Compute Q = w*G (public point)
-	qx, qy := ecCurve.ScalarBaseMult(w.Bytes())
-	qBytes := elliptic.MarshalCompressed(ecCurve, qx, qy)
+	point, err := curve.MulGenerator(curve.P256, exponent)
+	if err != nil {
+		return fmt.Errorf("compute Q = w*G: %w", err)
+	}
+	defer point.Free()
 
+	qBytes, err := point.Bytes()
+	if err != nil {
+		return fmt.Errorf("get point bytes: %w", err)
+	}
+
+	wBytes := exponent.Bytes
 	fmt.Println("Setup:")
-	fmt.Printf("  Secret exponent w: %s...\n", hex.EncodeToString(w.Bytes()[:8]))
+	fmt.Printf("  Secret exponent w: %s...\n", hex.EncodeToString(wBytes[:8]))
 	fmt.Printf("  Public point Q = w*G: %s...\n\n", hex.EncodeToString(qBytes[:16]))
 
 	// Create session ID
@@ -243,24 +244,11 @@ func demonstration() error {
 	}
 	sessionID := cbmpc.NewSessionID(sessionIDBytes)
 
-	// Create curve types
-	point, err := curve.NewPointFromBytes(cbmpc.CurveP256, qBytes)
-	if err != nil {
-		return fmt.Errorf("create point: %w", err)
-	}
-	defer point.Free()
-
-	exponent, err := curve.NewScalarFromBytes(w.Bytes())
-	if err != nil {
-		return fmt.Errorf("create scalar: %w", err)
-	}
-	defer exponent.Free()
-
 	// Example 1: P1 generates valid proof
 	fmt.Println("--- Example 1: Valid Proof ---")
 	fmt.Println("P1: Generating proof with correct exponent w")
 
-	proof1, err := zk.Prove(&zk.DLProveParams{
+	proof1, err := zk.ProveDL(&zk.DLProveParams{
 		Point:     point,
 		Exponent:  exponent,
 		SessionID: sessionID,
@@ -283,7 +271,7 @@ func demonstration() error {
 
 	// P2 verifies the proof
 	fmt.Println("P2: Verifying proof...")
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     storedProof,
 		Point:     point,
 		SessionID: sessionID,
@@ -299,16 +287,13 @@ func demonstration() error {
 	fmt.Println("--- Example 2: Invalid Proof (Wrong Exponent) ---")
 	fmt.Println("P1: Generating proof with WRONG exponent")
 
-	wrongW := new(big.Int).Add(w, big.NewInt(1))
-	wrongW.Mod(wrongW, ecCurve.Params().N)
-
-	wrongExponent, err := curve.NewScalarFromBytes(wrongW.Bytes())
+	wrongExponent, err := curve.RandomScalar(curve.P256)
 	if err != nil {
-		return fmt.Errorf("create wrong scalar: %w", err)
+		return fmt.Errorf("generate wrong exponent: %w", err)
 	}
 	defer wrongExponent.Free()
 
-	proof2, err := zk.Prove(&zk.DLProveParams{
+	proof2, err := zk.ProveDL(&zk.DLProveParams{
 		Point:     point,
 		Exponent:  wrongExponent,
 		SessionID: sessionID,
@@ -331,7 +316,7 @@ func demonstration() error {
 
 	// P2 verifies the proof
 	fmt.Println("P2: Verifying proof...")
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     storedProof2,
 		Point:     point,
 		SessionID: sessionID,

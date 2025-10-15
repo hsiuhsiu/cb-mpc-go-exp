@@ -42,11 +42,11 @@ type DLProveParams struct {
 	Aux       uint64          // Auxiliary data (e.g., party identifier)
 }
 
-// Prove creates a UC_DL proof for proving knowledge of the discrete logarithm.
+// ProveDL creates a UC_DL proof for proving knowledge of the discrete logarithm.
 // Specifically, it proves knowledge of Exponent such that Point = Exponent * G.
 // Returns the proof as bytes - no Close() required, safe to copy and serialize.
 // See cb-mpc/src/cbmpc/zk/zk_ec.h for protocol details.
-func Prove(params *DLProveParams) (DLProof, error) {
+func ProveDL(params *DLProveParams) (DLProof, error) {
 	if params == nil {
 		return nil, errors.New("nil params")
 	}
@@ -83,10 +83,10 @@ type DLVerifyParams struct {
 	Aux       uint64          // Auxiliary data (must match the one used in Prove)
 }
 
-// Verify verifies a UC_DL proof.
+// VerifyDL verifies a UC_DL proof.
 // The proof bytes are not modified and remain valid.
 // See cb-mpc/src/cbmpc/zk/zk_ec.h for protocol details.
-func Verify(params *DLVerifyParams) error {
+func VerifyDL(params *DLVerifyParams) error {
 	if params == nil {
 		return errors.New("nil params")
 	}

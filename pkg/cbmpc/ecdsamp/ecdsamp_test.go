@@ -44,39 +44,6 @@ func getEllipticCurve(curve cbmpc.Curve) elliptic.Curve {
 	}
 }
 
-// Helper to parse compressed EC point
-func parseCompressedPublicKey(curve elliptic.Curve, compressed []byte) (*ecdsa.PublicKey, error) {
-	x, y := elliptic.UnmarshalCompressed(curve, compressed)
-	if x == nil {
-		return nil, nil
-	}
-	return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
-}
-
-// Helper to parse DER signature
-func parseDERSignature(derSig []byte) (r, s *big.Int, err error) {
-	// Simple DER parser for ECDSA signature
-	// Format: 0x30 [total-len] 0x02 [R-len] [R] 0x02 [S-len] [S]
-	if len(derSig) < 8 || derSig[0] != 0x30 || derSig[2] != 0x02 {
-		return nil, nil, nil
-	}
-
-	rLen := int(derSig[3])
-	rBytes := derSig[4 : 4+rLen]
-	r = new(big.Int).SetBytes(rBytes)
-
-	sIndex := 4 + rLen
-	if sIndex+2 >= len(derSig) || derSig[sIndex] != 0x02 {
-		return nil, nil, nil
-	}
-
-	sLen := int(derSig[sIndex+1])
-	sBytes := derSig[sIndex+2 : sIndex+2+sLen]
-	s = new(big.Int).SetBytes(sBytes)
-
-	return r, s, nil
-}
-
 // Helper to verify signature for any curve (including secp256k1)
 func verifySignature(curve cbmpc.Curve, pubKeyBytes, messageHash, derSig []byte) (bool, error) {
 	if curve == cbmpc.CurveSecp256k1 {
@@ -100,15 +67,31 @@ func verifySignature(curve cbmpc.Curve, pubKeyBytes, messageHash, derSig []byte)
 		return false, nil // Unsupported curve
 	}
 
-	pubKey, err := parseCompressedPublicKey(ellipticCurve, pubKeyBytes)
-	if err != nil || pubKey == nil {
-		return false, err
+	// Parse compressed public key inline
+	x, y := elliptic.UnmarshalCompressed(ellipticCurve, pubKeyBytes)
+	if x == nil {
+		return false, nil
+	}
+	pubKey := &ecdsa.PublicKey{Curve: ellipticCurve, X: x, Y: y}
+
+	// Parse DER signature inline
+	// Format: 0x30 [total-len] 0x02 [R-len] [R] 0x02 [S-len] [S]
+	if len(derSig) < 8 || derSig[0] != 0x30 || derSig[2] != 0x02 {
+		return false, nil
 	}
 
-	r, s, err := parseDERSignature(derSig)
-	if err != nil || r == nil || s == nil {
-		return false, err
+	rLen := int(derSig[3])
+	rBytes := derSig[4 : 4+rLen]
+	r := new(big.Int).SetBytes(rBytes)
+
+	sIndex := 4 + rLen
+	if sIndex+2 >= len(derSig) || derSig[sIndex] != 0x02 {
+		return false, nil
 	}
+
+	sLen := int(derSig[sIndex+1])
+	sBytes := derSig[sIndex+2 : sIndex+2+sLen]
+	s := new(big.Int).SetBytes(sBytes)
 
 	return ecdsa.Verify(pubKey, messageHash, r, s), nil
 }
@@ -735,23 +718,14 @@ func TestECDSAMPSignRefreshSign(t *testing.T) {
 	t.Logf("Sign before refresh successful, signature: %s", abbrevHex(signatures[sigReceiver]))
 
 	// Verify signature before refresh
-	ellipticCurve := getEllipticCurve(curve)
-	if ellipticCurve != nil {
-		pubKeyStd, err := parseCompressedPublicKey(ellipticCurve, pubKey)
-		if err != nil || pubKeyStd == nil {
-			t.Fatalf("Failed to parse public key: %v", err)
-		}
-
-		r, s, err := parseDERSignature(signatures[sigReceiver])
-		if err != nil || r == nil || s == nil {
-			t.Fatalf("Failed to parse signature: %v", err)
-		}
-
-		if !ecdsa.Verify(pubKeyStd, messageHash1[:], r, s) {
-			t.Fatalf("Signature verification failed before refresh")
-		}
-		t.Logf("Signature verified before refresh")
+	valid, err := verifySignature(curve, pubKey, messageHash1[:], signatures[sigReceiver])
+	if err != nil {
+		t.Fatalf("Failed to verify signature before refresh: %v", err)
 	}
+	if !valid {
+		t.Fatalf("Signature verification failed before refresh")
+	}
+	t.Logf("Signature verified before refresh")
 
 	// Refresh keys
 	newKeys := make([]*ecdsamp.Key, nParties)
@@ -849,22 +823,14 @@ func TestECDSAMPSignRefreshSign(t *testing.T) {
 	t.Logf("Sign after refresh successful, signature: %s", abbrevHex(signatures[sigReceiver]))
 
 	// Verify signature after refresh
-	if ellipticCurve != nil {
-		pubKeyStd, err := parseCompressedPublicKey(ellipticCurve, newPubKey)
-		if err != nil || pubKeyStd == nil {
-			t.Fatalf("Failed to parse new public key: %v", err)
-		}
-
-		r, s, err := parseDERSignature(signatures[sigReceiver])
-		if err != nil || r == nil || s == nil {
-			t.Fatalf("Failed to parse signature after refresh: %v", err)
-		}
-
-		if !ecdsa.Verify(pubKeyStd, messageHash2[:], r, s) {
-			t.Fatalf("Signature verification failed after refresh")
-		}
-		t.Logf("Signature verified after refresh")
+	valid, err = verifySignature(curve, newPubKey, messageHash2[:], signatures[sigReceiver])
+	if err != nil {
+		t.Fatalf("Failed to verify signature after refresh: %v", err)
 	}
+	if !valid {
+		t.Fatalf("Signature verification failed after refresh")
+	}
+	t.Logf("Signature verified after refresh")
 
 	// Clean up keys
 	for _, key := range keys {

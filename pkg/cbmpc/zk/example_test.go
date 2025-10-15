@@ -3,7 +3,6 @@
 package zk_test
 
 import (
-	"crypto/elliptic"
 	"crypto/rand"
 	"fmt"
 	"log"
@@ -24,30 +23,17 @@ func Example() {
 }
 
 func runExample() error {
-	// Use P-256 curve
-	ecCurve := elliptic.P256()
-
-	// Generate a random discrete logarithm (exponent)
-	exponentBig, err := rand.Int(rand.Reader, ecCurve.Params().N)
+	// Generate a random discrete logarithm (exponent) using C++ library
+	exponent, err := curve.RandomScalar(curve.P256)
 	if err != nil {
 		return fmt.Errorf("failed to generate exponent: %w", err)
 	}
-
-	// Compute point Q = exponent*G
-	qx, qy := ecCurve.ScalarBaseMult(exponentBig.Bytes())
-	qBytes := elliptic.MarshalCompressed(ecCurve, qx, qy)
-
-	// Create scalar
-	exponent, err := curve.NewScalarFromBytes(exponentBig.Bytes())
-	if err != nil {
-		return fmt.Errorf("failed to create scalar: %w", err)
-	}
 	defer exponent.Free()
 
-	// Create curve point
-	point, err := curve.NewPointFromBytes(cbmpc.CurveP256, qBytes)
+	// Compute point Q = exponent*G using C++ library
+	point, err := curve.MulGenerator(curve.P256, exponent)
 	if err != nil {
-		return fmt.Errorf("failed to create point: %w", err)
+		return fmt.Errorf("failed to compute point: %w", err)
 	}
 	defer point.Free()
 
@@ -60,7 +46,7 @@ func runExample() error {
 
 	// Create proof that proves knowledge of exponent such that Q = exponent*G
 	// Proof is just []byte - no Close() needed, safe to copy and serialize
-	proof, err := zk.Prove(&zk.DLProveParams{
+	proof, err := zk.ProveDL(&zk.DLProveParams{
 		Point:     point,
 		Exponent:  exponent,
 		SessionID: sessionID,
@@ -76,7 +62,7 @@ func runExample() error {
 	// Can pass across goroutines, store in database, send over network, etc.
 
 	// Verify proof
-	err = zk.Verify(&zk.DLVerifyParams{
+	err = zk.VerifyDL(&zk.DLVerifyParams{
 		Proof:     proof,
 		Point:     point,
 		SessionID: sessionID,

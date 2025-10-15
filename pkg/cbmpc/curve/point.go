@@ -3,6 +3,7 @@
 package curve
 
 import (
+	"errors"
 	"runtime"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/backend"
@@ -13,6 +14,15 @@ import (
 //
 // The point is stored as a C cbmpc_ecc_point (via backend) and must be freed when no longer needed.
 // Use runtime.SetFinalizer or call Free() explicitly to release resources.
+//
+// Concurrency Safety:
+//   - Point methods are safe to call concurrently from multiple goroutines.
+//   - However, calling Free() while another goroutine is using the Point is unsafe and will cause
+//     use-after-free errors. The caller is responsible for ensuring all operations on a Point
+//     complete before calling Free().
+//   - runtime.KeepAlive in methods prevents premature garbage collection, not user-initiated Free().
+//   - Safe pattern: Use defer p.Free() immediately after creation, or ensure exclusive ownership
+//     during Free().
 type Point struct {
 	// cpoint stores the C pointer as returned from backend layer
 	// The backend layer uses C.cbmpc_ecc_point, which we store here
@@ -45,7 +55,7 @@ func NewPointFromBytes(curve Curve, bytes []byte) (*Point, error) {
 // Returns a defensive copy to prevent external modification of internal data.
 func (p *Point) Bytes() ([]byte, error) {
 	if p == nil || p.cpoint == nil {
-		return nil, nil
+		return nil, errors.New("nil point")
 	}
 
 	bytes, err := backend.ECCPointToBytes(p.cpoint)
@@ -96,4 +106,27 @@ func NewPointFromBackend(cpoint backend.ECCPoint) *Point {
 	p := &Point{cpoint: cpoint}
 	runtime.SetFinalizer(p, (*Point).Free)
 	return p
+}
+
+// Mul multiplies this point by a scalar: result = scalar * point.
+// Returns a new Point that must be freed with Free() when no longer needed.
+func (p *Point) Mul(scalar *Scalar) (*Point, error) {
+	if p == nil || p.cpoint == nil {
+		return nil, errors.New("nil point")
+	}
+	if scalar == nil {
+		return nil, errors.New("nil scalar")
+	}
+
+	resultCPoint, err := backend.ECCPointMul(p.cpoint, scalar.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	runtime.KeepAlive(p)
+	runtime.KeepAlive(scalar)
+
+	result := &Point{cpoint: resultCPoint}
+	runtime.SetFinalizer(result, (*Point).Free)
+	return result, nil
 }

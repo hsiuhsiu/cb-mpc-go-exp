@@ -21,6 +21,15 @@ import (
 //   - Use NewScalarFromString() to parse from decimal strings
 //
 // If you need to modify bytes, create a new Scalar with the modified bytes.
+//
+// Concurrency Safety:
+//   - Scalar methods are safe to call concurrently from multiple goroutines.
+//   - However, calling Free() while another goroutine is using the Scalar is unsafe and will cause
+//     use-after-free errors. The caller is responsible for ensuring all operations on a Scalar
+//     complete before calling Free().
+//   - runtime.KeepAlive in methods prevents premature garbage collection, not user-initiated Free().
+//   - Safe pattern: Use defer s.Free() immediately after creation, or ensure exclusive ownership
+//     during Free().
 type Scalar struct {
 	Bytes []byte
 }

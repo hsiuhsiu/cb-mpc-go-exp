@@ -566,6 +566,209 @@ func UCDLVerify(proof []byte, qPoint ECCPoint, sessionID []byte, aux uint64) err
 }
 
 // =====================
+// ZK Proof Operations - UC_Batch_DL
+// =====================
+
+// UCBatchDLProve creates a UC_Batch_DL proof for proving knowledge of multiple w's such that Q[i] = w[i]*G.
+// Returns the serialized proof as bytes.
+func UCBatchDLProve(qPoints []ECCPoint, wScalarsBytes [][]byte, sessionID []byte, aux uint64) ([]byte, error) {
+	if len(qPoints) == 0 {
+		return nil, errors.New("empty Q points")
+	}
+	if len(wScalarsBytes) == 0 {
+		return nil, errors.New("empty w scalars")
+	}
+	if len(qPoints) != len(wScalarsBytes) {
+		return nil, errors.New("Q points and w scalars count mismatch")
+	}
+	if len(sessionID) == 0 {
+		return nil, errors.New("empty session ID")
+	}
+
+	// Convert []ECCPoint to C array
+	cPoints := make([]C.cbmpc_ecc_point, len(qPoints))
+	for i, p := range qPoints {
+		if p == nil {
+			return nil, errors.New("nil point in Q points array")
+		}
+		cPoints[i] = p
+	}
+
+	wScalarsMem := goBytesSliceToCmems(wScalarsBytes)
+	defer freeCmems(wScalarsMem)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	var out C.cmem_t
+	rc := C.cbmpc_uc_batch_dl_prove(&cPoints[0], C.int(len(cPoints)), wScalarsMem, sessionIDMem, C.uint64_t(aux), &out)
+	if rc != 0 {
+		return nil, formatNativeErr("uc_batch_dl_prove", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// UCBatchDLVerify verifies a UC_Batch_DL proof.
+// The proof parameter should be serialized proof bytes.
+func UCBatchDLVerify(proof []byte, qPoints []ECCPoint, sessionID []byte, aux uint64) error {
+	if len(proof) == 0 {
+		return errors.New("empty proof")
+	}
+	if len(qPoints) == 0 {
+		return errors.New("empty Q points")
+	}
+	if len(sessionID) == 0 {
+		return errors.New("empty session ID")
+	}
+
+	// Convert []ECCPoint to C array
+	cPoints := make([]C.cbmpc_ecc_point, len(qPoints))
+	for i, p := range qPoints {
+		if p == nil {
+			return errors.New("nil point in Q points array")
+		}
+		cPoints[i] = p
+	}
+
+	proofMem := goBytesToCmem(proof)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	rc := C.cbmpc_uc_batch_dl_verify(proofMem, &cPoints[0], C.int(len(cPoints)), sessionIDMem, C.uint64_t(aux))
+	if rc != 0 {
+		return formatNativeErr("uc_batch_dl_verify", rc)
+	}
+
+	return nil
+}
+
+// =====================
+// ZK Proof Operations - DH
+// =====================
+
+// DHProve creates a DH proof for proving B = w*Q where A = w*G.
+// Returns the serialized proof as bytes.
+func DHProve(qPoint, aPoint, bPoint ECCPoint, w, sessionID []byte, aux uint64) ([]byte, error) {
+	if qPoint == nil {
+		return nil, errors.New("nil Q point")
+	}
+	if aPoint == nil {
+		return nil, errors.New("nil A point")
+	}
+	if bPoint == nil {
+		return nil, errors.New("nil B point")
+	}
+	if len(w) == 0 {
+		return nil, errors.New("empty witness")
+	}
+	if len(sessionID) == 0 {
+		return nil, errors.New("empty session ID")
+	}
+
+	wMem := goBytesToCmem(w)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	var out C.cmem_t
+	rc := C.cbmpc_dh_prove(qPoint, aPoint, bPoint, wMem, sessionIDMem, C.uint64_t(aux), &out)
+	if rc != 0 {
+		return nil, formatNativeErr("dh_prove", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// DHVerify verifies a DH proof.
+// The proof parameter should be serialized proof bytes.
+func DHVerify(proof []byte, qPoint, aPoint, bPoint ECCPoint, sessionID []byte, aux uint64) error {
+	if len(proof) == 0 {
+		return errors.New("empty proof")
+	}
+	if qPoint == nil {
+		return errors.New("nil Q point")
+	}
+	if aPoint == nil {
+		return errors.New("nil A point")
+	}
+	if bPoint == nil {
+		return errors.New("nil B point")
+	}
+	if len(sessionID) == 0 {
+		return errors.New("empty session ID")
+	}
+
+	proofMem := goBytesToCmem(proof)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	rc := C.cbmpc_dh_verify(proofMem, qPoint, aPoint, bPoint, sessionIDMem, C.uint64_t(aux))
+	if rc != 0 {
+		return formatNativeErr("dh_verify", rc)
+	}
+
+	return nil
+}
+
+// =====================
+// ZK Proof Operations - UC_ElGamalCom
+// =====================
+
+// UCElGamalComProve creates a UC_ElGamalCom proof for proving knowledge of x and r such that UV = (x*G, r*G + x*Q).
+// Returns the serialized proof as bytes.
+func UCElGamalComProve(qPoint ECCPoint, uvCommitment ECElGamalCommitment, x, r, sessionID []byte, aux uint64) ([]byte, error) {
+	if qPoint == nil {
+		return nil, errors.New("nil Q point")
+	}
+	if uvCommitment == nil {
+		return nil, errors.New("nil UV commitment")
+	}
+	if len(x) == 0 {
+		return nil, errors.New("empty x witness")
+	}
+	if len(r) == 0 {
+		return nil, errors.New("empty r witness")
+	}
+	if len(sessionID) == 0 {
+		return nil, errors.New("empty session ID")
+	}
+
+	xMem := goBytesToCmem(x)
+	rMem := goBytesToCmem(r)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	var out C.cmem_t
+	rc := C.cbmpc_uc_elgamal_com_prove(qPoint, uvCommitment, xMem, rMem, sessionIDMem, C.uint64_t(aux), &out)
+	if rc != 0 {
+		return nil, formatNativeErr("uc_elgamal_com_prove", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// UCElGamalComVerify verifies a UC_ElGamalCom proof.
+// The proof parameter should be serialized proof bytes.
+func UCElGamalComVerify(proof []byte, qPoint ECCPoint, uvCommitment ECElGamalCommitment, sessionID []byte, aux uint64) error {
+	if len(proof) == 0 {
+		return errors.New("empty proof")
+	}
+	if qPoint == nil {
+		return errors.New("nil Q point")
+	}
+	if uvCommitment == nil {
+		return errors.New("nil UV commitment")
+	}
+	if len(sessionID) == 0 {
+		return errors.New("empty session ID")
+	}
+
+	proofMem := goBytesToCmem(proof)
+	sessionIDMem := goBytesToCmem(sessionID)
+
+	rc := C.cbmpc_uc_elgamal_com_verify(proofMem, qPoint, uvCommitment, sessionIDMem, C.uint64_t(aux))
+	if rc != 0 {
+		return formatNativeErr("uc_elgamal_com_verify", rc)
+	}
+
+	return nil
+}
+
+// =====================
 // ECDSA MP Protocols
 // =====================
 
@@ -837,4 +1040,67 @@ func SchnorrMPSignBatch(cj unsafe.Pointer, key ECDSAMPKey, msgs [][]byte, sigRec
 	}
 
 	return cmemsToGoByteSlices(sigsOut), nil
+}
+
+// ============================================================
+// Curve Operations
+// ============================================================
+
+// CurveRandomScalar generates a random scalar for the given curve.
+// Returns scalar bytes in big-endian format.
+func CurveRandomScalar(curveNID int) ([]byte, error) {
+	var scalarOut C.cmem_t
+	rc := C.cbmpc_curve_random_scalar(C.int(curveNID), &scalarOut)
+	if rc != 0 {
+		return nil, formatNativeErr("curve_random_scalar", rc)
+	}
+	return cmemToGoBytes(scalarOut), nil
+}
+
+// CurveGetGenerator returns the generator point for the given curve.
+// The returned ECCPoint must be freed by the caller.
+func CurveGetGenerator(curveNID int) (ECCPoint, error) {
+	var generatorOut C.cbmpc_ecc_point
+	rc := C.cbmpc_curve_get_generator(C.int(curveNID), &generatorOut)
+	if rc != 0 {
+		return nil, formatNativeErr("curve_get_generator", rc)
+	}
+	return ECCPoint(generatorOut), nil
+}
+
+// CurveMulGenerator multiplies the generator point by a scalar: result = scalar * G.
+// scalarBytes should be in big-endian format.
+// The returned ECCPoint must be freed by the caller.
+func CurveMulGenerator(curveNID int, scalarBytes []byte) (ECCPoint, error) {
+	if len(scalarBytes) == 0 {
+		return nil, errors.New("empty scalar")
+	}
+
+	scalarMem := goBytesToCmem(scalarBytes)
+	var pointOut C.cbmpc_ecc_point
+	rc := C.cbmpc_curve_mul_generator(C.int(curveNID), scalarMem, &pointOut)
+	if rc != 0 {
+		return nil, formatNativeErr("curve_mul_generator", rc)
+	}
+	return ECCPoint(pointOut), nil
+}
+
+// ECCPointMul multiplies a point by a scalar: result = scalar * point.
+// scalarBytes should be in big-endian format.
+// The returned ECCPoint must be freed by the caller.
+func ECCPointMul(point ECCPoint, scalarBytes []byte) (ECCPoint, error) {
+	if point == nil {
+		return nil, errors.New("nil point")
+	}
+	if len(scalarBytes) == 0 {
+		return nil, errors.New("empty scalar")
+	}
+
+	scalarMem := goBytesToCmem(scalarBytes)
+	var resultOut C.cbmpc_ecc_point
+	rc := C.cbmpc_ecc_point_mul(point, scalarMem, &resultOut)
+	if rc != 0 {
+		return nil, formatNativeErr("ecc_point_mul", rc)
+	}
+	return ECCPoint(resultOut), nil
 }

@@ -140,6 +140,35 @@ func ECCPointGetCurve(ECCPoint) Curve {
 	return Unknown
 }
 
+// ECElGamalCommitment is a stub type for non-CGO builds
+type ECElGamalCommitment = unsafe.Pointer
+
+func ECElGamalCommitmentNew(ECCPoint, ECCPoint) (ECElGamalCommitment, error) {
+	return nil, ErrNotBuilt
+}
+
+func ECElGamalCommitmentToBytes(ECElGamalCommitment) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func ECElGamalCommitmentFromBytes(int, []byte) (ECElGamalCommitment, error) {
+	return nil, ErrNotBuilt
+}
+
+func ECElGamalCommitmentGetL(ECElGamalCommitment) (ECCPoint, error) {
+	return nil, ErrNotBuilt
+}
+
+func ECElGamalCommitmentGetR(ECElGamalCommitment) (ECCPoint, error) {
+	return nil, ErrNotBuilt
+}
+
+func ECElGamalCommitmentFree(ECElGamalCommitment) {}
+
+func ECElGamalCommitmentMake(ECCPoint, []byte, []byte) (ECElGamalCommitment, error) {
+	return nil, ErrNotBuilt
+}
+
 func PVEGetQPoint([]byte) (ECCPoint, error) {
 	return nil, ErrNotBuilt
 }
@@ -161,6 +190,30 @@ func UCDLProve(ECCPoint, []byte, []byte, uint64) ([]byte, error) {
 }
 
 func UCDLVerify([]byte, ECCPoint, []byte, uint64) error {
+	return ErrNotBuilt
+}
+
+func UCBatchDLProve([]ECCPoint, [][]byte, []byte, uint64) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func UCBatchDLVerify([]byte, []ECCPoint, []byte, uint64) error {
+	return ErrNotBuilt
+}
+
+func DHProve(ECCPoint, ECCPoint, ECCPoint, []byte, []byte, uint64) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func DHVerify([]byte, ECCPoint, ECCPoint, ECCPoint, []byte, uint64) error {
+	return ErrNotBuilt
+}
+
+func UCElGamalComProve(ECCPoint, ECElGamalCommitment, []byte, []byte, []byte, uint64) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func UCElGamalComVerify([]byte, ECCPoint, ECElGamalCommitment, []byte, uint64) error {
 	return ErrNotBuilt
 }
 
@@ -243,5 +296,22 @@ func SchnorrMPSign(unsafe.Pointer, ECDSAMPKey, []byte, int, SchnorrVariant) ([]b
 }
 
 func SchnorrMPSignBatch(unsafe.Pointer, ECDSAMPKey, [][]byte, int, SchnorrVariant) ([][]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+// Curve operations stubs
+func CurveRandomScalar(int) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func CurveGetGenerator(int) (ECCPoint, error) {
+	return nil, ErrNotBuilt
+}
+
+func CurveMulGenerator(int, []byte) (ECCPoint, error) {
+	return nil, ErrNotBuilt
+}
+
+func ECCPointMul(ECCPoint, []byte) (ECCPoint, error) {
 	return nil, ErrNotBuilt
 }

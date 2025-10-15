@@ -473,6 +473,124 @@ func ECCPointGetCurve(point ECCPoint) Curve {
 }
 
 // =====================
+// EC ElGamal Commitment bridging
+// =====================
+
+// ECElGamalCommitment is a type alias for C.cbmpc_ec_elgamal_commitment
+type ECElGamalCommitment = C.cbmpc_ec_elgamal_commitment
+
+// ECElGamalCommitmentNew creates an EC ElGamal commitment from two points.
+// Returns a commitment that must be freed with ECElGamalCommitmentFree.
+func ECElGamalCommitmentNew(pointL, pointR ECCPoint) (ECElGamalCommitment, error) {
+	if pointL == nil || pointR == nil {
+		return nil, errors.New("nil point")
+	}
+
+	var commitment ECElGamalCommitment
+	rc := C.cbmpc_ec_elgamal_commitment_new(pointL, pointR, &commitment)
+	if rc != 0 {
+		return nil, errors.New("ec_elgamal_commitment_new failed")
+	}
+
+	return commitment, nil
+}
+
+// ECElGamalCommitmentToBytes serializes an EC ElGamal commitment to bytes.
+func ECElGamalCommitmentToBytes(commitment ECElGamalCommitment) ([]byte, error) {
+	if commitment == nil {
+		return nil, errors.New("nil commitment")
+	}
+
+	var out C.cmem_t
+	rc := C.cbmpc_ec_elgamal_commitment_to_bytes(commitment, &out)
+	if rc != 0 {
+		return nil, errors.New("ec_elgamal_commitment_to_bytes failed")
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// ECElGamalCommitmentFromBytes creates an EC ElGamal commitment from bytes.
+// Returns a commitment that must be freed with ECElGamalCommitmentFree.
+func ECElGamalCommitmentFromBytes(curveNID int, bytes []byte) (ECElGamalCommitment, error) {
+	if len(bytes) == 0 {
+		return nil, errors.New("empty bytes")
+	}
+
+	bytesMem := goBytesToCmem(bytes)
+
+	var commitment ECElGamalCommitment
+	rc := C.cbmpc_ec_elgamal_commitment_from_bytes(C.int(curveNID), bytesMem, &commitment)
+	if rc != 0 {
+		return nil, errors.New("ec_elgamal_commitment_from_bytes failed")
+	}
+
+	return commitment, nil
+}
+
+// ECElGamalCommitmentGetL gets the L point from a commitment.
+// Returns a NEW point that must be freed with ECCPointFree.
+func ECElGamalCommitmentGetL(commitment ECElGamalCommitment) (ECCPoint, error) {
+	if commitment == nil {
+		return nil, errors.New("nil commitment")
+	}
+
+	var point ECCPoint
+	rc := C.cbmpc_ec_elgamal_commitment_get_L(commitment, &point)
+	if rc != 0 {
+		return nil, errors.New("ec_elgamal_commitment_get_L failed")
+	}
+
+	return point, nil
+}
+
+// ECElGamalCommitmentGetR gets the R point from a commitment.
+// Returns a NEW point that must be freed with ECCPointFree.
+func ECElGamalCommitmentGetR(commitment ECElGamalCommitment) (ECCPoint, error) {
+	if commitment == nil {
+		return nil, errors.New("nil commitment")
+	}
+
+	var point ECCPoint
+	rc := C.cbmpc_ec_elgamal_commitment_get_R(commitment, &point)
+	if rc != 0 {
+		return nil, errors.New("ec_elgamal_commitment_get_R failed")
+	}
+
+	return point, nil
+}
+
+// ECElGamalCommitmentFree frees an EC ElGamal commitment.
+func ECElGamalCommitmentFree(commitment ECElGamalCommitment) {
+	if commitment != nil {
+		C.cbmpc_ec_elgamal_commitment_free(commitment)
+	}
+}
+
+// ECElGamalCommitmentMake creates an EC ElGamal commitment using make_commitment.
+// Creates UV = (r*G, m*P + r*G) where P is the public key point.
+// Returns a commitment that must be freed with ECElGamalCommitmentFree.
+func ECElGamalCommitmentMake(p ECCPoint, m, r []byte) (ECElGamalCommitment, error) {
+	if p == nil {
+		return nil, errors.New("nil point P")
+	}
+	if len(m) == 0 || len(r) == 0 {
+		return nil, errors.New("empty scalar")
+	}
+
+	mMem := goBytesToCmem(m)
+	rMem := goBytesToCmem(r)
+
+	var commitment ECElGamalCommitment
+	rc := C.cbmpc_ec_elgamal_commitment_make(p, mMem, rMem, &commitment)
+	if rc != 0 {
+		return nil, formatNativeErr("ec_elgamal_commitment_make", rc)
+	}
+
+	return commitment, nil
+}
+
+// =====================
 // Generic handle registry for opaque Go objects
 // =====================
 
