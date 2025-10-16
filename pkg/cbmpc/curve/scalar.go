@@ -169,6 +169,40 @@ func (s *Scalar) Free() {
 	runtime.SetFinalizer(s, nil)
 }
 
+// Equal compares two scalars for numerical equality.
+// Handles scalars with different byte representations (e.g., with/without leading zeros).
+// Returns true if the scalars represent the same numeric value.
+func (s *Scalar) Equal(other *Scalar) bool {
+	if s == nil && other == nil {
+		return true
+	}
+	if s == nil || other == nil {
+		return false
+	}
+	if len(s.Bytes) == 0 && len(other.Bytes) == 0 {
+		return true
+	}
+	if len(s.Bytes) == 0 || len(other.Bytes) == 0 {
+		return false
+	}
+
+	// Fast path: if bytes are identical, they're equal
+	if len(s.Bytes) == len(other.Bytes) {
+		for i := range s.Bytes {
+			if s.Bytes[i] != other.Bytes[i] {
+				return false
+			}
+		}
+		return true
+	}
+
+	// Slow path: compare numerically using big.Int
+	// This handles cases where one scalar has leading zeros stripped
+	a := new(big.Int).SetBytes(s.Bytes)
+	b := new(big.Int).SetBytes(other.Bytes)
+	return a.Cmp(b) == 0
+}
+
 // Add adds two scalars modulo curve order: result = (this + other) mod q.
 // Returns a new Scalar that must be freed with Free() when no longer needed.
 func (s *Scalar) Add(other *Scalar, curve Curve) (*Scalar, error) {

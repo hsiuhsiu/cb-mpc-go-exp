@@ -169,9 +169,6 @@ type DKGResult struct {
 //
 // Context behavior: ctx is ignored; use cbmpc.NewJobMPWithContext to control cancellation.
 //
-// Note: Currently shares the same C++ DKG implementation as ECDSA MP,
-// but this is an implementation detail hidden from the Go API.
-//
 // See cb-mpc/src/cbmpc/protocol/schnorr_mp.h for protocol details.
 func DKG(_ context.Context, j *cbmpc.JobMP, params *DKGParams) (*DKGResult, error) {
 	if j == nil {
@@ -191,8 +188,8 @@ func DKG(_ context.Context, j *cbmpc.JobMP, params *DKGParams) (*DKGResult, erro
 		return nil, err
 	}
 
-	// Currently uses ECDSA MP DKG since Schnorr MP uses the same key type
-	keyPtr, sid, err := backend.ECDSAMP_DKG(ptr, nid)
+	// Use Schnorr MP specific DKG wrapper
+	keyPtr, sid, err := backend.SchnorrMPDKG(ptr, nid)
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
@@ -227,9 +224,6 @@ type RefreshResult struct {
 //
 // Context behavior: ctx is ignored; use cbmpc.NewJobMPWithContext to control cancellation.
 //
-// Note: Currently shares the same C++ refresh implementation as ECDSA MP,
-// but this is an implementation detail hidden from the Go API.
-//
 // See cb-mpc/src/cbmpc/protocol/schnorr_mp.h for protocol details.
 func Refresh(_ context.Context, j *cbmpc.JobMP, params *RefreshParams) (*RefreshResult, error) {
 	if j == nil {
@@ -247,8 +241,8 @@ func Refresh(_ context.Context, j *cbmpc.JobMP, params *RefreshParams) (*Refresh
 		return nil, err
 	}
 
-	// Currently uses ECDSA MP refresh since Schnorr MP uses the same key type
-	newKeyCkey, newSid, err := backend.ECDSAMPRefresh(ptr, params.Key.ckey, params.SessionID.Bytes())
+	// Use Schnorr MP specific refresh wrapper
+	newKeyCkey, newSid, err := backend.SchnorrMPRefresh(ptr, params.Key.ckey, params.SessionID.Bytes())
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}

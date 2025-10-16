@@ -150,6 +150,103 @@ int cbmpc_pve_get_Q_point(cmem_t pve_ct, cbmpc_ecc_point *Q_point_out);
 // Verify a PVE ciphertext against a public key Q (as ecc_point_t) and label.
 int cbmpc_pve_verify_with_point(cmem_t ek_bytes, cmem_t pve_ct, cbmpc_ecc_point Q_point, cmem_t label);
 
+// PVE Batch operations - encrypt/verify/decrypt multiple scalars in a single operation
+// Encrypt multiple scalars x[] with respect to a curve, producing a batch PVE ciphertext.
+// x_scalars: cmems_t containing serialized scalars (one per value to encrypt).
+int cbmpc_pve_batch_encrypt(cmem_t ek_bytes, cmem_t label, int curve_nid, cmems_t x_scalars, cmem_t *pve_ct_out);
+
+// Verify a batch PVE ciphertext against multiple public key points Q[] and label.
+// Q_points: array of ECC point handles (cbmpc_ecc_point*), Q_count: number of points.
+int cbmpc_pve_batch_verify(cmem_t ek_bytes, cmem_t pve_ct, cbmpc_ecc_point *Q_points, int Q_count, cmem_t label);
+
+// Decrypt a batch PVE ciphertext to recover multiple scalars x[].
+// Returns cmems_t containing the decrypted scalar bytes.
+int cbmpc_pve_batch_decrypt(const void *dk_handle, cmem_t ek_bytes, cmem_t pve_ct, cmem_t label, int curve_nid, cmems_t *x_scalars_out);
+
+// Access Control (AC) builder - opaque node handles for constructing AC trees
+// Opaque pointer to ac_owned_t node (C++ type).
+typedef void* cbmpc_ac_node;
+
+// Create a leaf node with the given party name.
+// Returns a new node that must be freed with cbmpc_ac_node_free.
+int cbmpc_ac_leaf(cmem_t name, cbmpc_ac_node *node_out);
+
+// Create an AND node with the given children.
+// Takes ownership of children nodes - caller should NOT free them after this call.
+// Returns a new node that must be freed with cbmpc_ac_node_free.
+int cbmpc_ac_and(cbmpc_ac_node *children, int count, cbmpc_ac_node *node_out);
+
+// Create an OR node with the given children.
+// Takes ownership of children nodes - caller should NOT free them after this call.
+// Returns a new node that must be freed with cbmpc_ac_node_free.
+int cbmpc_ac_or(cbmpc_ac_node *children, int count, cbmpc_ac_node *node_out);
+
+// Create a Threshold node requiring k of n children.
+// Takes ownership of children nodes - caller should NOT free them after this call.
+// Returns a new node that must be freed with cbmpc_ac_node_free.
+int cbmpc_ac_threshold(int k, cbmpc_ac_node *children, int count, cbmpc_ac_node *node_out);
+
+// Serialize an AC node tree to bytes.
+// Returns serialized ac_owned_t bytes.
+int cbmpc_ac_serialize(cbmpc_ac_node node, cmem_t *bytes_out);
+
+// Convert an AC to a canonical string representation (for debugging).
+// ac_bytes: serialized AC bytes.
+int cbmpc_ac_to_string(cmem_t ac_bytes, cmem_t *str_out);
+
+// Get list of leaf paths from an AC structure.
+// ac_bytes: serialized AC bytes.
+// Returns cmems_t containing leaf path strings (UTF-8).
+int cbmpc_ac_list_leaf_paths(cmem_t ac_bytes, cmems_t *paths_out);
+
+// Free an AC node (and its entire subtree if it's a parent node).
+void cbmpc_ac_node_free(cbmpc_ac_node node);
+
+// PVE-AC operations - Publicly Verifiable Encryption with Access Control
+// These operations use serialized AC structures and path->key mappings.
+
+// Encrypt scalars with AC policy.
+// ac_bytes: serialized AC structure
+// paths: cmems_t containing party path names (UTF-8 strings)
+// ek_bytes: cmems_t containing encryption keys corresponding to paths (same order)
+// label: encryption label
+// curve_nid: elliptic curve NID
+// x_scalars: cmems_t containing scalars to encrypt
+// Returns serialized ACCiphertext bytes.
+int cbmpc_pve_ac_encrypt(cmem_t ac_bytes, cmems_t paths, cmems_t ek_bytes, cmem_t label, int curve_nid, cmems_t x_scalars, cmem_t *pve_ct_out);
+
+// Verify an AC ciphertext against public key points.
+// ac_bytes: serialized AC structure
+// paths: cmems_t containing party path names
+// ek_bytes: cmems_t containing encryption keys corresponding to paths
+// pve_ct: serialized ACCiphertext
+// Q_points: array of ECC point handles (cbmpc_ecc_point*)
+// Q_count: number of points
+// label: encryption label (must match encryption)
+int cbmpc_pve_ac_verify(cmem_t ac_bytes, cmems_t paths, cmems_t ek_bytes, cmem_t pve_ct, cbmpc_ecc_point *Q_points, int Q_count, cmem_t label);
+
+// Party decrypts one row to produce a share.
+// ac_bytes: serialized AC structure
+// row_index: which scalar to decrypt (0-based)
+// path: party path name (UTF-8 string)
+// dk_handle: opaque pointer to the decryption key
+// pve_ct: serialized ACCiphertext
+// label: encryption label (must match encryption)
+// Returns scalar share bytes.
+int cbmpc_pve_ac_party_decrypt_row(cmem_t ac_bytes, int row_index, cmem_t path, const void *dk_handle, cmem_t pve_ct, cmem_t label, cmem_t *share_out);
+
+// Aggregate quorum shares to restore the original scalars for a row.
+// ac_bytes: serialized AC structure
+// row_index: which scalar to restore (0-based)
+// label: encryption label (must match encryption)
+// quorum_paths: cmems_t containing party paths that form a quorum
+// quorum_shares: cmems_t containing corresponding scalar shares
+// pve_ct: serialized ACCiphertext
+// all_paths: cmems_t containing all party paths (optional, for verification)
+// all_eks: cmems_t containing all encryption keys (optional, for verification)
+// Returns cmems_t containing the restored scalar bytes.
+int cbmpc_pve_ac_aggregate_to_restore_row(cmem_t ac_bytes, int row_index, cmem_t label, cmems_t quorum_paths, cmems_t quorum_shares, cmem_t pve_ct, cmems_t all_paths, cmems_t all_eks, cmems_t *x_out);
+
 // KEM context (thread-local) management for FFI policy
 // These APIs allow Go to set a per-thread opaque handle that the Go FFI
 // callbacks can retrieve to locate the correct KEM implementation.
@@ -195,7 +292,16 @@ int cbmpc_schnorr2p_sign_batch(cbmpc_job2p *j, const cbmpc_schnorr2p_key *key, c
 
 // Schnorr MP protocols
 // Schnorr MP uses the same key type as ECDSA MP (eckey::key_share_mp_t).
-// Use cbmpc_ecdsamp_dkg and cbmpc_ecdsamp_refresh for key management.
+
+// Perform multi-party Schnorr distributed key generation.
+// Uses coinbase::mpc::schnorrmp::dkg wrapper.
+int cbmpc_schnorrmp_dkg(cbmpc_jobmp *j, int curve_nid, cbmpc_ecdsamp_key **key_out, cmem_t *sid_out);
+
+// Refresh a Schnorr MP key (re-randomize shares while preserving public key).
+// Uses coinbase::mpc::schnorrmp::refresh wrapper.
+// sid_in: input session ID (can be empty to generate new one)
+// sid_out: output session ID (updated or newly generated)
+int cbmpc_schnorrmp_refresh(cbmpc_jobmp *j, cmem_t sid_in, const cbmpc_ecdsamp_key *key_in, cmem_t *sid_out, cbmpc_ecdsamp_key **key_out);
 
 // Sign a message with a Schnorr MP key.
 // Only the party with party_idx == sig_receiver will receive the final signature.

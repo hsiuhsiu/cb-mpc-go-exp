@@ -19,6 +19,8 @@
 #include "cbmpc/protocol/ecdsa_mp.h"
 #include "cbmpc/protocol/mpc_job.h"
 #include "cbmpc/protocol/pve.h"
+#include "cbmpc/protocol/pve_ac.h"
+#include "cbmpc/protocol/pve_batch.h"
 #include "cbmpc/protocol/pve_base.h"
 #include "cbmpc/protocol/schnorr_2p.h"
 #include "cbmpc/protocol/schnorr_mp.h"
@@ -604,6 +606,136 @@ int cbmpc_pve_get_label(cmem_t pve_ct, cmem_t *label_out) {
   // Get label
   const auto& label = pve.get_Label();
   *label_out = alloc_and_copy(label.data(), static_cast<size_t>(label.size()));
+
+  return 0;
+}
+
+// PVE Batch Encrypt
+int cbmpc_pve_batch_encrypt(cmem_t ek_bytes, cmem_t label, int curve_nid, cmems_t x_scalars, cmem_t *pve_ct_out) {
+  if (!ek_bytes.data || ek_bytes.size <= 0 || !label.data || label.size <= 0 ||
+      !x_scalars.data || x_scalars.count <= 0 || !x_scalars.sizes || !pve_ct_out) {
+    return E_BADARG;
+  }
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  // Convert cmems_t to std::vector<bn_t>
+  std::vector<coinbase::crypto::bn_t> x_vec;
+  x_vec.reserve(x_scalars.count);
+  size_t offset = 0;
+  for (int i = 0; i < x_scalars.count; ++i) {
+    int size = x_scalars.sizes[i];
+    if (size <= 0) return E_BADARG;
+
+    // Deserialize scalar x from bytes
+    coinbase::crypto::bn_t x = coinbase::crypto::bn_t::from_bin(mem_t(x_scalars.data + offset, size));
+    x_vec.push_back(std::move(x));
+    offset += size;
+  }
+
+  // Create batch PVE ciphertext using FFI KEM policy
+  coinbase::mpc::ec_pve_batch_t pve(x_scalars.count, coinbase::mpc::kem_pve_base_pke<coinbase::crypto::kem_policy_ffi_t>());
+
+  // Construct ffi_kem_ek_t from the EK bytes
+  coinbase::crypto::ffi_kem_ek_t ek(ek_bytes.data, static_cast<size_t>(ek_bytes.size));
+
+  pve.encrypt(&ek, mem_t(label.data, label.size), curve, x_vec);
+
+  // Serialize the batch PVE ciphertext
+  buf_t pve_serialized = coinbase::ser(pve);
+  *pve_ct_out = alloc_and_copy(pve_serialized.data(), static_cast<size_t>(pve_serialized.size()));
+
+  return 0;
+}
+
+// PVE Batch Verify
+int cbmpc_pve_batch_verify(cmem_t ek_bytes, cmem_t pve_ct, cbmpc_ecc_point *Q_points, int Q_count, cmem_t label) {
+  if (!ek_bytes.data || ek_bytes.size <= 0 || !pve_ct.data || pve_ct.size <= 0 ||
+      !Q_points || Q_count <= 0 || !label.data || label.size <= 0) {
+    return E_BADARG;
+  }
+
+  // Deserialize batch PVE ciphertext
+  coinbase::mpc::ec_pve_batch_t pve(Q_count, coinbase::mpc::kem_pve_base_pke<coinbase::crypto::kem_policy_ffi_t>());
+  error_t rv = coinbase::deser(mem_t(pve_ct.data, pve_ct.size), pve);
+  if (rv != SUCCESS) return rv;
+
+  // Convert Q_points from cbmpc_ecc_point* to std::vector<ecc_point_t>
+  std::vector<coinbase::crypto::ecc_point_t> Q_vec;
+  Q_vec.reserve(Q_count);
+  for (int i = 0; i < Q_count; ++i) {
+    if (!Q_points[i]) return E_BADARG;
+    const auto* point = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(Q_points[i]);
+    Q_vec.push_back(*point);
+  }
+
+  // Construct ffi_kem_ek_t from the EK bytes
+  coinbase::crypto::ffi_kem_ek_t ek(ek_bytes.data, static_cast<size_t>(ek_bytes.size));
+
+  // Verify
+  rv = pve.verify(&ek, Q_vec, mem_t(label.data, label.size));
+  return rv;
+}
+
+// Helper function to extract batch count from serialized PVE batch ciphertext
+// The serialized format starts with the Q vector, which includes its count
+static int extract_batch_count_from_pve_ct(mem_t pve_ct) {
+  // Create a temporary converter for reading
+  coinbase::converter_t reader(pve_ct);
+
+  // The first thing serialized is the Q vector
+  // Vector serialization uses convert_len for the count (uint32_t)
+  uint32_t count = 0;
+  reader.convert_len(count);
+
+  if (reader.is_error() || count > 10000) {
+    return -1;  // Invalid count or error
+  }
+
+  return static_cast<int>(count);
+}
+
+// PVE Batch Decrypt
+int cbmpc_pve_batch_decrypt(const void *dk_handle, cmem_t ek_bytes, cmem_t pve_ct, cmem_t label, int curve_nid, cmems_t *x_scalars_out) {
+  if (!dk_handle || !ek_bytes.data || ek_bytes.size <= 0 || !pve_ct.data || pve_ct.size <= 0 ||
+      !label.data || label.size <= 0 || !x_scalars_out) {
+    return E_BADARG;
+  }
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  // Extract batch count from serialized ciphertext
+  int batch_count = extract_batch_count_from_pve_ct(mem_t(pve_ct.data, pve_ct.size));
+  if (batch_count < 0) {
+    return E_FORMAT;
+  }
+
+  // Construct batch PVE with the correct count
+  coinbase::mpc::ec_pve_batch_t pve(batch_count, coinbase::mpc::kem_pve_base_pke<coinbase::crypto::kem_policy_ffi_t>());
+  error_t rv = coinbase::deser(mem_t(pve_ct.data, pve_ct.size), pve);
+  if (rv != SUCCESS) return rv;
+
+  // The dk_handle is an opaque Go pointer that will be passed to FFI callbacks
+  coinbase::crypto::ffi_kem_dk_t dk(const_cast<void*>(dk_handle));
+
+  // Construct ffi_kem_ek_t from the EK bytes
+  coinbase::crypto::ffi_kem_ek_t ek(ek_bytes.data, static_cast<size_t>(ek_bytes.size));
+
+  // Decrypt
+  std::vector<coinbase::crypto::bn_t> x_vec;
+  rv = pve.decrypt(&dk, &ek, mem_t(label.data, label.size), curve, x_vec);
+  if (rv != SUCCESS) return rv;
+
+  // Serialize scalars to bytes and return as cmems_t
+  std::vector<buf_t> x_bytes_vec;
+  x_bytes_vec.reserve(x_vec.size());
+  for (const auto& x : x_vec) {
+    x_bytes_vec.push_back(x.to_bin());
+  }
+
+  *x_scalars_out = alloc_and_copy_vector(x_bytes_vec);
 
   return 0;
 }
@@ -1406,6 +1538,57 @@ static inline coinbase::mpc::schnorrmp::variant_e int_to_schnorrmp_variant(int v
   }
 }
 
+// Schnorr MP DKG
+int cbmpc_schnorrmp_dkg(cbmpc_jobmp *j, int curve_nid, cbmpc_ecdsamp_key **key_out, cmem_t *sid_out) {
+  auto wrapper = reinterpret_cast<go_jobmp *>(j);
+  if (!wrapper || !wrapper->job || !key_out || !sid_out) return E_BADARG;
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  auto key = std::make_unique<coinbase::mpc::schnorrmp::key_t>();
+  buf_t sid;
+  error_t rv = coinbase::mpc::schnorrmp::dkg(*wrapper->job, curve, *key, sid);
+  if (rv != SUCCESS) return rv;
+
+  // Copy outputs
+  *sid_out = alloc_and_copy(sid.data(), static_cast<size_t>(sid.size()));
+  if (!sid_out->data && sid.size() > 0) return E_BADARG;
+
+  auto key_wrapper = new cbmpc_ecdsamp_key;
+  key_wrapper->opaque = key.release();
+  *key_out = key_wrapper;
+  return 0;
+}
+
+// Schnorr MP Refresh
+int cbmpc_schnorrmp_refresh(cbmpc_jobmp *j, cmem_t sid_in, const cbmpc_ecdsamp_key *key_in, cmem_t *sid_out, cbmpc_ecdsamp_key **key_out) {
+  auto wrapper = reinterpret_cast<go_jobmp *>(j);
+  if (!wrapper || !wrapper->job || !key_in || !key_in->opaque || !sid_out || !key_out) return E_BADARG;
+
+  // Copy the old key so we can pass a mutable reference to refresh
+  auto old_key_copy = *static_cast<const coinbase::mpc::schnorrmp::key_t *>(key_in->opaque);
+
+  // Create mutable sid buffer (can be empty to generate new one)
+  buf_t sid;
+  if (sid_in.data && sid_in.size > 0) {
+    sid = buf_t(sid_in.data, sid_in.size);
+  }
+
+  auto new_key = std::make_unique<coinbase::mpc::schnorrmp::key_t>();
+  error_t rv = coinbase::mpc::schnorrmp::refresh(*wrapper->job, sid, old_key_copy, *new_key);
+  if (rv != SUCCESS) return rv;
+
+  // Copy outputs
+  *sid_out = alloc_and_copy(sid.data(), static_cast<size_t>(sid.size()));
+  if (!sid_out->data && sid.size() > 0) return E_BADARG;
+
+  auto key_wrapper = new cbmpc_ecdsamp_key;
+  key_wrapper->opaque = new_key.release();
+  *key_out = key_wrapper;
+  return 0;
+}
+
 // Schnorr MP Sign
 int cbmpc_schnorrmp_sign(cbmpc_jobmp *j, const cbmpc_ecdsamp_key *key, cmem_t msg, int sig_receiver, int variant, cmem_t *sig_out) {
   auto wrapper = reinterpret_cast<go_jobmp *>(j);
@@ -1913,6 +2096,514 @@ int cbmpc_paillier_range_exp_slack_verify(cmem_t proof_bytes, cbmpc_paillier pai
   // Verify (public key only is sufficient for verification)
   rv = proof.verify(*p, q_mod, c_bn, mem_t(session_id.data, session_id.size), aux);
   return rv;
+}
+
+// =====================
+// Access Control (AC) Builder Operations
+// =====================
+
+// Create a leaf node
+int cbmpc_ac_leaf(cmem_t name, cbmpc_ac_node *node_out) {
+  if (!name.data || name.size <= 0 || !node_out) {
+    return E_BADARG;
+  }
+
+  // Create leaf node with name
+  std::string name_str(reinterpret_cast<const char*>(name.data), static_cast<size_t>(name.size));
+  auto* node = new coinbase::crypto::ss::node_t(
+    coinbase::crypto::ss::node_e::LEAF,
+    name_str
+  );
+
+  *node_out = reinterpret_cast<cbmpc_ac_node>(node);
+  return 0;
+}
+
+// Create an AND node
+int cbmpc_ac_and(cbmpc_ac_node *children, int count, cbmpc_ac_node *node_out) {
+  if (!children || count <= 0 || !node_out) {
+    return E_BADARG;
+  }
+
+  // Create AND node with auto-generated name and threshold 0
+  // Name will be set to empty later if this becomes the root
+  static int and_counter = 0;
+  std::string name = "and" + std::to_string(++and_counter);
+
+  auto* node = new coinbase::crypto::ss::node_t(
+    coinbase::crypto::ss::node_e::AND,
+    name,
+    0
+  );
+
+  // Add children
+  for (int i = 0; i < count; ++i) {
+    if (!children[i]) {
+      delete node;
+      return E_BADARG;
+    }
+    auto* child = reinterpret_cast<coinbase::crypto::ss::node_t*>(children[i]);
+    child->parent = node;
+    node->children.push_back(child);
+  }
+
+  *node_out = reinterpret_cast<cbmpc_ac_node>(node);
+  return 0;
+}
+
+// Create an OR node
+int cbmpc_ac_or(cbmpc_ac_node *children, int count, cbmpc_ac_node *node_out) {
+  if (!children || count <= 0 || !node_out) {
+    return E_BADARG;
+  }
+
+  // Create OR node with auto-generated name and threshold 0
+  static int or_counter = 0;
+  std::string name = "or" + std::to_string(++or_counter);
+
+  auto* node = new coinbase::crypto::ss::node_t(
+    coinbase::crypto::ss::node_e::OR,
+    name,
+    0
+  );
+
+  // Add children
+  for (int i = 0; i < count; ++i) {
+    if (!children[i]) {
+      delete node;
+      return E_BADARG;
+    }
+    auto* child = reinterpret_cast<coinbase::crypto::ss::node_t*>(children[i]);
+    child->parent = node;
+    node->children.push_back(child);
+  }
+
+  *node_out = reinterpret_cast<cbmpc_ac_node>(node);
+  return 0;
+}
+
+// Create a Threshold node
+int cbmpc_ac_threshold(int k, cbmpc_ac_node *children, int count, cbmpc_ac_node *node_out) {
+  if (k <= 0 || !children || count <= 0 || !node_out) {
+    return E_BADARG;
+  }
+
+  if (k > count) {
+    return E_BADARG;
+  }
+
+  // Create Threshold node with auto-generated name and threshold k
+  static int threshold_counter = 0;
+  std::string name = "th" + std::to_string(++threshold_counter);
+
+  auto* node = new coinbase::crypto::ss::node_t(
+    coinbase::crypto::ss::node_e::THRESHOLD,
+    name,
+    k
+  );
+
+  // Add children
+  for (int i = 0; i < count; ++i) {
+    if (!children[i]) {
+      delete node;
+      return E_BADARG;
+    }
+    auto* child = reinterpret_cast<coinbase::crypto::ss::node_t*>(children[i]);
+    child->parent = node;
+    node->children.push_back(child);
+  }
+
+  *node_out = reinterpret_cast<cbmpc_ac_node>(node);
+  return 0;
+}
+
+// Serialize an AC node tree
+int cbmpc_ac_serialize(cbmpc_ac_node node, cmem_t *bytes_out) {
+  if (!node || !bytes_out) {
+    return E_BADARG;
+  }
+
+  auto* cpp_node = reinterpret_cast<coinbase::crypto::ss::node_t*>(node);
+
+  // Create ac_owned_t from the node (makes a copy)
+  coinbase::crypto::ss::ac_owned_t ac(cpp_node);
+
+  // The root node must have an empty name
+  // This is required even for single-leaf ACs
+  const_cast<coinbase::crypto::ss::node_t*>(ac.root)->name = "";
+
+  // Validate the tree
+  error_t rv = ac.validate_tree();
+  if (rv != SUCCESS) {
+    return rv;
+  }
+
+  // Serialize using converter_t
+  buf_t serialized = coinbase::ser(ac);
+  *bytes_out = alloc_and_copy(serialized.data(), static_cast<size_t>(serialized.size()));
+
+  return 0;
+}
+
+// Convert AC to string (for debugging)
+int cbmpc_ac_to_string(cmem_t ac_bytes, cmem_t *str_out) {
+  if (!ac_bytes.data || ac_bytes.size <= 0 || !str_out) {
+    return E_BADARG;
+  }
+
+  // Deserialize AC
+  coinbase::crypto::ss::ac_owned_t ac;
+  error_t rv = coinbase::deser(mem_t(ac_bytes.data, ac_bytes.size), ac);
+  if (rv != SUCCESS) return rv;
+
+  // Get list of leaf paths (simple representation for now)
+  std::vector<std::string> paths = ac.root->list_leaf_paths();
+
+  // Build a simple string representation
+  std::string result = "AC with " + std::to_string(paths.size()) + " leaves: [";
+  for (size_t i = 0; i < paths.size(); ++i) {
+    if (i > 0) result += ", ";
+    result += paths[i];
+  }
+  result += "]";
+
+  *str_out = alloc_and_copy(reinterpret_cast<const uint8_t*>(result.c_str()), result.size());
+  return 0;
+}
+
+// Get list of leaf paths from an AC structure
+int cbmpc_ac_list_leaf_paths(cmem_t ac_bytes, cmems_t *paths_out) {
+  if (!ac_bytes.data || ac_bytes.size <= 0 || !paths_out) {
+    return E_BADARG;
+  }
+
+  // Deserialize AC
+  coinbase::crypto::ss::ac_owned_t ac;
+  error_t rv = coinbase::deser(mem_t(ac_bytes.data, ac_bytes.size), ac);
+  if (rv != SUCCESS) return rv;
+
+  // Get list of leaf paths
+  std::vector<std::string> paths = ac.root->list_leaf_paths();
+
+  // Convert to cmems_t (treat strings as byte buffers)
+  std::vector<buf_t> path_bufs;
+  path_bufs.reserve(paths.size());
+  for (const auto& path : paths) {
+    path_bufs.emplace_back(reinterpret_cast<const uint8_t*>(path.c_str()), path.size());
+  }
+
+  *paths_out = alloc_and_copy_vector(path_bufs);
+  return 0;
+}
+
+// Free an AC node
+void cbmpc_ac_node_free(cbmpc_ac_node node) {
+  if (node) {
+    auto* cpp_node = reinterpret_cast<coinbase::crypto::ss::node_t*>(node);
+    delete cpp_node;
+  }
+}
+
+// =====================
+// PVE-AC Operations
+// =====================
+
+// PVE-AC Encrypt
+int cbmpc_pve_ac_encrypt(cmem_t ac_bytes, cmems_t paths, cmems_t ek_bytes, cmem_t label, int curve_nid, cmems_t x_scalars, cmem_t *pve_ct_out) {
+  if (!ac_bytes.data || ac_bytes.size <= 0 ||
+      !paths.data || paths.count <= 0 || !paths.sizes ||
+      !ek_bytes.data || ek_bytes.count <= 0 || !ek_bytes.sizes ||
+      !label.data || label.size <= 0 ||
+      !x_scalars.data || x_scalars.count <= 0 || !x_scalars.sizes ||
+      !pve_ct_out) {
+    return E_BADARG;
+  }
+
+  if (paths.count != ek_bytes.count) {
+    return E_BADARG;
+  }
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  // Deserialize AC
+  coinbase::crypto::ss::ac_owned_t ac;
+  error_t rv = coinbase::deser(mem_t(ac_bytes.data, ac_bytes.size), ac);
+  if (rv != SUCCESS) return rv;
+
+  // Build path->key map
+  coinbase::mpc::ec_pve_ac_t::pks_t ac_pks;
+  // Use unique_ptr to keep EKs stable in memory (avoid reallocation issues)
+  std::vector<std::unique_ptr<coinbase::crypto::ffi_kem_ek_t>> ek_storage;
+
+  size_t path_offset = 0;
+  size_t ek_offset = 0;
+
+  for (int i = 0; i < paths.count; ++i) {
+    // Get path string and derive leaf name (substring after last '/')
+    std::string path_str(reinterpret_cast<const char*>(paths.data + path_offset), static_cast<size_t>(paths.sizes[i]));
+    std::string leaf_name = path_str;
+    size_t slash_pos = leaf_name.rfind('/');
+    if (slash_pos != std::string::npos) {
+      leaf_name = leaf_name.substr(slash_pos + 1);
+    }
+
+    // Create EK and store in unique_ptr (keeps pointer stable)
+    auto ek = std::make_unique<coinbase::crypto::ffi_kem_ek_t>(
+      ek_bytes.data + ek_offset,
+      static_cast<size_t>(ek_bytes.sizes[i])
+    );
+
+    // Add to map using leaf name (aligns ordering with list_leaf_names)
+    ac_pks[leaf_name] = ek.get();
+
+    // Store the unique_ptr to keep EK alive
+    ek_storage.push_back(std::move(ek));
+
+    path_offset += paths.sizes[i];
+    ek_offset += ek_bytes.sizes[i];
+  }
+
+  // Convert x_scalars to vector<bn_t>
+  std::vector<coinbase::crypto::bn_t> x_vec;
+  x_vec.reserve(x_scalars.count);
+  size_t x_offset = 0;
+  for (int i = 0; i < x_scalars.count; ++i) {
+    coinbase::crypto::bn_t x = coinbase::crypto::bn_t::from_bin(mem_t(x_scalars.data + x_offset, x_scalars.sizes[i]));
+    x_vec.push_back(std::move(x));
+    x_offset += x_scalars.sizes[i];
+  }
+
+  // Create PVE-AC ciphertext using FFI KEM policy
+  coinbase::mpc::ec_pve_ac_t pve(coinbase::mpc::kem_pve_base_pke<coinbase::crypto::kem_policy_ffi_t>());
+
+  // Encrypt
+  pve.encrypt(ac, ac_pks, mem_t(label.data, label.size), curve, x_vec);
+
+  // Serialize the PVE-AC ciphertext
+  buf_t pve_serialized = coinbase::ser(pve);
+  *pve_ct_out = alloc_and_copy(pve_serialized.data(), static_cast<size_t>(pve_serialized.size()));
+
+  return 0;
+}
+
+// PVE-AC Verify
+int cbmpc_pve_ac_verify(cmem_t ac_bytes, cmems_t paths, cmems_t ek_bytes, cmem_t pve_ct, cbmpc_ecc_point *Q_points, int Q_count, cmem_t label) {
+  if (!ac_bytes.data || ac_bytes.size <= 0 ||
+      !paths.data || paths.count <= 0 || !paths.sizes ||
+      !ek_bytes.data || ek_bytes.count <= 0 || !ek_bytes.sizes ||
+      !pve_ct.data || pve_ct.size <= 0 ||
+      !Q_points || Q_count <= 0 ||
+      !label.data || label.size <= 0) {
+    return E_BADARG;
+  }
+
+  if (paths.count != ek_bytes.count) {
+    return E_BADARG;
+  }
+
+  // Deserialize AC
+  coinbase::crypto::ss::ac_owned_t ac;
+  error_t rv = coinbase::deser(mem_t(ac_bytes.data, ac_bytes.size), ac);
+  if (rv != SUCCESS) return rv;
+
+  // Build path->key map
+  coinbase::mpc::ec_pve_ac_t::pks_t ac_pks;
+  std::vector<std::unique_ptr<coinbase::crypto::ffi_kem_ek_t>> ek_storage;
+
+  size_t path_offset = 0;
+  size_t ek_offset = 0;
+
+  for (int i = 0; i < paths.count; ++i) {
+    // Get path string and derive leaf name (substring after last '/')
+    std::string path_str(reinterpret_cast<const char*>(paths.data + path_offset), static_cast<size_t>(paths.sizes[i]));
+    std::string leaf_name = path_str;
+    size_t slash_pos = leaf_name.rfind('/');
+    if (slash_pos != std::string::npos) {
+      leaf_name = leaf_name.substr(slash_pos + 1);
+    }
+
+    // Create EK and store in unique_ptr
+    auto ek = std::make_unique<coinbase::crypto::ffi_kem_ek_t>(
+      ek_bytes.data + ek_offset,
+      static_cast<size_t>(ek_bytes.sizes[i])
+    );
+
+    ac_pks[leaf_name] = ek.get();
+    ek_storage.push_back(std::move(ek));
+
+    path_offset += paths.sizes[i];
+    ek_offset += ek_bytes.sizes[i];
+  }
+
+  // Deserialize PVE-AC ciphertext (allow infinity points during deserialization)
+  coinbase::mpc::ec_pve_ac_t pve(coinbase::mpc::kem_pve_base_pke<coinbase::crypto::kem_policy_ffi_t>());
+  {
+    coinbase::crypto::allow_ecc_infinity_t allow_infinity;
+    rv = coinbase::deser(mem_t(pve_ct.data, pve_ct.size), pve);
+    if (rv != SUCCESS) return rv;
+  }
+
+  // Convert Q_points to vector<ecc_point_t>
+  std::vector<coinbase::crypto::ecc_point_t> Q_vec;
+  Q_vec.reserve(Q_count);
+  for (int i = 0; i < Q_count; ++i) {
+    if (!Q_points[i]) return E_BADARG;
+    const auto* point = reinterpret_cast<const coinbase::crypto::ecc_point_t*>(Q_points[i]);
+    Q_vec.push_back(*point);
+  }
+
+  // Verify
+  rv = pve.verify(ac, ac_pks, Q_vec, mem_t(label.data, label.size));
+  return rv;
+}
+
+// PVE-AC Party Decrypt Row
+int cbmpc_pve_ac_party_decrypt_row(cmem_t ac_bytes, int row_index, cmem_t path, const void *dk_handle, cmem_t pve_ct, cmem_t label, cmem_t *share_out) {
+  if (!ac_bytes.data || ac_bytes.size <= 0 ||
+      row_index < 0 ||
+      !path.data || path.size <= 0 ||
+      !dk_handle ||
+      !pve_ct.data || pve_ct.size <= 0 ||
+      !label.data || label.size <= 0 ||
+      !share_out) {
+    return E_BADARG;
+  }
+
+  // Allow infinity points throughout this function (PVE-AC may have Q points that are infinity)
+  coinbase::crypto::allow_ecc_infinity_t allow_infinity;
+
+  // Deserialize AC
+  coinbase::crypto::ss::ac_owned_t ac;
+  error_t rv = coinbase::deser(mem_t(ac_bytes.data, ac_bytes.size), ac);
+  if (rv != SUCCESS) {
+    return rv;
+  }
+
+  // Deserialize PVE-AC ciphertext
+  coinbase::mpc::ec_pve_ac_t pve(coinbase::mpc::kem_pve_base_pke<coinbase::crypto::kem_policy_ffi_t>());
+  rv = coinbase::deser(mem_t(pve_ct.data, pve_ct.size), pve);
+  if (rv != SUCCESS) {
+    return rv;
+  }
+
+  // Convert path to string
+  std::string path_str(reinterpret_cast<const char*>(path.data), static_cast<size_t>(path.size));
+
+  // Wrap dk_handle in ffi_kem_dk_t
+  coinbase::crypto::ffi_kem_dk_t dk(const_cast<void*>(dk_handle));
+
+  // Party decrypt to get share
+  coinbase::crypto::bn_t share;
+  rv = pve.party_decrypt_row(ac, row_index, path_str, &dk, mem_t(label.data, label.size), share);
+  if (rv != SUCCESS) {
+    return rv;
+  }
+
+  // Serialize share to bytes
+  buf_t share_bytes = share.to_bin();
+  *share_out = alloc_and_copy(share_bytes.data(), static_cast<size_t>(share_bytes.size()));
+
+  return 0;
+}
+
+// PVE-AC Aggregate to Restore Row
+int cbmpc_pve_ac_aggregate_to_restore_row(cmem_t ac_bytes, int row_index, cmem_t label, cmems_t quorum_paths, cmems_t quorum_shares, cmem_t pve_ct, cmems_t all_paths, cmems_t all_eks, cmems_t *x_out) {
+  if (!ac_bytes.data || ac_bytes.size <= 0 ||
+      row_index < 0 ||
+      !label.data || label.size <= 0 ||
+      !quorum_paths.data || quorum_paths.count <= 0 || !quorum_paths.sizes ||
+      !quorum_shares.data || quorum_shares.count <= 0 || !quorum_shares.sizes ||
+      !pve_ct.data || pve_ct.size <= 0 ||
+      !x_out) {
+    return E_BADARG;
+  }
+
+  if (quorum_paths.count != quorum_shares.count) {
+    return E_BADARG;
+  }
+
+  // Deserialize AC
+  coinbase::crypto::ss::ac_owned_t ac;
+  error_t rv = coinbase::deser(mem_t(ac_bytes.data, ac_bytes.size), ac);
+  if (rv != SUCCESS) return rv;
+
+  // Deserialize PVE-AC ciphertext (allow infinity points during deserialization)
+  coinbase::mpc::ec_pve_ac_t pve(coinbase::mpc::kem_pve_base_pke<coinbase::crypto::kem_policy_ffi_t>());
+  {
+    coinbase::crypto::allow_ecc_infinity_t allow_infinity;
+    rv = coinbase::deser(mem_t(pve_ct.data, pve_ct.size), pve);
+    if (rv != SUCCESS) return rv;
+  }
+
+  // Build quorum_decrypted map
+  std::map<std::string, coinbase::crypto::bn_t> quorum_decrypted;
+  size_t path_offset = 0;
+  size_t share_offset = 0;
+
+  for (int i = 0; i < quorum_paths.count; ++i) {
+    // Get path string
+    std::string path_str(reinterpret_cast<const char*>(quorum_paths.data + path_offset), static_cast<size_t>(quorum_paths.sizes[i]));
+
+    // Deserialize share
+    coinbase::crypto::bn_t share = coinbase::crypto::bn_t::from_bin(mem_t(quorum_shares.data + share_offset, quorum_shares.sizes[i]));
+
+    quorum_decrypted[path_str] = std::move(share);
+
+    path_offset += quorum_paths.sizes[i];
+    share_offset += quorum_shares.sizes[i];
+  }
+
+  // Build all_ac_pks if provided (for verification)
+  coinbase::mpc::ec_pve_ac_t::pks_t all_ac_pks;
+  std::vector<std::unique_ptr<coinbase::crypto::ffi_kem_ek_t>> ek_storage;
+  bool skip_verify = true;
+
+  if (all_paths.data && all_paths.count > 0 && all_eks.data && all_eks.count > 0) {
+    if (all_paths.count != all_eks.count) {
+      return E_BADARG;
+    }
+
+    size_t all_path_offset = 0;
+    size_t all_ek_offset = 0;
+
+    for (int i = 0; i < all_paths.count; ++i) {
+      std::string path_str(reinterpret_cast<const char*>(all_paths.data + all_path_offset), static_cast<size_t>(all_paths.sizes[i]));
+      std::string leaf_name = path_str;
+      size_t slash_pos = leaf_name.rfind('/');
+      if (slash_pos != std::string::npos) {
+        leaf_name = leaf_name.substr(slash_pos + 1);
+      }
+
+      auto ek = std::make_unique<coinbase::crypto::ffi_kem_ek_t>(
+        all_eks.data + all_ek_offset,
+        static_cast<size_t>(all_eks.sizes[i])
+      );
+
+      all_ac_pks[leaf_name] = ek.get();
+      ek_storage.push_back(std::move(ek));
+
+      all_path_offset += all_paths.sizes[i];
+      all_ek_offset += all_eks.sizes[i];
+    }
+
+    skip_verify = false;
+  }
+
+  // Aggregate to restore scalars
+  std::vector<coinbase::crypto::bn_t> x_vec;
+  rv = pve.aggregate_to_restore_row(ac, row_index, mem_t(label.data, label.size), quorum_decrypted, x_vec, skip_verify, all_ac_pks);
+  if (rv != SUCCESS) return rv;
+
+  // Serialize restored scalars to bytes
+  std::vector<buf_t> x_bytes_vec;
+  x_bytes_vec.reserve(x_vec.size());
+  for (const auto& x : x_vec) {
+    x_bytes_vec.push_back(x.to_bin());
+  }
+
+  *x_out = alloc_and_copy_vector(x_bytes_vec);
+  return 0;
 }
 
 }  // extern "C"

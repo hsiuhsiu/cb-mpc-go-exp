@@ -392,6 +392,138 @@ func PVEVerifyWithPoint(k KEM, ekBytes, pveCT []byte, QPoint ECCPoint, label []b
 	return nil
 }
 
+// PVEBatchEncrypt is a C binding wrapper for batch PVE encrypt.
+// The provided KEM is bound to thread-local storage for the duration of the call.
+func PVEBatchEncrypt(k KEM, ekBytes, label []byte, curveNID int, xScalarsBytes [][]byte) ([]byte, error) {
+	if len(ekBytes) == 0 {
+		return nil, errors.New("empty ek bytes")
+	}
+	if len(label) == 0 {
+		return nil, errors.New("empty label")
+	}
+	if len(xScalarsBytes) == 0 {
+		return nil, errors.New("empty x scalars")
+	}
+
+	// Bind the per-call KEM via TLS on the current OS thread
+	if k == nil {
+		return nil, errors.New("no KEM provided")
+	}
+	h := RegisterHandle(k)
+	runtime.LockOSThread()
+	C.cbmpc_set_kem_tls(h)
+	defer func() {
+		C.cbmpc_clear_kem_tls()
+		FreeHandle(h)
+		runtime.UnlockOSThread()
+	}()
+
+	ekMem := goBytesToCmem(ekBytes)
+	labelMem := goBytesToCmem(label)
+	xScalarsMem := goBytesSliceToCmems(xScalarsBytes)
+	defer freeCmems(xScalarsMem)
+
+	var out C.cmem_t
+	rc := C.cbmpc_pve_batch_encrypt(ekMem, labelMem, C.int(curveNID), xScalarsMem, &out)
+	if rc != 0 {
+		return nil, formatNativeErr("pve_batch_encrypt", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// PVEBatchVerify is a C binding wrapper for batch PVE verify.
+// The provided KEM is bound to thread-local storage for the duration of the call.
+func PVEBatchVerify(k KEM, ekBytes, pveCT []byte, qPoints []ECCPoint, label []byte) error {
+	if len(ekBytes) == 0 {
+		return errors.New("empty ek bytes")
+	}
+	if len(pveCT) == 0 {
+		return errors.New("empty pve ciphertext")
+	}
+	if len(qPoints) == 0 {
+		return errors.New("empty Q points")
+	}
+	if len(label) == 0 {
+		return errors.New("empty label")
+	}
+
+	// Bind the per-call KEM via TLS on the current OS thread
+	if k == nil {
+		return errors.New("no KEM provided")
+	}
+	h := RegisterHandle(k)
+	runtime.LockOSThread()
+	C.cbmpc_set_kem_tls(h)
+	defer func() {
+		C.cbmpc_clear_kem_tls()
+		FreeHandle(h)
+		runtime.UnlockOSThread()
+	}()
+
+	// Convert []ECCPoint to C array
+	cPoints := make([]C.cbmpc_ecc_point, len(qPoints))
+	for i, p := range qPoints {
+		if p == nil {
+			return errors.New("nil point in Q points array")
+		}
+		cPoints[i] = p
+	}
+
+	ekMem := goBytesToCmem(ekBytes)
+	pveCTMem := goBytesToCmem(pveCT)
+	labelMem := goBytesToCmem(label)
+
+	rc := C.cbmpc_pve_batch_verify(ekMem, pveCTMem, &cPoints[0], C.int(len(cPoints)), labelMem)
+	if rc != 0 {
+		return formatNativeErr("pve_batch_verify", rc)
+	}
+
+	return nil
+}
+
+// PVEBatchDecrypt is a C binding wrapper for batch PVE decrypt.
+// The provided KEM is bound to thread-local storage for the duration of the call.
+func PVEBatchDecrypt(k KEM, dkHandle unsafe.Pointer, ekBytes, pveCT, label []byte, curveNID int) ([][]byte, error) {
+	if dkHandle == nil {
+		return nil, errors.New("nil dk handle")
+	}
+	if len(ekBytes) == 0 {
+		return nil, errors.New("empty ek bytes")
+	}
+	if len(pveCT) == 0 {
+		return nil, errors.New("empty pve ciphertext")
+	}
+	if len(label) == 0 {
+		return nil, errors.New("empty label")
+	}
+
+	// Bind the per-call KEM via TLS on the current OS thread
+	if k == nil {
+		return nil, errors.New("no KEM provided")
+	}
+	h := RegisterHandle(k)
+	runtime.LockOSThread()
+	C.cbmpc_set_kem_tls(h)
+	defer func() {
+		C.cbmpc_clear_kem_tls()
+		FreeHandle(h)
+		runtime.UnlockOSThread()
+	}()
+
+	ekMem := goBytesToCmem(ekBytes)
+	pveCTMem := goBytesToCmem(pveCT)
+	labelMem := goBytesToCmem(label)
+
+	var out C.cmems_t
+	rc := C.cbmpc_pve_batch_decrypt(dkHandle, ekMem, pveCTMem, labelMem, C.int(curveNID), &out)
+	if rc != 0 {
+		return nil, formatNativeErr("pve_batch_decrypt", rc)
+	}
+
+	return cmemsToGoByteSlices(out), nil
+}
+
 // =====================
 // KEM callbacks and registry for FFI policy
 // =====================
@@ -1203,6 +1335,47 @@ func Schnorr2PSignBatch(cj unsafe.Pointer, key Schnorr2PKey, msgs [][]byte, vari
 // Schnorr MP Protocols
 // =====================
 
+// SchnorrMPDKG is a C binding wrapper for multi-party Schnorr distributed key generation.
+// Uses the coinbase::mpc::schnorrmp::dkg wrapper.
+func SchnorrMPDKG(cj unsafe.Pointer, curveNID int) (ECDSAMPKey, []byte, error) {
+	if cj == nil {
+		return nil, nil, errors.New("nil job")
+	}
+
+	var key ECDSAMPKey
+	var sidOut C.cmem_t
+	rc := C.cbmpc_schnorrmp_dkg((*C.cbmpc_jobmp)(cj), C.int(curveNID), &key, &sidOut)
+	if rc != 0 {
+		return nil, nil, formatNativeErr("schnorrmp_dkg", rc)
+	}
+
+	return key, cmemToGoBytes(sidOut), nil
+}
+
+// SchnorrMPRefresh is a C binding wrapper for multi-party Schnorr key refresh.
+// Uses the coinbase::mpc::schnorrmp::refresh wrapper.
+// sidIn can be empty to generate a new session ID.
+func SchnorrMPRefresh(cj unsafe.Pointer, key ECDSAMPKey, sidIn []byte) (ECDSAMPKey, []byte, error) {
+	if cj == nil {
+		return nil, nil, errors.New("nil job")
+	}
+	if key == nil {
+		return nil, nil, errors.New("nil key")
+	}
+
+	// Copy session ID into C-allocated memory to avoid aliasing Go memory during CGO call
+	sidMem := allocCmem(sidIn)
+	defer freeCmem(sidMem)
+
+	var newKey ECDSAMPKey
+	var sidOut C.cmem_t
+	rc := C.cbmpc_schnorrmp_refresh((*C.cbmpc_jobmp)(cj), sidMem, key, &sidOut, &newKey)
+	if rc != 0 {
+		return nil, nil, formatNativeErr("schnorrmp_refresh", rc)
+	}
+	return newKey, cmemToGoBytes(sidOut), nil
+}
+
 // SchnorrMPSign is a C binding wrapper for multi-party Schnorr signing.
 // Only the party with party_idx == sig_receiver will receive the final signature.
 func SchnorrMPSign(cj unsafe.Pointer, key ECDSAMPKey, msg []byte, sigReceiver int, variant SchnorrVariant) ([]byte, error) {
@@ -1632,4 +1805,423 @@ func PaillierRangeExpSlackVerify(proof []byte, paillier Paillier, q, c, sessionI
 	}
 
 	return nil
+}
+
+// =====================
+// Access Control (AC) Builder Operations
+// =====================
+
+// ACNode is an opaque handle to a C++ ac_owned_t node.
+type ACNode = C.cbmpc_ac_node
+
+// ACLeaf creates a leaf node with the given party name.
+// The returned node must be freed with ACNodeFree unless it's added as a child
+// (parent nodes take ownership).
+func ACLeaf(name []byte) (ACNode, error) {
+	if len(name) == 0 {
+		return nil, errors.New("empty name")
+	}
+
+	nameMem := goBytesToCmem(name)
+	var node ACNode
+	rc := C.cbmpc_ac_leaf(nameMem, &node)
+	if rc != 0 {
+		return nil, formatNativeErr("ac_leaf", rc)
+	}
+
+	return node, nil
+}
+
+// ACAnd creates an AND node with the given children.
+// Takes ownership of children - caller must NOT free them after this call.
+// The returned node must be freed with ACNodeFree.
+func ACAnd(children []ACNode) (ACNode, error) {
+	if len(children) == 0 {
+		return nil, errors.New("empty children")
+	}
+
+	// Convert []ACNode to C array
+	cChildren := make([]C.cbmpc_ac_node, len(children))
+	for i, child := range children {
+		if child == nil {
+			return nil, errors.New("nil child in children array")
+		}
+		cChildren[i] = child
+	}
+
+	var node ACNode
+	rc := C.cbmpc_ac_and(&cChildren[0], C.int(len(cChildren)), &node)
+	if rc != 0 {
+		return nil, formatNativeErr("ac_and", rc)
+	}
+
+	return node, nil
+}
+
+// ACOr creates an OR node with the given children.
+// Takes ownership of children - caller must NOT free them after this call.
+// The returned node must be freed with ACNodeFree.
+func ACOr(children []ACNode) (ACNode, error) {
+	if len(children) == 0 {
+		return nil, errors.New("empty children")
+	}
+
+	// Convert []ACNode to C array
+	cChildren := make([]C.cbmpc_ac_node, len(children))
+	for i, child := range children {
+		if child == nil {
+			return nil, errors.New("nil child in children array")
+		}
+		cChildren[i] = child
+	}
+
+	var node ACNode
+	rc := C.cbmpc_ac_or(&cChildren[0], C.int(len(cChildren)), &node)
+	if rc != 0 {
+		return nil, formatNativeErr("ac_or", rc)
+	}
+
+	return node, nil
+}
+
+// ACThreshold creates a threshold node requiring k of n children.
+// Takes ownership of children - caller must NOT free them after this call.
+// The returned node must be freed with ACNodeFree.
+func ACThreshold(k int, children []ACNode) (ACNode, error) {
+	if k <= 0 {
+		return nil, errors.New("threshold k must be positive")
+	}
+	if len(children) == 0 {
+		return nil, errors.New("empty children")
+	}
+	if k > len(children) {
+		return nil, errors.New("threshold k exceeds number of children")
+	}
+
+	// Convert []ACNode to C array
+	cChildren := make([]C.cbmpc_ac_node, len(children))
+	for i, child := range children {
+		if child == nil {
+			return nil, errors.New("nil child in children array")
+		}
+		cChildren[i] = child
+	}
+
+	var node ACNode
+	rc := C.cbmpc_ac_threshold(C.int(k), &cChildren[0], C.int(len(cChildren)), &node)
+	if rc != 0 {
+		return nil, formatNativeErr("ac_threshold", rc)
+	}
+
+	return node, nil
+}
+
+// ACSerialize serializes an AC node tree to bytes.
+// Returns the serialized ac_owned_t bytes.
+func ACSerialize(node ACNode) ([]byte, error) {
+	if node == nil {
+		return nil, errors.New("nil node")
+	}
+
+	var out C.cmem_t
+	rc := C.cbmpc_ac_serialize(node, &out)
+	if rc != 0 {
+		return nil, formatNativeErr("ac_serialize", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// ACToString converts an AC to a canonical string representation (for debugging).
+func ACToString(acBytes []byte) (string, error) {
+	if len(acBytes) == 0 {
+		return "", errors.New("empty AC bytes")
+	}
+
+	acMem := goBytesToCmem(acBytes)
+	var out C.cmem_t
+	rc := C.cbmpc_ac_to_string(acMem, &out)
+	if rc != 0 {
+		return "", formatNativeErr("ac_to_string", rc)
+	}
+
+	strBytes := cmemToGoBytes(out)
+	return string(strBytes), nil
+}
+
+// ACListLeafPaths returns the list of leaf paths from an AC structure.
+// These paths can be used as keys in the pathToEK map for PVE-AC operations.
+func ACListLeafPaths(acBytes []byte) ([]string, error) {
+	if len(acBytes) == 0 {
+		return nil, errors.New("empty AC bytes")
+	}
+
+	acMem := goBytesToCmem(acBytes)
+	var out C.cmems_t
+	rc := C.cbmpc_ac_list_leaf_paths(acMem, &out)
+	if rc != 0 {
+		return nil, formatNativeErr("ac_list_leaf_paths", rc)
+	}
+
+	pathBytes := cmemsToGoByteSlices(out)
+	paths := make([]string, len(pathBytes))
+	for i, pb := range pathBytes {
+		paths[i] = string(pb)
+	}
+	return paths, nil
+}
+
+// ACNodeFree frees an AC node (and its entire subtree).
+func ACNodeFree(node ACNode) {
+	if node != nil {
+		C.cbmpc_ac_node_free(node)
+	}
+}
+
+// =====================
+// PVE-AC Operations
+// =====================
+
+// PVEACEncrypt encrypts multiple scalars using PVE with access control.
+// The provided KEM is bound to thread-local storage for the duration of the call.
+// pathToEK maps party path names to encryption key bytes.
+func PVEACEncrypt(k KEM, acBytes []byte, pathToEK map[string][]byte, label []byte, curveNID int, xScalarsBytes [][]byte) ([]byte, error) {
+	if len(acBytes) == 0 {
+		return nil, errors.New("empty AC bytes")
+	}
+	if len(pathToEK) == 0 {
+		return nil, errors.New("empty path to EK map")
+	}
+	if len(label) == 0 {
+		return nil, errors.New("empty label")
+	}
+	if len(xScalarsBytes) == 0 {
+		return nil, errors.New("empty x scalars")
+	}
+
+	// Bind the per-call KEM via TLS on the current OS thread
+	if k == nil {
+		return nil, errors.New("no KEM provided")
+	}
+	h := RegisterHandle(k)
+	runtime.LockOSThread()
+	C.cbmpc_set_kem_tls(h)
+	defer func() {
+		C.cbmpc_clear_kem_tls()
+		FreeHandle(h)
+		runtime.UnlockOSThread()
+	}()
+
+	// Convert map to parallel slices
+	paths := make([][]byte, 0, len(pathToEK))
+	eks := make([][]byte, 0, len(pathToEK))
+	for path, ek := range pathToEK {
+		paths = append(paths, []byte(path))
+		eks = append(eks, ek)
+	}
+
+	acMem := goBytesToCmem(acBytes)
+	pathsMem := goBytesSliceToCmems(paths)
+	defer freeCmems(pathsMem)
+	eksMem := goBytesSliceToCmems(eks)
+	defer freeCmems(eksMem)
+	labelMem := goBytesToCmem(label)
+	xScalarsMem := goBytesSliceToCmems(xScalarsBytes)
+	defer freeCmems(xScalarsMem)
+
+	var out C.cmem_t
+	rc := C.cbmpc_pve_ac_encrypt(acMem, pathsMem, eksMem, labelMem, C.int(curveNID), xScalarsMem, &out)
+	if rc != 0 {
+		return nil, formatNativeErr("pve_ac_encrypt", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// PVEACVerify verifies a PVE-AC ciphertext against public key points.
+// The provided KEM is bound to thread-local storage for the duration of the call.
+// pathToEK maps party path names to encryption key bytes.
+func PVEACVerify(k KEM, acBytes []byte, pathToEK map[string][]byte, pveCT []byte, qPoints []ECCPoint, label []byte) error {
+	if len(acBytes) == 0 {
+		return errors.New("empty AC bytes")
+	}
+	if len(pathToEK) == 0 {
+		return errors.New("empty path to EK map")
+	}
+	if len(pveCT) == 0 {
+		return errors.New("empty PVE ciphertext")
+	}
+	if len(qPoints) == 0 {
+		return errors.New("empty Q points")
+	}
+	if len(label) == 0 {
+		return errors.New("empty label")
+	}
+
+	// Bind the per-call KEM via TLS on the current OS thread
+	if k == nil {
+		return errors.New("no KEM provided")
+	}
+	h := RegisterHandle(k)
+	runtime.LockOSThread()
+	C.cbmpc_set_kem_tls(h)
+	defer func() {
+		C.cbmpc_clear_kem_tls()
+		FreeHandle(h)
+		runtime.UnlockOSThread()
+	}()
+
+	// Convert map to parallel slices
+	paths := make([][]byte, 0, len(pathToEK))
+	eks := make([][]byte, 0, len(pathToEK))
+	for path, ek := range pathToEK {
+		paths = append(paths, []byte(path))
+		eks = append(eks, ek)
+	}
+
+	// Convert []ECCPoint to C array
+	cPoints := make([]C.cbmpc_ecc_point, len(qPoints))
+	for i, p := range qPoints {
+		if p == nil {
+			return errors.New("nil point in Q points array")
+		}
+		cPoints[i] = p
+	}
+
+	acMem := goBytesToCmem(acBytes)
+	pathsMem := goBytesSliceToCmems(paths)
+	defer freeCmems(pathsMem)
+	eksMem := goBytesSliceToCmems(eks)
+	defer freeCmems(eksMem)
+	pveCTMem := goBytesToCmem(pveCT)
+	labelMem := goBytesToCmem(label)
+
+	rc := C.cbmpc_pve_ac_verify(acMem, pathsMem, eksMem, pveCTMem, &cPoints[0], C.int(len(cPoints)), labelMem)
+	if rc != 0 {
+		return formatNativeErr("pve_ac_verify", rc)
+	}
+
+	return nil
+}
+
+// PVEACPartyDecryptRow performs party decryption for a single row to produce a share.
+// The provided KEM is bound to thread-local storage for the duration of the call.
+func PVEACPartyDecryptRow(k KEM, acBytes []byte, rowIndex int, path string, dkHandle unsafe.Pointer, pveCT, label []byte) ([]byte, error) {
+	if len(acBytes) == 0 {
+		return nil, errors.New("empty AC bytes")
+	}
+	if rowIndex < 0 {
+		return nil, errors.New("negative row index")
+	}
+	if len(path) == 0 {
+		return nil, errors.New("empty path")
+	}
+	if dkHandle == nil {
+		return nil, errors.New("nil dk handle")
+	}
+	if len(pveCT) == 0 {
+		return nil, errors.New("empty PVE ciphertext")
+	}
+	if len(label) == 0 {
+		return nil, errors.New("empty label")
+	}
+
+	// Bind the per-call KEM via TLS on the current OS thread
+	if k == nil {
+		return nil, errors.New("no KEM provided")
+	}
+	h := RegisterHandle(k)
+	runtime.LockOSThread()
+	C.cbmpc_set_kem_tls(h)
+	defer func() {
+		C.cbmpc_clear_kem_tls()
+		FreeHandle(h)
+		runtime.UnlockOSThread()
+	}()
+
+	acMem := goBytesToCmem(acBytes)
+	pathMem := goBytesToCmem([]byte(path))
+	pveCTMem := goBytesToCmem(pveCT)
+	labelMem := goBytesToCmem(label)
+
+	var out C.cmem_t
+	rc := C.cbmpc_pve_ac_party_decrypt_row(acMem, C.int(rowIndex), pathMem, dkHandle, pveCTMem, labelMem, &out)
+	if rc != 0 {
+		return nil, formatNativeErr("pve_ac_party_decrypt_row", rc)
+	}
+
+	return cmemToGoBytes(out), nil
+}
+
+// PVEACAggregateToRestoreRow aggregates quorum shares to restore the original scalars for a row.
+// The provided KEM is bound to thread-local storage for the duration of the call.
+// If allPathToEK is provided and non-empty, verification is performed during aggregation.
+func PVEACAggregateToRestoreRow(k KEM, acBytes []byte, rowIndex int, label []byte, quorumPathToShare map[string][]byte, pveCT []byte, allPathToEK map[string][]byte) ([][]byte, error) {
+	if len(acBytes) == 0 {
+		return nil, errors.New("empty AC bytes")
+	}
+	if rowIndex < 0 {
+		return nil, errors.New("negative row index")
+	}
+	if len(label) == 0 {
+		return nil, errors.New("empty label")
+	}
+	if len(quorumPathToShare) == 0 {
+		return nil, errors.New("empty quorum path to share map")
+	}
+	if len(pveCT) == 0 {
+		return nil, errors.New("empty PVE ciphertext")
+	}
+
+	// Bind the per-call KEM via TLS on the current OS thread
+	if k == nil {
+		return nil, errors.New("no KEM provided")
+	}
+	h := RegisterHandle(k)
+	runtime.LockOSThread()
+	C.cbmpc_set_kem_tls(h)
+	defer func() {
+		C.cbmpc_clear_kem_tls()
+		FreeHandle(h)
+		runtime.UnlockOSThread()
+	}()
+
+	// Convert quorum map to parallel slices
+	quorumPaths := make([][]byte, 0, len(quorumPathToShare))
+	quorumShares := make([][]byte, 0, len(quorumPathToShare))
+	for path, share := range quorumPathToShare {
+		quorumPaths = append(quorumPaths, []byte(path))
+		quorumShares = append(quorumShares, share)
+	}
+
+	acMem := goBytesToCmem(acBytes)
+	labelMem := goBytesToCmem(label)
+	quorumPathsMem := goBytesSliceToCmems(quorumPaths)
+	defer freeCmems(quorumPathsMem)
+	quorumSharesMem := goBytesSliceToCmems(quorumShares)
+	defer freeCmems(quorumSharesMem)
+	pveCTMem := goBytesToCmem(pveCT)
+
+	// Convert allPathToEK map if provided
+	var allPathsMem, allEksMem C.cmems_t
+	if len(allPathToEK) > 0 {
+		allPaths := make([][]byte, 0, len(allPathToEK))
+		allEks := make([][]byte, 0, len(allPathToEK))
+		for path, ek := range allPathToEK {
+			allPaths = append(allPaths, []byte(path))
+			allEks = append(allEks, ek)
+		}
+		allPathsMem = goBytesSliceToCmems(allPaths)
+		defer freeCmems(allPathsMem)
+		allEksMem = goBytesSliceToCmems(allEks)
+		defer freeCmems(allEksMem)
+	}
+
+	var out C.cmems_t
+	rc := C.cbmpc_pve_ac_aggregate_to_restore_row(acMem, C.int(rowIndex), labelMem, quorumPathsMem, quorumSharesMem, pveCTMem, allPathsMem, allEksMem, &out)
+	if rc != 0 {
+		return nil, formatNativeErr("pve_ac_aggregate_to_restore_row", rc)
+	}
+
+	return cmemsToGoByteSlices(out), nil
 }
