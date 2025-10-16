@@ -20,9 +20,15 @@
 //
 // # Key Operations
 //
+// Single-scalar operations (Ciphertext has Q() and Label() getters):
 //   - Encrypt: Creates a PVE ciphertext with proof
 //   - Verify: Verifies a PVE ciphertext against a commitment
 //   - Decrypt: Decrypts a PVE ciphertext to recover the scalar
+//
+// Batch operations (BatchCiphertext does NOT have Q() or Label() getters):
+//   - BatchEncrypt: Creates a batch PVE ciphertext for multiple scalars
+//   - BatchVerify: Verifies a batch ciphertext against multiple commitments
+//   - BatchDecrypt: Decrypts a batch ciphertext to recover multiple scalars
 //
 // # KEM Requirements
 //

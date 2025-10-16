@@ -408,3 +408,91 @@ func ValidPaillierProve(Paillier, []byte, uint64) ([]byte, error) {
 func ValidPaillierVerify([]byte, Paillier, []byte, uint64) error {
 	return ErrNotBuilt
 }
+
+// AC Builder stubs
+type ACNode = unsafe.Pointer
+
+func ACLeaf([]byte) (ACNode, error) {
+	return nil, ErrNotBuilt
+}
+
+func ACAnd([]ACNode) (ACNode, error) {
+	return nil, ErrNotBuilt
+}
+
+func ACOr([]ACNode) (ACNode, error) {
+	return nil, ErrNotBuilt
+}
+
+func ACThreshold(int, []ACNode) (ACNode, error) {
+	return nil, ErrNotBuilt
+}
+
+func ACSerialize(ACNode) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func ACToString([]byte) (string, error) {
+	return "", ErrNotBuilt
+}
+
+func ACListLeafPaths([]byte) ([]string, error) {
+	return nil, ErrNotBuilt
+}
+
+func ACNodeFree(ACNode) {}
+
+// PVE-AC stubs
+func PVEACEncrypt(KEM, []byte, map[string][]byte, []byte, int, [][]byte) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func PVEACVerify(KEM, []byte, map[string][]byte, []byte, []ECCPoint, []byte) error {
+	return ErrNotBuilt
+}
+
+func PVEACPartyDecryptRow(KEM, []byte, int, string, unsafe.Pointer, []byte, []byte) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func PVEACAggregateToRestoreRow(KEM, []byte, int, []byte, map[string][]byte, []byte, map[string][]byte) ([][]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+// PVE batch operation stubs
+func PVEBatchEncrypt(KEM, []byte, []byte, int, [][]byte) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func PVEBatchVerify(KEM, []byte, []byte, []ECCPoint, []byte) error {
+	return ErrNotBuilt
+}
+
+func PVEBatchDecrypt(KEM, unsafe.Pointer, []byte, []byte, []byte, int) ([][]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+// Paillier ZK proof stubs
+func PaillierZeroProve(Paillier, []byte, []byte, []byte, uint64) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func PaillierZeroVerify([]byte, Paillier, []byte, []byte, uint64) error {
+	return ErrNotBuilt
+}
+
+func TwoPaillierEqualProve([]byte, Paillier, []byte, Paillier, []byte, []byte, []byte, []byte, []byte, uint64) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func TwoPaillierEqualVerify([]byte, []byte, Paillier, []byte, Paillier, []byte, []byte, uint64) error {
+	return ErrNotBuilt
+}
+
+func PaillierRangeExpSlackProve(Paillier, []byte, []byte, []byte, []byte, []byte, uint64) ([]byte, error) {
+	return nil, ErrNotBuilt
+}
+
+func PaillierRangeExpSlackVerify([]byte, Paillier, []byte, []byte, []byte, uint64) error {
+	return ErrNotBuilt
+}

@@ -68,3 +68,73 @@ type DecryptResult struct {
 func (pve *PVE) Decrypt(_ context.Context, params *DecryptParams) (*DecryptResult, error) {
 	return nil, errors.New("PVE requires CGO")
 }
+
+// Batch PVE operations
+
+type BatchCiphertext []byte
+
+type BatchEncryptParams struct {
+	EK      []byte
+	Label   []byte
+	Curve   cbmpc.Curve
+	Scalars []*curve.Scalar
+}
+
+type BatchEncryptResult struct {
+	Ciphertext BatchCiphertext
+}
+
+func (pve *PVE) BatchEncrypt(_ context.Context, params *BatchEncryptParams) (*BatchEncryptResult, error) {
+	return nil, errors.New("PVE requires CGO")
+}
+
+type BatchVerifyParams struct {
+	EK         []byte
+	Ciphertext BatchCiphertext
+	Points     []*cbmpc.CurvePoint
+	Label      []byte
+}
+
+func (pve *PVE) BatchVerify(_ context.Context, params *BatchVerifyParams) error {
+	return errors.New("PVE requires CGO")
+}
+
+type BatchDecryptParams struct {
+	DK         any
+	EK         []byte
+	Ciphertext BatchCiphertext
+	Label      []byte
+	Curve      cbmpc.Curve
+}
+
+type BatchDecryptResult struct {
+	Scalars []*curve.Scalar
+}
+
+func (pve *PVE) BatchDecrypt(_ context.Context, params *BatchDecryptParams) (*BatchDecryptResult, error) {
+	return nil, errors.New("PVE requires CGO")
+}
+
+// AC-based PVE operations
+
+type ACCiphertext []byte
+
+func (ct ACCiphertext) Bytes() []byte {
+	return []byte(ct)
+}
+
+type ACEncryptParams struct {
+	AC       []byte
+	PathToEK map[string][]byte
+	Label    []byte
+	Curve    cbmpc.Curve
+	Scalars  [][]byte
+}
+
+type ACEncryptResult struct {
+	Ciphertext ACCiphertext
+}
+
+func (pve *PVE) ACEncrypt(_ context.Context, params *ACEncryptParams) (*ACEncryptResult, error) {
+	return nil, errors.New("PVE requires CGO")
+}
