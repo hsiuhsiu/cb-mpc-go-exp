@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
-	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/acbuilder"
+	ac "github.com/coinbase/cb-mpc-go/pkg/cbmpc/accessstructure"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/curve"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/backend"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/testkem"
@@ -30,20 +30,20 @@ func TestPVEACEncryptSimpleThreshold(t *testing.T) {
 	}
 
 	// Create a 2-of-3 threshold AC structure
-	acExpr := acbuilder.Threshold(2,
-		acbuilder.Leaf("alice"),
-		acbuilder.Leaf("bob"),
-		acbuilder.Leaf("charlie"),
+	acExpr := ac.Threshold(2,
+		ac.Leaf("alice"),
+		ac.Leaf("bob"),
+		ac.Leaf("charlie"),
 	)
 
-	// Compile AC
-	ac, err := acbuilder.Compile(acExpr)
+	// Compile access structure
+	structure, err := ac.Compile(acExpr)
 	if err != nil {
 		t.Fatalf("Failed to compile AC: %v", err)
 	}
 
 	// Get actual paths from AC structure using dynamic discovery
-	paths, err := backend.ACListLeafPaths(ac)
+	paths, err := backend.ACListLeafPaths(structure)
 	if err != nil {
 		t.Fatalf("Failed to list leaf paths: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestPVEACEncryptSimpleThreshold(t *testing.T) {
 
 	// Encrypt
 	encryptResult, err := pveInstance.ACEncrypt(ctx, &pve.ACEncryptParams{
-		AC:       ac,
+		AC:       structure,
 		PathToEK: pathToEK,
 		Label:    label,
 		Curve:    crv,
@@ -113,26 +113,26 @@ func TestPVEACEncryptComplexNested(t *testing.T) {
 
 	// Create a complex nested policy:
 	// Requires alice AND (bob OR (2-of-3: charlie, dave, eve))
-	acExpr := acbuilder.And(
-		acbuilder.Leaf("alice"),
-		acbuilder.Or(
-			acbuilder.Leaf("bob"),
-			acbuilder.Threshold(2,
-				acbuilder.Leaf("charlie"),
-				acbuilder.Leaf("dave"),
-				acbuilder.Leaf("eve"),
+	acExpr := ac.And(
+		ac.Leaf("alice"),
+		ac.Or(
+			ac.Leaf("bob"),
+			ac.Threshold(2,
+				ac.Leaf("charlie"),
+				ac.Leaf("dave"),
+				ac.Leaf("eve"),
 			),
 		),
 	)
 
 	// Compile AC
-	ac, err := acbuilder.Compile(acExpr)
+	structure, err := ac.Compile(acExpr)
 	if err != nil {
 		t.Fatalf("Failed to compile AC: %v", err)
 	}
 
 	// Get actual paths from AC structure using dynamic discovery
-	paths, err := backend.ACListLeafPaths(ac)
+	paths, err := backend.ACListLeafPaths(structure)
 	if err != nil {
 		t.Fatalf("Failed to list leaf paths: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestPVEACEncryptComplexNested(t *testing.T) {
 
 	// Encrypt
 	encryptResult, err := pveInstance.ACEncrypt(ctx, &pve.ACEncryptParams{
-		AC:       ac,
+		AC:       structure,
 		PathToEK: pathToEK,
 		Label:    label,
 		Curve:    crv,
@@ -196,18 +196,18 @@ func TestPVEACEncryptSimpleAnd(t *testing.T) {
 	}
 
 	// Simple AND: both alice AND bob required
-	acExpr := acbuilder.And(
-		acbuilder.Leaf("alice"),
-		acbuilder.Leaf("bob"),
+	acExpr := ac.And(
+		ac.Leaf("alice"),
+		ac.Leaf("bob"),
 	)
 
-	ac, err := acbuilder.Compile(acExpr)
+	structure, err := ac.Compile(acExpr)
 	if err != nil {
 		t.Fatalf("Failed to compile AC: %v", err)
 	}
 
 	// Get actual paths from AC structure using dynamic discovery
-	paths, err := backend.ACListLeafPaths(ac)
+	paths, err := backend.ACListLeafPaths(structure)
 	if err != nil {
 		t.Fatalf("Failed to list leaf paths: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestPVEACEncryptSimpleAnd(t *testing.T) {
 
 	// Encrypt
 	encryptResult, err := pveInstance.ACEncrypt(ctx, &pve.ACEncryptParams{
-		AC:       ac,
+		AC:       structure,
 		PathToEK: pathToEK,
 		Label:    []byte("and-test"),
 		Curve:    cbmpc.CurveP256,
@@ -266,19 +266,19 @@ func TestPVEACDecryptAggregate(t *testing.T) {
 	}
 
 	// Create a 2-of-3 threshold AC structure
-	acExpr := acbuilder.Threshold(2,
-		acbuilder.Leaf("alice"),
-		acbuilder.Leaf("bob"),
-		acbuilder.Leaf("charlie"),
+	acExpr := ac.Threshold(2,
+		ac.Leaf("alice"),
+		ac.Leaf("bob"),
+		ac.Leaf("charlie"),
 	)
 
-	ac, err := acbuilder.Compile(acExpr)
+	structure, err := ac.Compile(acExpr)
 	if err != nil {
 		t.Fatalf("Failed to compile AC: %v", err)
 	}
 
 	// Get paths from AC
-	paths, err := backend.ACListLeafPaths(ac)
+	paths, err := backend.ACListLeafPaths(structure)
 	if err != nil {
 		t.Fatalf("Failed to list leaf paths: %v", err)
 	}
@@ -326,7 +326,7 @@ func TestPVEACDecryptAggregate(t *testing.T) {
 
 	// Step 1: Encrypt
 	encryptResult, err := pveInstance.ACEncrypt(ctx, &pve.ACEncryptParams{
-		AC:       ac,
+		AC:       structure,
 		PathToEK: pathToEK,
 		Label:    label,
 		Curve:    crv,
@@ -384,7 +384,7 @@ func TestPVEACDecryptAggregate(t *testing.T) {
 		}
 
 		shareResult, err := pveInstance.ACPartyDecryptRow(ctx, &pve.ACPartyDecryptRowParams{
-			AC:         ac,
+			AC:         structure,
 			RowIndex:   rowIndex,
 			Path:       path,
 			DK:         kp.DK,
@@ -402,7 +402,7 @@ func TestPVEACDecryptAggregate(t *testing.T) {
 	// Step 3: Aggregate to restore (without verification)
 	t.Log("Step 3: Aggregating to restore...")
 	aggregateResult, err := pveInstance.ACAggregateToRestoreRow(ctx, &pve.ACAggregateToRestoreRowParams{
-		AC:                ac,
+		AC:                structure,
 		RowIndex:          rowIndex,
 		Label:             label,
 		QuorumPathToShare: quorumPathToShare,

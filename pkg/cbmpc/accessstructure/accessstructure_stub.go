@@ -1,11 +1,11 @@
 //go:build !cgo || windows
 
-package acbuilder
+package accessstructure
 
 import "errors"
 
-// AC represents a serialized access control structure.
-type AC []byte
+// AccessStructure represents a serialized access control structure.
+type AccessStructure []byte
 
 // Expr represents an access control expression node.
 type Expr interface {
@@ -46,11 +46,11 @@ func Threshold(k int, children ...Expr) Expr {
 }
 
 // Compile returns an error indicating CGO is required.
-func Compile(e Expr) (AC, error) {
-	return nil, errors.New("AC builder requires CGO")
+func Compile(e Expr) (AccessStructure, error) {
+	return nil, errors.New("access structure builder requires CGO")
 }
 
 // String returns an error indicating CGO is required.
-func (ac AC) String() (string, error) {
-	return "", errors.New("AC builder requires CGO")
+func (s AccessStructure) String() (string, error) {
+	return "", errors.New("access structure requires CGO")
 }

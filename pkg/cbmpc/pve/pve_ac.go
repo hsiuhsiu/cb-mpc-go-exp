@@ -7,7 +7,7 @@ import (
 	"errors"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
-	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/acbuilder"
+	ac "github.com/coinbase/cb-mpc-go/pkg/cbmpc/accessstructure"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/backend"
 )
 
@@ -19,7 +19,7 @@ type ACCiphertext []byte
 // ACEncryptParams contains parameters for PVE-AC encryption.
 type ACEncryptParams struct {
 	// AC is the compiled access control structure.
-	AC acbuilder.AC
+	AC ac.AccessStructure
 
 	// PathToEK maps party path names to their encryption keys.
 	// Path names must match those used in the AC structure.
@@ -87,7 +87,7 @@ func (ct ACCiphertext) Bytes() []byte {
 // ACVerifyParams contains parameters for PVE-AC verification.
 type ACVerifyParams struct {
 	// AC is the compiled access control structure.
-	AC acbuilder.AC
+	AC ac.AccessStructure
 
 	// PathToEK maps party path names to their encryption keys.
 	PathToEK map[string][]byte
@@ -151,7 +151,7 @@ func (pve *PVE) ACVerify(ctx context.Context, p *ACVerifyParams) error {
 // ACPartyDecryptRowParams contains parameters for PVE-AC party decryption.
 type ACPartyDecryptRowParams struct {
 	// AC is the compiled access control structure.
-	AC acbuilder.AC
+	AC ac.AccessStructure
 
 	// RowIndex specifies which row (scalar index) to decrypt.
 	RowIndex int
@@ -220,7 +220,7 @@ func (pve *PVE) ACPartyDecryptRow(ctx context.Context, p *ACPartyDecryptRowParam
 // ACAggregateToRestoreRowParams contains parameters for PVE-AC aggregation.
 type ACAggregateToRestoreRowParams struct {
 	// AC is the compiled access control structure.
-	AC acbuilder.AC
+	AC ac.AccessStructure
 
 	// RowIndex specifies which row (scalar index) to restore.
 	RowIndex int

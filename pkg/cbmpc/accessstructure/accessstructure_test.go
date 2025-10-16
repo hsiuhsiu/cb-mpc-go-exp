@@ -1,14 +1,14 @@
 //go:build cgo && !windows
 
-package acbuilder
+package accessstructure
 
 import (
 	"strings"
 	"testing"
 )
 
-func TestACBuilderSimpleThreshold(t *testing.T) {
-	// Create a simple 2-of-3 threshold AC structure
+func TestAccessStructureSimpleThreshold(t *testing.T) {
+	// Create a simple 2-of-3 threshold access structure
 	expr := Threshold(2,
 		Leaf("alice"),
 		Leaf("bob"),
@@ -16,17 +16,17 @@ func TestACBuilderSimpleThreshold(t *testing.T) {
 	)
 
 	// Compile to bytes
-	ac, err := Compile(expr)
+	structure, err := Compile(expr)
 	if err != nil {
 		t.Fatalf("Compile failed: %v", err)
 	}
 
-	if len(ac) == 0 {
+	if len(structure) == 0 {
 		t.Fatal("Compile returned empty bytes")
 	}
 
 	// Convert to string representation
-	str, err := ac.String()
+	str, err := structure.String()
 	if err != nil {
 		t.Fatalf("String failed: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestACBuilderSimpleThreshold(t *testing.T) {
 	}
 }
 
-func TestACBuilderComplexNested(t *testing.T) {
+func TestAccessStructureComplexNested(t *testing.T) {
 	// Create a complex nested policy:
 	// Requires alice AND (bob OR (2-of-3: charlie, dave, eve))
 	expr := And(
@@ -63,17 +63,17 @@ func TestACBuilderComplexNested(t *testing.T) {
 	)
 
 	// Compile to bytes
-	ac, err := Compile(expr)
+	structure, err := Compile(expr)
 	if err != nil {
 		t.Fatalf("Compile failed: %v", err)
 	}
 
-	if len(ac) == 0 {
+	if len(structure) == 0 {
 		t.Fatal("Compile returned empty bytes")
 	}
 
 	// Convert to string representation
-	str, err := ac.String()
+	str, err := structure.String()
 	if err != nil {
 		t.Fatalf("String failed: %v", err)
 	}
@@ -92,23 +92,23 @@ func TestACBuilderComplexNested(t *testing.T) {
 	}
 }
 
-func TestACBuilderSimpleAnd(t *testing.T) {
+func TestAccessStructureSimpleAnd(t *testing.T) {
 	// Create a simple AND gate
 	expr := And(
 		Leaf("alice"),
 		Leaf("bob"),
 	)
 
-	ac, err := Compile(expr)
+	structure, err := Compile(expr)
 	if err != nil {
 		t.Fatalf("Compile failed: %v", err)
 	}
 
-	if len(ac) == 0 {
+	if len(structure) == 0 {
 		t.Fatal("Compile returned empty bytes")
 	}
 
-	str, err := ac.String()
+	str, err := structure.String()
 	if err != nil {
 		t.Fatalf("String failed: %v", err)
 	}
@@ -124,23 +124,23 @@ func TestACBuilderSimpleAnd(t *testing.T) {
 	}
 }
 
-func TestACBuilderSimpleOr(t *testing.T) {
+func TestAccessStructureSimpleOr(t *testing.T) {
 	// Create a simple OR gate
 	expr := Or(
 		Leaf("alice"),
 		Leaf("bob"),
 	)
 
-	ac, err := Compile(expr)
+	structure, err := Compile(expr)
 	if err != nil {
 		t.Fatalf("Compile failed: %v", err)
 	}
 
-	if len(ac) == 0 {
+	if len(structure) == 0 {
 		t.Fatal("Compile returned empty bytes")
 	}
 
-	str, err := ac.String()
+	str, err := structure.String()
 	if err != nil {
 		t.Fatalf("String failed: %v", err)
 	}
@@ -156,30 +156,30 @@ func TestACBuilderSimpleOr(t *testing.T) {
 	}
 }
 
-func TestACBuilderSingleLeaf(t *testing.T) {
-	// Single leaf (trivial AC - just one party required)
+func TestAccessStructureSingleLeaf(t *testing.T) {
+	// Single leaf (trivial access structure - just one party required)
 	expr := Leaf("alice")
 
-	ac, err := Compile(expr)
+	structure, err := Compile(expr)
 	if err != nil {
 		t.Fatalf("Compile failed: %v", err)
 	}
 
-	if len(ac) == 0 {
+	if len(structure) == 0 {
 		t.Fatal("Compile returned empty bytes")
 	}
 
-	str, err := ac.String()
+	str, err := structure.String()
 	if err != nil {
 		t.Fatalf("String failed: %v", err)
 	}
 
 	// For a single leaf that becomes the root, the name gets cleared
 	// So the path will be empty "/" and the string representation may be "AC with 1 leaves: []"
-	// This is expected - single leaf ACs are a degenerate case
+	// This is expected - single leaf access structures are a degenerate case
 	if !strings.Contains(str, "1 leaves") {
 		t.Errorf("Expected string to contain '1 leaves', got: %s", str)
 	}
 	// The leaf path is "/" or empty since root has no name
-	// We accept this as correct behavior for a single-leaf AC
+	// We accept this as correct behavior for a single-leaf access structure
 }

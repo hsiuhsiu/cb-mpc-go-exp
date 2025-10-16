@@ -1,6 +1,6 @@
-// Package acbuilder provides a DSL for constructing access control structures.
+// Package accessstructure provides a DSL for constructing access control structures.
 //
-// Access Control (AC) structures define flexible policies for secret sharing
+// Access control structures define flexible policies for secret sharing
 // using combinations of AND, OR, and Threshold gates. These structures are
 // used with PVE-AC (Publicly Verifiable Encryption with Access Control) to
 // encrypt secrets that can only be decrypted by parties satisfying the policy.
@@ -18,37 +18,39 @@
 // The Compile function builds the expression tree in C++ and returns
 // serialized bytes that can be used with PVE-AC operations:
 //
-//	ac, err := acbuilder.Compile(expr)
+//	structure, err := ac.Compile(expr)
 //
 // All validation (duplicate names, invalid thresholds, etc.) is performed
 // in the C++ layer. The Go DSL is purely a builder.
 //
 // # Usage Example
 //
-//	import "github.com/coinbase/cb-mpc-go/pkg/cbmpc/acbuilder"
+// It is recommended to import with the 'ac' alias for brevity:
+//
+//	import ac "github.com/coinbase/cb-mpc-go/pkg/cbmpc/accessstructure"
 //
 //	// Simple 2-of-3 threshold
-//	simple := acbuilder.Threshold(2,
-//	    acbuilder.Leaf("alice"),
-//	    acbuilder.Leaf("bob"),
-//	    acbuilder.Leaf("charlie"),
+//	simple := ac.Threshold(2,
+//	    ac.Leaf("alice"),
+//	    ac.Leaf("bob"),
+//	    ac.Leaf("charlie"),
 //	)
-//	ac, _ := acbuilder.Compile(simple)
+//	structure, _ := ac.Compile(simple)
 //
 //	// Complex nested policy:
 //	// Requires alice AND (bob OR (2-of-3: charlie, dave, eve))
-//	complex := acbuilder.And(
-//	    acbuilder.Leaf("alice"),
-//	    acbuilder.Or(
-//	        acbuilder.Leaf("bob"),
-//	        acbuilder.Threshold(2,
-//	            acbuilder.Leaf("charlie"),
-//	            acbuilder.Leaf("dave"),
-//	            acbuilder.Leaf("eve"),
+//	complex := ac.And(
+//	    ac.Leaf("alice"),
+//	    ac.Or(
+//	        ac.Leaf("bob"),
+//	        ac.Threshold(2,
+//	            ac.Leaf("charlie"),
+//	            ac.Leaf("dave"),
+//	            ac.Leaf("eve"),
 //	        ),
 //	    ),
 //	)
-//	ac2, _ := acbuilder.Compile(complex)
+//	structure2, _ := ac.Compile(complex)
 //
 // # Path Names
 //
@@ -62,9 +64,9 @@
 //
 // # Debugging
 //
-// The String() method returns a summary of the AC structure:
+// The String() method returns a summary of the access structure:
 //
-//	str, _ := ac.String()  // e.g., "AC with 3 leaves: [/alice /bob /charlie]"
+//	str, _ := structure.String()  // e.g., "AC with 3 leaves: [/alice /bob /charlie]"
 //
 // See cb-mpc/src/cbmpc/crypto/secret_sharing.h for access structure implementation.
-package acbuilder
+package accessstructure

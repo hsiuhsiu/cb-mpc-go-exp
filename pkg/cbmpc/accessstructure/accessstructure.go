@@ -1,6 +1,6 @@
 //go:build cgo && !windows
 
-package acbuilder
+package accessstructure
 
 import (
 	"errors"
@@ -10,9 +10,9 @@ import (
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/backend"
 )
 
-// AC represents a serialized access control structure (ss::ac_t).
+// AccessStructure represents a serialized access control structure (ss::ac_t).
 // It defines policies for secret sharing using combinations of AND, OR, and Threshold gates.
-type AC []byte
+type AccessStructure []byte
 
 // Expr represents an access control expression node.
 type Expr interface {
@@ -69,9 +69,9 @@ func Threshold(k int, children ...Expr) Expr {
 }
 
 // Compile builds an access control structure from the expression tree and returns
-// the serialized AC bytes. All C++ node allocation and deallocation is handled internally.
-// See cb-mpc/src/cbmpc/crypto/secret_sharing.h for AC semantics and validation rules.
-func Compile(e Expr) (AC, error) {
+// the serialized bytes. All C++ node allocation and deallocation is handled internally.
+// See cb-mpc/src/cbmpc/crypto/secret_sharing.h for semantics and validation rules.
+func Compile(e Expr) (AccessStructure, error) {
 	if e == nil {
 		return nil, errors.New("nil expression")
 	}
@@ -89,7 +89,7 @@ func Compile(e Expr) (AC, error) {
 		return nil, cbmpc.RemapError(err)
 	}
 
-	return AC(bytes), nil
+	return AccessStructure(bytes), nil
 }
 
 // buildNode recursively constructs C++ AC nodes from the expression tree.
@@ -171,13 +171,13 @@ func buildNode(e Expr) (backend.ACNode, error) {
 
 // String returns a canonicalized string representation of the access control structure.
 // This is useful for debugging and logging.
-func (ac AC) String() (string, error) {
-	if len(ac) == 0 {
-		return "", errors.New("empty AC")
+func (s AccessStructure) String() (string, error) {
+	if len(s) == 0 {
+		return "", errors.New("empty AccessStructure")
 	}
-	s, err := backend.ACToString(ac)
+	str, err := backend.ACToString(s)
 	if err != nil {
 		return "", cbmpc.RemapError(err)
 	}
-	return s, nil
+	return str, nil
 }
