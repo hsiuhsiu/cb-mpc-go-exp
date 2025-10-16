@@ -1971,7 +1971,7 @@ func PVEACEncrypt(k KEM, acBytes []byte, pathToEK map[string][]byte, label []byt
 		runtime.UnlockOSThread()
 	}()
 
-	// Convert map to parallel slices (sorted by path for determinism)
+	// Convert map to parallel slices
 	paths := make([][]byte, 0, len(pathToEK))
 	eks := make([][]byte, 0, len(pathToEK))
 	for path, ek := range pathToEK {
@@ -2030,7 +2030,7 @@ func PVEACVerify(k KEM, acBytes []byte, pathToEK map[string][]byte, pveCT []byte
 		runtime.UnlockOSThread()
 	}()
 
-	// Convert map to parallel slices (sorted by path for determinism)
+	// Convert map to parallel slices
 	paths := make([][]byte, 0, len(pathToEK))
 	eks := make([][]byte, 0, len(pathToEK))
 	for path, ek := range pathToEK {

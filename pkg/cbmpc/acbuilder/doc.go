@@ -62,9 +62,9 @@
 //
 // # Debugging
 //
-// The String() method returns a canonical representation of the AC structure:
+// The String() method returns a summary of the AC structure:
 //
-//	str, _ := ac.String()  // e.g., "AND(alice, OR(bob, THRESHOLD-2-of-3(...)))"
+//	str, _ := ac.String()  // e.g., "AC with 3 leaves: [/alice /bob /charlie]"
 //
 // See cb-mpc/src/cbmpc/crypto/secret_sharing.h for access structure implementation.
 package acbuilder
