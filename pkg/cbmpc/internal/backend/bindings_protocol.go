@@ -1335,6 +1335,47 @@ func Schnorr2PSignBatch(cj unsafe.Pointer, key Schnorr2PKey, msgs [][]byte, vari
 // Schnorr MP Protocols
 // =====================
 
+// SchnorrMPDKG is a C binding wrapper for multi-party Schnorr distributed key generation.
+// Uses the coinbase::mpc::schnorrmp::dkg wrapper.
+func SchnorrMPDKG(cj unsafe.Pointer, curveNID int) (ECDSAMPKey, []byte, error) {
+	if cj == nil {
+		return nil, nil, errors.New("nil job")
+	}
+
+	var key ECDSAMPKey
+	var sidOut C.cmem_t
+	rc := C.cbmpc_schnorrmp_dkg((*C.cbmpc_jobmp)(cj), C.int(curveNID), &key, &sidOut)
+	if rc != 0 {
+		return nil, nil, formatNativeErr("schnorrmp_dkg", rc)
+	}
+
+	return key, cmemToGoBytes(sidOut), nil
+}
+
+// SchnorrMPRefresh is a C binding wrapper for multi-party Schnorr key refresh.
+// Uses the coinbase::mpc::schnorrmp::refresh wrapper.
+// sidIn can be empty to generate a new session ID.
+func SchnorrMPRefresh(cj unsafe.Pointer, key ECDSAMPKey, sidIn []byte) (ECDSAMPKey, []byte, error) {
+	if cj == nil {
+		return nil, nil, errors.New("nil job")
+	}
+	if key == nil {
+		return nil, nil, errors.New("nil key")
+	}
+
+	// Copy session ID into C-allocated memory to avoid aliasing Go memory during CGO call
+	sidMem := allocCmem(sidIn)
+	defer freeCmem(sidMem)
+
+	var newKey ECDSAMPKey
+	var sidOut C.cmem_t
+	rc := C.cbmpc_schnorrmp_refresh((*C.cbmpc_jobmp)(cj), sidMem, key, &sidOut, &newKey)
+	if rc != 0 {
+		return nil, nil, formatNativeErr("schnorrmp_refresh", rc)
+	}
+	return newKey, cmemToGoBytes(sidOut), nil
+}
+
 // SchnorrMPSign is a C binding wrapper for multi-party Schnorr signing.
 // Only the party with party_idx == sig_receiver will receive the final signature.
 func SchnorrMPSign(cj unsafe.Pointer, key ECDSAMPKey, msg []byte, sigReceiver int, variant SchnorrVariant) ([]byte, error) {

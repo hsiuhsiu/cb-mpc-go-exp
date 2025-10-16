@@ -315,6 +315,14 @@ func Schnorr2PSignBatch(unsafe.Pointer, Schnorr2PKey, [][]byte, SchnorrVariant) 
 	return nil, ErrNotBuilt
 }
 
+func SchnorrMPDKG(unsafe.Pointer, int) (ECDSAMPKey, []byte, error) {
+	return nil, nil, ErrNotBuilt
+}
+
+func SchnorrMPRefresh(unsafe.Pointer, ECDSAMPKey, []byte) (ECDSAMPKey, []byte, error) {
+	return nil, nil, ErrNotBuilt
+}
+
 func SchnorrMPSign(unsafe.Pointer, ECDSAMPKey, []byte, int, SchnorrVariant) ([]byte, error) {
 	return nil, ErrNotBuilt
 }

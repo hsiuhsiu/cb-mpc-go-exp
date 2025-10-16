@@ -292,7 +292,16 @@ int cbmpc_schnorr2p_sign_batch(cbmpc_job2p *j, const cbmpc_schnorr2p_key *key, c
 
 // Schnorr MP protocols
 // Schnorr MP uses the same key type as ECDSA MP (eckey::key_share_mp_t).
-// Use cbmpc_ecdsamp_dkg and cbmpc_ecdsamp_refresh for key management.
+
+// Perform multi-party Schnorr distributed key generation.
+// Uses coinbase::mpc::schnorrmp::dkg wrapper.
+int cbmpc_schnorrmp_dkg(cbmpc_jobmp *j, int curve_nid, cbmpc_ecdsamp_key **key_out, cmem_t *sid_out);
+
+// Refresh a Schnorr MP key (re-randomize shares while preserving public key).
+// Uses coinbase::mpc::schnorrmp::refresh wrapper.
+// sid_in: input session ID (can be empty to generate new one)
+// sid_out: output session ID (updated or newly generated)
+int cbmpc_schnorrmp_refresh(cbmpc_jobmp *j, cmem_t sid_in, const cbmpc_ecdsamp_key *key_in, cmem_t *sid_out, cbmpc_ecdsamp_key **key_out);
 
 // Sign a message with a Schnorr MP key.
 // Only the party with party_idx == sig_receiver will receive the final signature.
