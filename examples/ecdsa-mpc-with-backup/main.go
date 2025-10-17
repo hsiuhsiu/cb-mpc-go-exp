@@ -90,6 +90,7 @@ func main() {
 	defer cancel()
 
 	// Create multi-party job
+	// #nosec G115 -- selfIndex is validated to be >= 0 and < len(cfg.Parties) which is exactly 4
 	job, err := cbmpc.NewJobMPWithContext(ctx, transport, cbmpc.RoleID(selfIndex), names)
 	if err != nil {
 		log.Fatalf("NewJobMP: %v", err)

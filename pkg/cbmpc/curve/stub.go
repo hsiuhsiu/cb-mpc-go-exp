@@ -145,6 +145,18 @@ func (s *Scalar) Free() {
 	runtime.SetFinalizer(s, nil)
 }
 
+// Equal compares two scalars for numerical equality.
+// This is a stub that returns false for non-CGO builds.
+func (s *Scalar) Equal(other *Scalar) bool {
+	return false
+}
+
+// Add adds two scalars modulo curve order.
+// This is a stub that returns an error for non-CGO builds.
+func (s *Scalar) Add(other *Scalar, curve Curve) (*Scalar, error) {
+	return nil, errNotBuilt
+}
+
 // =====================
 // Point stub
 // =====================
