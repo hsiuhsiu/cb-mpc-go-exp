@@ -1,0 +1,29 @@
+{
+  "ca_cert": "examples/ecdsa-mpc-with-backup/certs/rootCA.pem",
+  "parties": [
+    {
+      "name": "alice",
+      "address": "127.0.0.1:8001",
+      "cert": "examples/ecdsa-mpc-with-backup/certs/alice-cert.pem",
+      "key": "examples/ecdsa-mpc-with-backup/certs/alice-key.pem"
+    },
+    {
+      "name": "bob",
+      "address": "127.0.0.1:8002",
+      "cert": "examples/ecdsa-mpc-with-backup/certs/bob-cert.pem",
+      "key": "examples/ecdsa-mpc-with-backup/certs/bob-key.pem"
+    },
+    {
+      "name": "charlie",
+      "address": "127.0.0.1:8003",
+      "cert": "examples/ecdsa-mpc-with-backup/certs/charlie-cert.pem",
+      "key": "examples/ecdsa-mpc-with-backup/certs/charlie-key.pem"
+    },
+    {
+      "name": "dave",
+      "address": "127.0.0.1:8004",
+      "cert": "examples/ecdsa-mpc-with-backup/certs/dave-cert.pem",
+      "key": "examples/ecdsa-mpc-with-backup/certs/dave-key.pem"
+    }
+  ]
+}

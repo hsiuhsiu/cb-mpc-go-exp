@@ -13,3 +13,11 @@ bin/
 # macOS noise
 .DS_Store
 
+# Claude Code local settings
+.claude/
+
+# Example build artifacts and generated files
+examples/**/build/
+examples/**/certs/*.pem
+examples/tlsnet/cmd/gen-certs/examples/
+
