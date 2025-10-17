@@ -274,6 +274,14 @@ func ECDSAMPSign(unsafe.Pointer, ECDSAMPKey, []byte, int) ([]byte, error) {
 	return nil, ErrNotBuilt
 }
 
+func ECDSAMPThresholdDKG(unsafe.Pointer, int, []byte, []int) (ECDSAMPKey, []byte, error) {
+	return nil, nil, ErrNotBuilt
+}
+
+func ECDSAMPThresholdRefresh(unsafe.Pointer, int, []byte, []int, ECDSAMPKey, []byte) (ECDSAMPKey, []byte, error) {
+	return nil, nil, ErrNotBuilt
+}
+
 // Schnorr2PKey is a stub type for non-CGO builds
 type Schnorr2PKey = unsafe.Pointer
 
@@ -329,6 +337,14 @@ func SchnorrMPSign(unsafe.Pointer, ECDSAMPKey, []byte, int, SchnorrVariant) ([]b
 
 func SchnorrMPSignBatch(unsafe.Pointer, ECDSAMPKey, [][]byte, int, SchnorrVariant) ([][]byte, error) {
 	return nil, ErrNotBuilt
+}
+
+func SchnorrMPThresholdDKG(unsafe.Pointer, int, []byte, []int) (ECDSAMPKey, []byte, error) {
+	return nil, nil, ErrNotBuilt
+}
+
+func SchnorrMPThresholdRefresh(unsafe.Pointer, int, []byte, []int, ECDSAMPKey, []byte) (ECDSAMPKey, []byte, error) {
+	return nil, nil, ErrNotBuilt
 }
 
 // Curve operations stubs

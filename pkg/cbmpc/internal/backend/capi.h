@@ -61,6 +61,20 @@ int cbmpc_ecdsamp_refresh(cbmpc_jobmp *j, cmem_t sid_in, const cbmpc_ecdsamp_key
 // Only the party with party_idx == sig_receiver will receive the final signature.
 int cbmpc_ecdsamp_sign(cbmpc_jobmp *j, const cbmpc_ecdsamp_key *key, cmem_t msg, int sig_receiver, cmem_t *sig_out);
 
+// Perform multi-party ECDSA threshold DKG with access control.
+// ac_bytes: serialized access control structure
+// quorum_party_indices: array of party indices forming the quorum
+// quorum_count: number of parties in quorum
+int cbmpc_ecdsamp_threshold_dkg(cbmpc_jobmp *j, int curve_nid, cmem_t ac_bytes, const int *quorum_party_indices, int quorum_count, cbmpc_ecdsamp_key **key_out, cmem_t *sid_out);
+
+// Refresh an ECDSA MP key using threshold refresh with access control.
+// ac_bytes: serialized access control structure
+// quorum_party_indices: array of party indices forming the quorum
+// quorum_count: number of parties in quorum
+// sid_in: input session ID (can be empty to generate new one)
+// sid_out: output session ID (updated or newly generated)
+int cbmpc_ecdsamp_threshold_refresh(cbmpc_jobmp *j, int curve_nid, cmem_t ac_bytes, const int *quorum_party_indices, int quorum_count, cmem_t sid_in, const cbmpc_ecdsamp_key *key_in, cmem_t *sid_out, cbmpc_ecdsamp_key **key_out);
+
 // PVE (Publicly Verifiable Encryption) functions
 // Encrypt a scalar x with respect to a curve, producing a PVE ciphertext.
 // ek_bytes: serialized public encryption key bytes.
@@ -312,6 +326,22 @@ int cbmpc_schnorrmp_sign(cbmpc_jobmp *j, const cbmpc_ecdsamp_key *key, cmem_t ms
 // Only the party with party_idx == sig_receiver will receive the final signatures.
 // variant: CBMPC_SCHNORR_VARIANT_EDDSA or CBMPC_SCHNORR_VARIANT_BIP340
 int cbmpc_schnorrmp_sign_batch(cbmpc_jobmp *j, const cbmpc_ecdsamp_key *key, cmems_t msgs, int sig_receiver, int variant, cmems_t *sigs_out);
+
+// Perform multi-party Schnorr threshold DKG with access control.
+// Uses coinbase::mpc::schnorrmp::threshold_dkg wrapper.
+// ac_bytes: serialized access control structure
+// quorum_party_indices: array of party indices forming the quorum
+// quorum_count: number of parties in quorum
+int cbmpc_schnorrmp_threshold_dkg(cbmpc_jobmp *j, int curve_nid, cmem_t ac_bytes, const int *quorum_party_indices, int quorum_count, cbmpc_ecdsamp_key **key_out, cmem_t *sid_out);
+
+// Refresh a Schnorr MP key using threshold refresh with access control.
+// Uses coinbase::mpc::schnorrmp::threshold_refresh wrapper.
+// ac_bytes: serialized access control structure
+// quorum_party_indices: array of party indices forming the quorum
+// quorum_count: number of parties in quorum
+// sid_in: input session ID (can be empty to generate new one)
+// sid_out: output session ID (updated or newly generated)
+int cbmpc_schnorrmp_threshold_refresh(cbmpc_jobmp *j, int curve_nid, cmem_t ac_bytes, const int *quorum_party_indices, int quorum_count, cmem_t sid_in, const cbmpc_ecdsamp_key *key_in, cmem_t *sid_out, cbmpc_ecdsamp_key **key_out);
 
 // EC ElGamal Commitment operations (coinbase::crypto namespace)
 // Opaque pointer to ec_elgamal_commitment_t (C++ type).

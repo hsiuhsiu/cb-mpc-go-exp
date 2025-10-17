@@ -484,6 +484,100 @@ int cbmpc_ecdsamp_sign(cbmpc_jobmp *j, const cbmpc_ecdsamp_key *key, cmem_t msg,
   return 0;
 }
 
+// ECDSA MP Threshold DKG
+int cbmpc_ecdsamp_threshold_dkg(cbmpc_jobmp *j, int curve_nid, cmem_t ac_bytes,
+                                const int *quorum_party_indices, int quorum_count,
+                                cbmpc_ecdsamp_key **key_out, cmem_t *sid_out) {
+  auto wrapper = reinterpret_cast<go_jobmp *>(j);
+  if (!wrapper || !wrapper->job || !ac_bytes.data || ac_bytes.size <= 0 ||
+      !quorum_party_indices || quorum_count <= 0 || !key_out || !sid_out) return E_BADARG;
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  // Deserialize access control structure
+  coinbase::crypto::ss::ac_owned_t ac;
+  error_t rv = coinbase::deser(mem_t(ac_bytes.data, ac_bytes.size), ac);
+  if (rv != SUCCESS) return rv;
+
+  // Set generator point for access control
+  ac.G = curve.generator();
+
+  // Build quorum party set from indices
+  coinbase::mpc::party_set_t quorum_party_set;
+  for (int i = 0; i < quorum_count; i++) {
+    quorum_party_set.add(quorum_party_indices[i]);
+  }
+
+  // Run threshold DKG
+  auto key = std::make_unique<coinbase::mpc::ecdsampc::key_t>();
+  buf_t sid;
+  rv = coinbase::mpc::eckey::key_share_mp_t::threshold_dkg(*wrapper->job, curve, sid, ac,
+                                                            quorum_party_set, *key);
+  if (rv != SUCCESS) return rv;
+
+  // Copy output sid
+  *sid_out = alloc_and_copy(sid.data(), static_cast<size_t>(sid.size()));
+  if (!sid_out->data && sid.size() > 0) return E_BADARG;
+
+  auto key_wrapper = new cbmpc_ecdsamp_key;
+  key_wrapper->opaque = key.release();
+  *key_out = key_wrapper;
+  return 0;
+}
+
+// ECDSA MP Threshold Refresh
+int cbmpc_ecdsamp_threshold_refresh(cbmpc_jobmp *j, int curve_nid, cmem_t ac_bytes,
+                                    const int *quorum_party_indices, int quorum_count,
+                                    cmem_t sid_in, const cbmpc_ecdsamp_key *key_in,
+                                    cmem_t *sid_out, cbmpc_ecdsamp_key **key_out) {
+  auto wrapper = reinterpret_cast<go_jobmp *>(j);
+  if (!wrapper || !wrapper->job || !ac_bytes.data || ac_bytes.size <= 0 ||
+      !quorum_party_indices || quorum_count <= 0 || !key_in || !key_in->opaque ||
+      !sid_out || !key_out) return E_BADARG;
+
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  // Deserialize access control structure
+  coinbase::crypto::ss::ac_owned_t ac;
+  error_t rv = coinbase::deser(mem_t(ac_bytes.data, ac_bytes.size), ac);
+  if (rv != SUCCESS) return rv;
+
+  // Set generator point for access control
+  ac.G = curve.generator();
+
+  // Build quorum party set from indices
+  coinbase::mpc::party_set_t quorum_party_set;
+  for (int i = 0; i < quorum_count; i++) {
+    quorum_party_set.add(quorum_party_indices[i]);
+  }
+
+  // Copy the old key so we can pass a mutable reference to threshold_refresh
+  auto old_key_copy = *static_cast<const coinbase::mpc::ecdsampc::key_t *>(key_in->opaque);
+
+  // Create mutable sid buffer (can be empty to generate new one)
+  buf_t sid;
+  if (sid_in.data && sid_in.size > 0) {
+    sid = buf_t(sid_in.data, sid_in.size);
+  }
+
+  // Run threshold refresh
+  auto new_key = std::make_unique<coinbase::mpc::ecdsampc::key_t>();
+  rv = coinbase::mpc::eckey::key_share_mp_t::threshold_refresh(*wrapper->job, curve, sid, ac,
+                                                                quorum_party_set, old_key_copy, *new_key);
+  if (rv != SUCCESS) return rv;
+
+  // Copy output sid
+  *sid_out = alloc_and_copy(sid.data(), static_cast<size_t>(sid.size()));
+  if (!sid_out->data && sid.size() > 0) return E_BADARG;
+
+  auto key_wrapper = new cbmpc_ecdsamp_key;
+  key_wrapper->opaque = new_key.release();
+  *key_out = key_wrapper;
+  return 0;
+}
+
 // PVE Encrypt
 int cbmpc_pve_encrypt(cmem_t ek_bytes, cmem_t label, int curve_nid, cmem_t x_bytes, cmem_t *pve_ct_out) {
   if (!ek_bytes.data || ek_bytes.size <= 0 || !label.data || label.size <= 0 || !x_bytes.data || x_bytes.size <= 0 || !pve_ct_out) {
@@ -1645,6 +1739,115 @@ int cbmpc_schnorrmp_sign_batch(cbmpc_jobmp *j, const cbmpc_ecdsamp_key *key, cme
 
   // Copy outputs (signatures may be empty for non-receiver parties)
   *sigs_out = alloc_and_copy_vector(signatures);
+  return 0;
+}
+
+// Schnorr MP Threshold DKG
+int cbmpc_schnorrmp_threshold_dkg(cbmpc_jobmp *j, int curve_nid, cmem_t ac_bytes,
+                                  const int *quorum_party_indices, int quorum_count,
+                                  cbmpc_ecdsamp_key **key_out, cmem_t *sid_out) {
+  auto wrapper = reinterpret_cast<go_jobmp *>(j);
+  if (!wrapper || !wrapper->job || !key_out || !sid_out) return E_BADARG;
+  if (!ac_bytes.data || ac_bytes.size <= 0) return E_BADARG;
+  if (!quorum_party_indices || quorum_count <= 0) return E_BADARG;
+
+  // Get curve from NID
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  // Deserialize access control structure from bytes
+  coinbase::crypto::ss::ac_owned_t ac;
+  error_t rv = coinbase::deser(mem_t(ac_bytes.data, ac_bytes.size), ac);
+  if (rv != SUCCESS) return rv;
+
+  // Set the generator point based on the curve
+  ac.G = curve.generator();
+
+  // Build party set from indices
+  coinbase::mpc::party_set_t quorum_party_set;
+  for (int i = 0; i < quorum_count; i++) {
+    quorum_party_set.add(quorum_party_indices[i]);
+  }
+
+  // Create a unique_ptr for the key
+  auto key = std::make_unique<coinbase::mpc::schnorrmp::key_t>();
+
+  // Session ID buffer (input/output parameter)
+  buf_t sid;
+
+  // Perform threshold DKG using Schnorr MP wrapper
+  rv = coinbase::mpc::schnorrmp::threshold_dkg(*wrapper->job, curve, sid, ac, quorum_party_set, *key);
+  if (rv != SUCCESS) return rv;
+
+  // Wrap the key in cbmpc_ecdsamp_key structure
+  auto ecdsamp_key = std::make_unique<cbmpc_ecdsamp_key>();
+  ecdsamp_key->opaque = key.release();
+
+  // Copy session ID to output
+  *sid_out = alloc_and_copy(sid.data(), static_cast<size_t>(sid.size()));
+
+  // Transfer ownership to caller
+  *key_out = ecdsamp_key.release();
+  return 0;
+}
+
+// Schnorr MP Threshold Refresh
+int cbmpc_schnorrmp_threshold_refresh(cbmpc_jobmp *j, int curve_nid, cmem_t ac_bytes,
+                                      const int *quorum_party_indices, int quorum_count,
+                                      cmem_t sid_in, const cbmpc_ecdsamp_key *key_in,
+                                      cmem_t *sid_out, cbmpc_ecdsamp_key **key_out) {
+  auto wrapper = reinterpret_cast<go_jobmp *>(j);
+  if (!wrapper || !wrapper->job || !key_in || !key_in->opaque || !key_out || !sid_out) return E_BADARG;
+  if (!ac_bytes.data || ac_bytes.size <= 0) return E_BADARG;
+  if (!quorum_party_indices || quorum_count <= 0) return E_BADARG;
+
+  // Get curve from NID
+  auto curve = find_curve_by_nid(curve_nid);
+  if (!curve) return E_BADARG;
+
+  // Deserialize access control structure from bytes
+  coinbase::crypto::ss::ac_owned_t ac;
+  error_t rv = coinbase::deser(mem_t(ac_bytes.data, ac_bytes.size), ac);
+  if (rv != SUCCESS) return rv;
+
+  // Set the generator point based on the curve
+  ac.G = curve.generator();
+
+  // Build party set from indices
+  coinbase::mpc::party_set_t quorum_party_set;
+  for (int i = 0; i < quorum_count; i++) {
+    quorum_party_set.add(quorum_party_indices[i]);
+  }
+
+  // Get the old key
+  const auto *old_key = static_cast<const coinbase::mpc::schnorrmp::key_t *>(key_in->opaque);
+
+  // Create a unique_ptr for the new key
+  auto new_key = std::make_unique<coinbase::mpc::schnorrmp::key_t>();
+
+  // Session ID buffer (input/output parameter)
+  // If sid_in is empty, a new one will be generated
+  buf_t sid;
+  if (sid_in.data && sid_in.size > 0) {
+    sid = buf_t(sid_in.data, sid_in.size);
+  }
+
+  // Copy the old key so we can pass a mutable reference
+  auto old_key_copy = *old_key;
+
+  // Perform threshold refresh using Schnorr MP wrapper
+  rv = coinbase::mpc::schnorrmp::threshold_refresh(*wrapper->job, curve, sid, ac, quorum_party_set, old_key_copy, *new_key);
+  if (rv != SUCCESS) return rv;
+
+  // Wrap the new key in cbmpc_ecdsamp_key structure
+  auto ecdsamp_key = std::make_unique<cbmpc_ecdsamp_key>();
+  ecdsamp_key->opaque = new_key.release();
+
+  // Copy session ID to output
+  *sid_out = alloc_and_copy(sid.data(), static_cast<size_t>(sid.size()));
+
+  // Transfer ownership to caller
+  *key_out = ecdsamp_key.release();
   return 0;
 }
 

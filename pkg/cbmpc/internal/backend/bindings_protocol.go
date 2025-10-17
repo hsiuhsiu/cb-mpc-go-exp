@@ -1181,6 +1181,74 @@ func ECDSAMPSign(cj unsafe.Pointer, key ECDSAMPKey, msg []byte, sigReceiver int)
 	return cmemToGoBytes(sigOut), nil
 }
 
+// ECDSAMPThresholdDKG is a C binding wrapper for multi-party ECDSA threshold distributed key generation.
+func ECDSAMPThresholdDKG(cj unsafe.Pointer, curveNID int, acBytes []byte, quorumPartyIndices []int) (ECDSAMPKey, []byte, error) {
+	if cj == nil {
+		return nil, nil, errors.New("nil job")
+	}
+	if len(acBytes) == 0 {
+		return nil, nil, errors.New("empty AC bytes")
+	}
+	if len(quorumPartyIndices) == 0 {
+		return nil, nil, errors.New("empty quorum party indices")
+	}
+
+	// Convert Go slice to C array
+	cIndices := make([]C.int, len(quorumPartyIndices))
+	for i, idx := range quorumPartyIndices {
+		cIndices[i] = C.int(idx)
+	}
+
+	acMem := goBytesToCmem(acBytes)
+
+	var key ECDSAMPKey
+	var sidOut C.cmem_t
+	rc := C.cbmpc_ecdsamp_threshold_dkg((*C.cbmpc_jobmp)(cj), C.int(curveNID), acMem, &cIndices[0], C.int(len(cIndices)), &key, &sidOut)
+	if rc != 0 {
+		return nil, nil, formatNativeErr("ecdsamp_threshold_dkg", rc)
+	}
+
+	return key, cmemToGoBytes(sidOut), nil
+}
+
+// ECDSAMPThresholdRefresh is a C binding wrapper for multi-party ECDSA threshold key refresh.
+// sidIn can be empty to generate a new session ID.
+func ECDSAMPThresholdRefresh(cj unsafe.Pointer, curveNID int, acBytes []byte, quorumPartyIndices []int, key ECDSAMPKey, sidIn []byte) (ECDSAMPKey, []byte, error) {
+	if cj == nil {
+		return nil, nil, errors.New("nil job")
+	}
+	if len(acBytes) == 0 {
+		return nil, nil, errors.New("empty AC bytes")
+	}
+	if len(quorumPartyIndices) == 0 {
+		return nil, nil, errors.New("empty quorum party indices")
+	}
+	if key == nil {
+		return nil, nil, errors.New("nil key")
+	}
+
+	// Convert Go slice to C array
+	cIndices := make([]C.int, len(quorumPartyIndices))
+	for i, idx := range quorumPartyIndices {
+		cIndices[i] = C.int(idx)
+	}
+
+	acMem := goBytesToCmem(acBytes)
+
+	// Copy session ID into C-allocated memory to avoid aliasing Go memory during CGO call
+	sidMem := allocCmem(sidIn)
+	defer freeCmem(sidMem)
+
+	var newKey ECDSAMPKey
+	var sidOut C.cmem_t
+	rc := C.cbmpc_ecdsamp_threshold_refresh((*C.cbmpc_jobmp)(cj), C.int(curveNID), acMem, &cIndices[0], C.int(len(cIndices)), sidMem, key, &sidOut, &newKey)
+	if rc != 0 {
+		return nil, nil, formatNativeErr("ecdsamp_threshold_refresh", rc)
+	}
+
+	return newKey, cmemToGoBytes(sidOut), nil
+}
+
 // =====================
 // Schnorr 2P Protocols
 // =====================
@@ -1426,6 +1494,76 @@ func SchnorrMPSignBatch(cj unsafe.Pointer, key ECDSAMPKey, msgs [][]byte, sigRec
 	}
 
 	return cmemsToGoByteSlices(sigsOut), nil
+}
+
+// SchnorrMPThresholdDKG is a C binding wrapper for multi-party Schnorr threshold distributed key generation.
+// Uses the coinbase::mpc::schnorrmp::threshold_dkg wrapper.
+func SchnorrMPThresholdDKG(cj unsafe.Pointer, curveNID int, acBytes []byte, quorumPartyIndices []int) (ECDSAMPKey, []byte, error) {
+	if cj == nil {
+		return nil, nil, errors.New("nil job")
+	}
+	if len(acBytes) == 0 {
+		return nil, nil, errors.New("empty AC bytes")
+	}
+	if len(quorumPartyIndices) == 0 {
+		return nil, nil, errors.New("empty quorum party indices")
+	}
+
+	// Convert Go slice to C array
+	cIndices := make([]C.int, len(quorumPartyIndices))
+	for i, idx := range quorumPartyIndices {
+		cIndices[i] = C.int(idx)
+	}
+
+	acMem := goBytesToCmem(acBytes)
+
+	var key ECDSAMPKey
+	var sidOut C.cmem_t
+	rc := C.cbmpc_schnorrmp_threshold_dkg((*C.cbmpc_jobmp)(cj), C.int(curveNID), acMem, &cIndices[0], C.int(len(cIndices)), &key, &sidOut)
+	if rc != 0 {
+		return nil, nil, formatNativeErr("schnorrmp_threshold_dkg", rc)
+	}
+
+	return key, cmemToGoBytes(sidOut), nil
+}
+
+// SchnorrMPThresholdRefresh is a C binding wrapper for multi-party Schnorr threshold key refresh.
+// Uses the coinbase::mpc::schnorrmp::threshold_refresh wrapper.
+// sidIn can be empty to generate a new session ID.
+func SchnorrMPThresholdRefresh(cj unsafe.Pointer, curveNID int, acBytes []byte, quorumPartyIndices []int, key ECDSAMPKey, sidIn []byte) (ECDSAMPKey, []byte, error) {
+	if cj == nil {
+		return nil, nil, errors.New("nil job")
+	}
+	if len(acBytes) == 0 {
+		return nil, nil, errors.New("empty AC bytes")
+	}
+	if len(quorumPartyIndices) == 0 {
+		return nil, nil, errors.New("empty quorum party indices")
+	}
+	if key == nil {
+		return nil, nil, errors.New("nil key")
+	}
+
+	// Convert Go slice to C array
+	cIndices := make([]C.int, len(quorumPartyIndices))
+	for i, idx := range quorumPartyIndices {
+		cIndices[i] = C.int(idx)
+	}
+
+	acMem := goBytesToCmem(acBytes)
+
+	// Copy session ID into C-allocated memory to avoid aliasing Go memory during CGO call
+	sidMem := allocCmem(sidIn)
+	defer freeCmem(sidMem)
+
+	var newKey ECDSAMPKey
+	var sidOut C.cmem_t
+	rc := C.cbmpc_schnorrmp_threshold_refresh((*C.cbmpc_jobmp)(cj), C.int(curveNID), acMem, &cIndices[0], C.int(len(cIndices)), sidMem, key, &sidOut, &newKey)
+	if rc != 0 {
+		return nil, nil, formatNativeErr("schnorrmp_threshold_refresh", rc)
+	}
+
+	return newKey, cmemToGoBytes(sidOut), nil
 }
 
 // ============================================================
