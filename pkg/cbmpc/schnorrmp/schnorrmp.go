@@ -6,6 +6,7 @@ import (
 	"runtime"
 
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc"
+	ac "github.com/coinbase/cb-mpc-go/pkg/cbmpc/accessstructure"
 	"github.com/coinbase/cb-mpc-go/pkg/cbmpc/internal/backend"
 )
 
@@ -143,14 +144,13 @@ const (
 
 // String returns the string representation of the variant.
 func (v Variant) String() string {
-	switch v {
-	case VariantEdDSA:
+	if v == VariantEdDSA {
 		return "EdDSA"
-	case VariantBIP340:
-		return "BIP340"
-	default:
-		return "Unknown"
 	}
+	if v == VariantBIP340 {
+		return "BIP340"
+	}
+	return "Unknown"
 }
 
 // DKGParams contains parameters for multi-party Schnorr distributed key generation.
@@ -378,5 +378,139 @@ func SignBatch(_ context.Context, j *cbmpc.JobMP, params *SignBatchParams) (*Sig
 
 	return &SignBatchResult{
 		Signatures: sigs,
+	}, nil
+}
+
+// ThresholdDKGParams contains parameters for threshold multi-party Schnorr distributed key generation.
+type ThresholdDKGParams struct {
+	Curve              cbmpc.Curve
+	AccessStructure    ac.AccessStructure // Compiled access control structure
+	QuorumPartyIndices []int              // Party indices forming the quorum for DKG
+}
+
+// ThresholdDKGResult contains the output of threshold multi-party Schnorr distributed key generation.
+type ThresholdDKGResult struct {
+	Key       *Key
+	SessionID cbmpc.SessionID
+}
+
+// ThresholdDKG performs threshold multi-party Schnorr distributed key generation with access control.
+// The returned key must be freed with Close() when no longer needed.
+//
+// This function allows a subset of parties (quorum) to participate in DKG according to an access
+// control structure. The access structure defines policies for secret sharing using combinations
+// of AND, OR, and Threshold gates.
+//
+// Context behavior: ctx is ignored; use cbmpc.NewJobMPWithContext to control cancellation.
+//
+// See cb-mpc/src/cbmpc/protocol/schnorr_mp.h for protocol details.
+func ThresholdDKG(_ context.Context, j *cbmpc.JobMP, params *ThresholdDKGParams) (*ThresholdDKGResult, error) {
+	if j == nil {
+		return nil, errors.New("nil job")
+	}
+	if params == nil {
+		return nil, errors.New("nil params")
+	}
+	if len(params.AccessStructure) == 0 {
+		return nil, errors.New("empty access structure")
+	}
+	if len(params.QuorumPartyIndices) == 0 {
+		return nil, errors.New("empty quorum party indices")
+	}
+
+	ptr, err := j.Ptr()
+	if err != nil {
+		return nil, err
+	}
+
+	nid, err := backend.CurveToNID(backend.Curve(params.Curve))
+	if err != nil {
+		return nil, err
+	}
+
+	keyPtr, sid, err := backend.SchnorrMPThresholdDKG(ptr, nid, []byte(params.AccessStructure), params.QuorumPartyIndices)
+	if err != nil {
+		return nil, cbmpc.RemapError(err)
+	}
+	runtime.KeepAlive(j)
+
+	return &ThresholdDKGResult{
+		Key:       newKey(keyPtr),
+		SessionID: cbmpc.NewSessionID(sid),
+	}, nil
+}
+
+// ThresholdRefreshParams contains parameters for threshold multi-party Schnorr key refresh.
+type ThresholdRefreshParams struct {
+	SessionID          cbmpc.SessionID
+	Key                *Key
+	AccessStructure    ac.AccessStructure // Compiled access control structure
+	QuorumPartyIndices []int              // Party indices forming the quorum for refresh
+}
+
+// ThresholdRefreshResult contains the output of threshold multi-party Schnorr key refresh.
+type ThresholdRefreshResult struct {
+	NewKey    *Key
+	SessionID cbmpc.SessionID
+}
+
+// ThresholdRefresh performs threshold multi-party Schnorr key refresh with access control.
+// The returned key must be freed with Close() when no longer needed.
+// The input key is not modified and remains valid.
+//
+// This function allows a subset of parties (quorum) to participate in key refresh according to an access
+// control structure. The access structure defines policies for secret sharing using combinations
+// of AND, OR, and Threshold gates.
+//
+// Session ID behavior:
+// - If params.SessionID is empty, a new session ID will be generated
+// - If params.SessionID is provided, it will be used and updated
+// - The updated/generated session ID is returned in ThresholdRefreshResult.SessionID
+//
+// Context behavior: ctx is ignored; use cbmpc.NewJobMPWithContext to control cancellation.
+//
+// See cb-mpc/src/cbmpc/protocol/schnorr_mp.h for protocol details.
+func ThresholdRefresh(_ context.Context, j *cbmpc.JobMP, params *ThresholdRefreshParams) (*ThresholdRefreshResult, error) {
+	if j == nil {
+		return nil, errors.New("nil job")
+	}
+	if params == nil {
+		return nil, errors.New("nil params")
+	}
+	if params.Key == nil || params.Key.ckey == nil {
+		return nil, errors.New("nil or closed key")
+	}
+	if len(params.AccessStructure) == 0 {
+		return nil, errors.New("empty access structure")
+	}
+	if len(params.QuorumPartyIndices) == 0 {
+		return nil, errors.New("empty quorum party indices")
+	}
+
+	ptr, err := j.Ptr()
+	if err != nil {
+		return nil, err
+	}
+
+	curve, err := params.Key.Curve()
+	if err != nil {
+		return nil, err
+	}
+
+	nid, err := backend.CurveToNID(backend.Curve(curve))
+	if err != nil {
+		return nil, err
+	}
+
+	newKeyCkey, newSid, err := backend.SchnorrMPThresholdRefresh(ptr, nid, []byte(params.AccessStructure), params.QuorumPartyIndices, params.Key.ckey, params.SessionID.Bytes())
+	if err != nil {
+		return nil, cbmpc.RemapError(err)
+	}
+	runtime.KeepAlive(j)
+	runtime.KeepAlive(params.Key)
+
+	return &ThresholdRefreshResult{
+		NewKey:    newKey(newKeyCkey),
+		SessionID: cbmpc.NewSessionID(newSid),
 	}, nil
 }
