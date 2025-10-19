@@ -20,10 +20,12 @@
 //
 // # Key Operations
 //
-//   - DKG: Distributed Key Generation for n parties with threshold t
+//   - DKG: Distributed Key Generation for n parties
+//   - ThresholdDKG: Threshold DKG with access control structures
 //   - Sign: Threshold Schnorr signature generation
 //   - SignBatch: Batch threshold signing for multiple messages
 //   - Refresh: Key share refresh while preserving the public key
+//   - ThresholdRefresh: Threshold refresh with access control structures
 //
 // # Memory Management
 //

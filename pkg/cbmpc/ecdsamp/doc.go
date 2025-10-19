@@ -15,9 +15,11 @@
 //
 // # Key Operations
 //
-//   - DKG: Distributed Key Generation for n parties with threshold t
+//   - DKG: Distributed Key Generation for n parties
+//   - ThresholdDKG: Threshold DKG with access control structures
 //   - Sign: Threshold signature generation (requires t+1 parties)
 //   - Refresh: Key share refresh while preserving the public key
+//   - ThresholdRefresh: Threshold refresh with access control structures
 //
 // # Memory Management
 //

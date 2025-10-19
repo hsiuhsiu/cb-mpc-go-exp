@@ -13,8 +13,8 @@ This example demonstrates a complete PVE (Publicly Verifiable Encryption) round-
 ## Running
 
 ```bash
-# From repository root (after make build-cbmpc)
-go run examples/kem-pve-roundtrip/main.go
+# From repository root
+scripts/run_with_go.sh run examples/kem-pve-roundtrip/main.go
 ```
 
 ## Expected Output

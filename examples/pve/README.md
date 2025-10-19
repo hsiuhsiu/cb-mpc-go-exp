@@ -26,7 +26,7 @@ This example shows:
 
 ```bash
 # From repository root
-go run examples/pve/main.go
+scripts/run_with_go.sh run examples/pve/main.go
 ```
 
 ## Expected Output

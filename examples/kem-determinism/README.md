@@ -12,7 +12,7 @@ This example demonstrates the deterministic property of the RSA-OAEP KEM used in
 
 ```bash
 # From repository root
-go run examples/kem-determinism/main.go
+scripts/run_with_go.sh run examples/kem-determinism/main.go
 ```
 
 ## Expected Output
