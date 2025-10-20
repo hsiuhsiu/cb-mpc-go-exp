@@ -11,7 +11,10 @@ This package provides a minimal, production-leaning `cbmpc.Transport` built on m
 From repository root:
 
 ```bash
-scripts/run_example.sh run ./examples/tlsnet/cmd/gen-certs --output examples/agree-random-2p/certs --names p0,p1
+scripts/run_with_go.sh run examples/tlsnet/cmd/gen-certs/main.go \
+  --output examples/agree-random-2p/certs \
+  --names p0,p1 \
+  --localhost
 ```
 
 For multi-party, include more names and adjust the output directory accordingly.

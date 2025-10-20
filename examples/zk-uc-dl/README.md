@@ -28,7 +28,8 @@ P1 generates a proof using a **wrong** exponent (different from the actual `w`).
 The simplest way to see the demonstration is to run the prover, which will output all the necessary data:
 
 ```bash
-go run examples/zk-uc-dl/main.go --party p1
+# From repository root
+scripts/run_with_go.sh run examples/zk-uc-dl/main.go --party p1
 ```
 
 This will:
@@ -71,14 +72,16 @@ To run P1 and P2 as separate processes:
 
 1. **Run the prover (P1)**:
 ```bash
-go run examples/zk-uc-dl/main.go --party p1
+# From repository root
+scripts/run_with_go.sh run examples/zk-uc-dl/main.go --party p1
 ```
 
 Copy the output data (Point Q, SessionID, Valid proof, Invalid proof).
 
 2. **Run the verifier (P2)** with the data from P1:
 ```bash
-go run examples/zk-uc-dl/main.go --party p2 \
+# From repository root
+scripts/run_with_go.sh run examples/zk-uc-dl/main.go --party p2 \
   --point <POINT_HEX> \
   --sessionid <SESSION_ID_HEX> \
   --valid-proof <VALID_PROOF_HEX> \

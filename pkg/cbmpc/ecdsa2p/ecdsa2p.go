@@ -53,7 +53,7 @@ func (k *Key) Close() error {
 }
 
 // Bytes returns the serialized key data for persistent storage or network transmission.
-// Returns a defensive copy to prevent external modification of internal key data.
+// The returned bytes are a fresh copy from the bindings layer; it is safe to modify them.
 //
 // SECURITY WARNING:
 // The returned bytes contain sensitive cryptographic key material.
@@ -83,10 +83,7 @@ func (k *Key) Bytes() ([]byte, error) {
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
-	// Return a defensive copy to prevent mutation of internal state
-	result := make([]byte, len(data))
-	copy(result, data)
-	return result, nil
+	return data, nil
 }
 
 // LoadKey deserializes a key from bytes.
@@ -101,7 +98,7 @@ func LoadKey(data []byte) (*Key, error) {
 
 // PublicKey extracts the public key point Q from the key share.
 // Returns the compressed EC point encoding.
-// Returns a defensive copy to prevent external modification of internal key data.
+// The returned bytes are a fresh copy from the bindings layer; it is safe to modify them.
 func (k *Key) PublicKey() ([]byte, error) {
 	if k == nil || k.ckey == nil {
 		return nil, errors.New("nil or closed key")
@@ -110,10 +107,7 @@ func (k *Key) PublicKey() ([]byte, error) {
 	if err != nil {
 		return nil, cbmpc.RemapError(err)
 	}
-	// Return a defensive copy to prevent mutation of internal state
-	result := make([]byte, len(pubKey))
-	copy(result, pubKey)
-	return result, nil
+	return pubKey, nil
 }
 
 // Curve returns the elliptic curve used by this key.
